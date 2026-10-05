@@ -1,0 +1,55 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu with mawk
+            os: ubuntu-latest
+            awk: mawk
+          - name: ubuntu with gawk
+            os: ubuntu-latest
+            awk: gawk
+          - name: macos with the system awk
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the awk under test
+        if: matrix.awk
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ${{ matrix.awk }}
+          sudo update-alternatives --set awk /usr/bin/${{ matrix.awk }}
+          readlink -f "$(command -v awk)"
+
+      - name: Make sure jq is installed
+        run: |
+          if command -v jq > /dev/null 2>&1; then exit 0; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install jq; else sudo apt-get install -y -q jq; fi
+
+      - name: Show the tool versions
+        run: |
+          bash --version | head -1
+          git --version
+          jq --version
+
+      - name: Run the tests
+        run: bash tests/run.sh

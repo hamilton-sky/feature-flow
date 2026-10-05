@@ -181,7 +181,7 @@ Every ticket still costs at least two sessions (build and review). Use `FLOW_REV
 bash tests/run.sh
 ```
 
-154 checks, offline, no cost. A fake `claude` stands in for the real one, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer, and every way a run should stop. The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
+154 checks, offline, no cost. A fake `claude` stands in for the real one, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer, and every way a run should stop. The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `.github/workflows/tests.yml` runs the suite on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
 
 ## Caution
 
