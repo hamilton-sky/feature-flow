@@ -1,5 +1,7 @@
 # Feature flow skills for Claude Code
 
+[![tests](https://github.com/hamilton-sky/feature-flow/actions/workflows/tests.yml/badge.svg)](https://github.com/hamilton-sky/feature-flow/actions/workflows/tests.yml)
+
 Plan a feature as a graph of small tickets, then work the tickets one at a time or unattended. Every ticket is built by one session and checked by another, scripts check the build and watch for work that weakens the checks, and the whole run has cost and turn limits.
 
 6 skills, 2 agents, 4 scripts, an installer and a test suite. MIT licensed.
@@ -159,7 +161,7 @@ Settings, all optional environment variables:
 - **Headless** (`claude -p`): tested for real. This is what the loop does.
 - **Interactive**: the skills are meant to be typed in a normal session. Only the headless path has been tested for real.
 - **Claude Code on the web, Codex and other harnesses**: not tested. Layers 1 and 2 are portable as they are. Layer 3 uses Claude Code features (`disable-model-invocation`, `$ARGUMENTS`, `--allowedTools`), and layer 4 calls `claude`.
-- Tested on macOS (BSD awk, bash 3.2). Not yet tried on Linux.
+- The test suite passes in CI on Linux (with `mawk` and with `gawk`) and on macOS. It was developed on macOS with bash 3.2.
 
 ## What a session costs
 
