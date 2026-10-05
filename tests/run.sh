@@ -452,6 +452,111 @@ CLAUDE_HOME="$I/home/.claude" bash "$ROOT/install.sh" "$I/repo2" --user > /dev/n
 if [ -f "$I/home/.claude/skills/next-phase/SKILL.md" ] && [ -f "$I/home/.claude/agents/ticket-reviewer.md" ]; then ok "--user puts skills and agents in the user folder"; else bad "--user puts skills and agents in the user folder"; fi
 if [ -f "$I/repo2/scripts/gate.sh" ] && [ ! -e "$I/repo2/.claude" ]; then ok "--user still puts scripts in the repo and no .claude"; else bad "--user still puts scripts in the repo and no .claude"; fi
 bash "$ROOT/install.sh" --nonsense > /dev/null 2>&1; expect_rc "an unknown option is a usage error" 2 $?
+for f in .claude/skills/show-flow/SKILL.md scripts/flow-view.sh scripts/flow-view.html; do
+  if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
+done
+
+echo "flow-status.sh, json"
+set_status() { awk -v s="$2" 'FNR<=20 && !d && /^Status:/ {print "Status: " s; d=1; next} {print}' "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
+cd "$TMP" || exit 1
+mkdir -p js/plans/f/tasks
+cd js || exit 1
+S="$ROOT/scripts/flow-status.sh"
+ticket plans/f/tasks/01-a.md 'Say "hi" \ and <b>caf'$'\xc3\xa9''</b>' resolved "—"
+ticket plans/f/tasks/02-b.md B open "01"
+ticket plans/f/tasks/03-c.md C open "01, 02"
+out="$(bash "$S" f --json)"
+printf '%s' "$out" | jq -e . > /dev/null 2>&1; expect_rc "--json prints valid JSON" 0 $?
+[ "$(printf '%s' "$out" | jq -r '.tickets[0].title')" = 'Say "hi" \ and <b>caf'$'\xc3\xa9''</b>' ] && ok "quotes, backslashes, tags and accents survive" || bad "quotes, backslashes, tags and accents survive"
+expect_has "counts are included" '"total":3' "$out"
+[ "$(printf '%s' "$out" | jq -r '[.tickets[] | select(.ready) | .label] | join(",")')" = "02" ] && ok "readiness matches the table" || bad "readiness matches the table"
+[ "$(printf '%s' "$out" | jq -r '.tickets[2].blocked_by | join(",")')" = "01,02" ] && ok "blockers are listed" || bad "blockers are listed"
+[ "$(printf '%s' "$out" | jq -r '.tickets[0].type')" = "task" ] && ok "a missing Type defaults to task" || bad "a missing Type defaults to task"
+
+echo "flow-view.sh"
+V="$ROOT/scripts/flow-view.sh"
+mkdir -p "$TMP/view/plans/f/tasks"
+cd "$TMP/view" || exit 1
+git init -q
+git config user.email t@t
+git config user.name t
+ticket plans/f/tasks/01-a.md 'First ticket' open "—"
+ticket plans/f/tasks/02-b.md '</script><script>window.__xss=1</script><img src=x onerror=alert(1)>' open "01"
+git add -A; GIT_AUTHOR_DATE="1790000000 +0000" GIT_COMMITTER_DATE="1790000000 +0000" git commit -qm plan
+set_status plans/f/tasks/01-a.md resolved
+printf 'Built: the first thing\nProof: it ran\n<img src=x onerror=alert(2)>\n' >> plans/f/tasks/01-a.md
+git add -A; GIT_AUTHOR_DATE="1790001000 +0000" GIT_COMMITTER_DATE="1790001000 +0000" git commit -qm resolve
+set_status plans/f/tasks/01-a.md open
+printf '\n## Review findings (round 1, gate)\n\nfix it\n' >> plans/f/tasks/01-a.md
+git add -A; GIT_AUTHOR_DATE="1790002000 +0000" GIT_COMMITTER_DATE="1790002000 +0000" git commit -qm reopen
+set_status plans/f/tasks/01-a.md resolved
+git add -A; GIT_AUTHOR_DATE="1790003000 +0000" GIT_COMMITTER_DATE="1790003000 +0000" git commit -qm resolve-again
+printf '00:00:01,01-a,build,3,0.25,false,"success"\n00:00:02,01-a,review,2,0.10,false,"success"\n00:00:03,01-a,build,4,0.30,false,"success"\n' > "$(git rev-parse --absolute-git-dir)/flow-cost-f.log"
+
+bash "$V" f --no-open --out "$TMP/view.html" > /dev/null 2>&1; expect_rc "the page is written" 0 $?
+page="$(cat "$TMP/view.html")"
+data="$(grep -F '<script id="flow-data"' "$TMP/view.html" | sed 's/^<script id="flow-data" type="application\/json">//; s/<\/script>$//')"
+printf '%s' "$data" | jq -e . > /dev/null 2>&1; expect_rc "the embedded data is valid JSON" 0 $?
+expect_has "the page has the animated graph code" "@keyframes flow" "$page"
+[ "$(printf '%s' "$data" | jq -r '[.details["01"].history[].status] | join(",")')" = "open,resolved,open,resolved" ] && ok "history lists every status change from git" || bad "history lists every status change from git"
+[ "$(printf '%s' "$data" | jq -r '.details["01"].history[1].t')" = "1790001000" ] && ok "history carries the commit time" || bad "history carries the commit time"
+[ "$(printf '%s' "$data" | jq -r '.details["01"].cost | "\(.build * 1) \(.review * 1) \(.sessions)"')" = "0.55 0.1 3" ] && ok "cost is summed per role from the cost log" || bad "cost is summed per role from the cost log"
+[ "$(printf '%s' "$data" | jq -r '.details["01"].rounds[0] | "\(.n) \(.source)"')" = "1 gate" ] && ok "sent back rounds are read from the ticket" || bad "sent back rounds are read from the ticket"
+[ "$(printf '%s' "$data" | jq -r '.details["01"].done_when[0]')" = "x" ] && ok "Done when bullets are included" || bad "Done when bullets are included"
+expect_has "the Answer excerpt is included" "Built: the first thing" "$(printf '%s' "$data" | jq -r '.details["01"].answer')"
+[ "$(printf '%s' "$data" | jq -r '.details["02"].history | length')" = "1" ] && ok "a ticket with one commit has one history entry" || bad "a ticket with one commit has one history entry"
+
+expect_lacks "hostile ticket text cannot close the data script" '</script><script>window' "$page"
+expect_lacks "hostile ticket text cannot inject an element" '<img src=x' "$page"
+expect_has "the angle brackets are escaped in the data" 'u003c/script' "$page"
+expect_lacks "the page never writes HTML from data" "innerHTML" "$page"
+expect_lacks "the page never evaluates strings" "eval(" "$page"
+urls="$(grep -oE 'https?://[^" <>)]+' "$TMP/view.html" | grep -vF 'http://www.w3.org/2000/svg' || true)"
+if [ -z "$urls" ]; then ok "the page is self contained, no external addresses"; else bad "the page is self contained, no external addresses" "$urls"; fi
+expect_lacks "an ordinary page does not auto refresh" 'http-equiv="refresh"' "$page"
+
+out="$(bash "$V" f --no-open 2>&1)"
+expect_has "the default location is inside .git" ".git/flow-f.html" "$out"
+if [ -z "$(git status --porcelain)" ]; then ok "writing the page never dirties the tree"; else bad "writing the page never dirties the tree"; fi
+bash "$V" nosuchfeature --no-open > /dev/null 2>&1; expect_rc "a missing feature exits 2" 2 $?
+bash "$V" f --bogus > /dev/null 2>&1; expect_rc "an unknown option exits 2" 2 $?
+bash "$V" > /dev/null 2>&1; expect_rc "no feature exits 2" 2 $?
+
+mkdir -p "$TMP/nogit/plans/f/tasks" "$TMP/nogit_out"
+(cd "$TMP/nogit" && ticket plans/f/tasks/01-a.md A open "—" && TMPDIR="$TMP/nogit_out" bash "$V" f --no-open > /dev/null 2>&1)
+if [ -f "$TMP/nogit_out/flow-f.html" ]; then ok "outside a git repo the page goes to the temp folder"; else bad "outside a git repo the page goes to the temp folder"; fi
+data2="$(grep -F '<script id="flow-data"' "$TMP/nogit_out/flow-f.html" | sed 's/^<script id="flow-data" type="application\/json">//; s/<\/script>$//')"
+[ "$(printf '%s' "$data2" | jq -r '.details["01"].history | length')" = "0" ] && ok "and it simply has no history" || bad "and it simply has no history"
+
+cd "$TMP/view" || exit 1
+set_status plans/f/tasks/02-b.md resolved
+git add -A; git commit -qm both
+out="$(FLOW_WATCH_SECONDS=0.1 bash "$V" f --watch --no-open --out "$TMP/watch_done.html" 2>&1)"
+expect_has "watching a finished feature ends at once" "feature complete" "$out"
+expect_lacks "and leaves a page that does not refresh" 'http-equiv="refresh"' "$(cat "$TMP/watch_done.html")"
+set_status plans/f/tasks/02-b.md open
+git add -A; git commit -qm reopen-02
+( FLOW_WATCH_SECONDS=0.2 bash "$V" f --watch --no-open --out "$TMP/watch_live.html" > /dev/null 2>&1 & echo $! > "$TMP/watch.pid" )
+sleep 2
+expect_has "watching a running feature writes a page that refreshes itself" 'http-equiv="refresh"' "$(cat "$TMP/watch_live.html" 2> /dev/null)"
+kill "$(cat "$TMP/watch.pid")" 2> /dev/null || true
+
+echo "demo and viewer logic"
+out="$(bash "$ROOT/examples/demo.sh" "$TMP/demo" 2>&1)"; rc=$?
+expect_rc "the demo builds a project and its page" 0 $rc
+dd="$(grep -F '<script id="flow-data"' "$TMP/demo/.git/flow-demo.html" | sed 's/^<script id="flow-data" type="application\/json">//; s/<\/script>$//')"
+[ "$(printf '%s' "$dd" | jq -r '"\(.counts.total) \(.counts.resolved) \(.counts.claimed) \(.counts.ready)"')" = "10 5 1 2" ] && ok "the demo shows 10 tickets: 5 resolved, 1 in progress, 2 ready" || bad "the demo shows 10 tickets: 5 resolved, 1 in progress, 2 ready"
+[ "$(printf '%s' "$dd" | jq -r '.details["02"].history | length')" = "4" ] && ok "the demo has a ticket that was sent back and recovered" || bad "the demo has a ticket that was sent back and recovered"
+if command -v node > /dev/null 2>&1; then
+  while IFS= read -r line; do
+    case "$line" in
+      "ok   "*) ok "viewer: ${line#ok   }" ;;
+      "FAIL "*) bad "viewer: ${line#FAIL }" ;;
+    esac
+  done < <(node "$ROOT/tests/viewer-logic.test.js" "$ROOT/scripts/flow-view.html" 2>&1)
+else
+  echo "  skip  node is not installed, so the layout and replay unit tests were not run"
+fi
 
 echo
 echo "$PASS passed, $FAILS failed"

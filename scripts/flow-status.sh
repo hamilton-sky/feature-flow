@@ -1,7 +1,8 @@
 #!/bin/bash
-# usage: bash scripts/flow-status.sh <feature> [--next | --counts | --check | --mermaid [plain]]
+# usage: bash scripts/flow-status.sh <feature> [--next | --counts | --check | --mermaid [plain] | --json]
 # reads plans/<feature>/tasks/NN-slug.md and reports which tickets are ready.
 # --mermaid prints the ticket graph as a mermaid flowchart, coloured by status unless "plain" is given.
+# --json prints every ticket with its status, blockers and readiness as one JSON object.
 # env: FLOW_DIR (default plans), FLOW_TICKETS (default tasks)
 # exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready
 
@@ -11,7 +12,7 @@ FEATURE="${1:-}"
 MODE="${2:-table}"
 OPT="${3:-}"
 if [ -z "$FEATURE" ]; then
-  echo "usage: bash scripts/flow-status.sh <feature> [--next | --counts | --check | --mermaid [plain]]" >&2
+  echo "usage: bash scripts/flow-status.sh <feature> [--next | --counts | --check | --mermaid [plain] | --json]" >&2
   exit 2
 fi
 
@@ -37,7 +38,22 @@ if [ "$MODE" = "--check" ]; then
   fi
 fi
 
-exec awk -v mode="$MODE" -v opt="$OPT" '
+exec awk -v mode="$MODE" -v opt="$OPT" -v feat="$FEATURE" '
+function jstr(s,   n, i, c, o) {
+  o = "\""
+  n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "\\") o = o "\\\\"
+    else if (c == "\"") o = o "\\\""
+    else if (c == "\t") o = o "\\t"
+    else if (c == "\001") o = o "\\n"
+    else if (c < " ") o = o ""
+    else o = o c
+  }
+  return o "\""
+}
+
 function norm(s) {
   s = tolower(s)
   sub(/^[ \t]+/, "", s)
@@ -82,6 +98,13 @@ FNR <= 20 && /^Blocked by:/ && !hasblk[cur] {
     blk[cur, nblk[cur]] = substr(v, RSTART, RLENGTH) + 0
     v = substr(v, RSTART + RLENGTH)
   }
+}
+FNR <= 20 && /^Type:/ && !hastype[cur] {
+  hastype[cur] = 1
+  v = tolower($0)
+  sub(/^type:[ \t]*/, "", v)
+  sub(/[ \t].*$/, "", v)
+  typ[cur] = v
 }
 FNR <= 20 && /^Test first:/ && !hastf[cur] {
   hastf[cur] = 1
@@ -153,6 +176,22 @@ END {
 
   if (mode == "--counts") {
     printf "total=%d resolved=%d open=%d claimed=%d waiting=%d parked=%d unknown=%d ready=%d\n", n, nres, nopen, nclaim, nwait, npark, nunk, nready
+    exit 0
+  }
+
+  if (mode == "--json") {
+    printf "{\"feature\":%s,\"tickets\":[", jstr(feat)
+    for (i = 1; i <= n; i++) {
+      t = order[i]
+      bl = ""
+      for (b = 1; b <= nblk[t]; b++) {
+        d = blk[t, b]
+        bl = bl (b > 1 ? "," : "") jstr((d in seen) ? lab[d] : sprintf("%02d", d))
+      }
+      printf "%s{\"id\":%d,\"label\":%s,\"title\":%s,\"status\":%s,\"type\":%s,\"test_first\":%s,\"blocked_by\":[%s],\"ready\":%s,\"file\":%s}", \
+        (i > 1 ? "," : ""), t, jstr(lab[t]), jstr(title[t]), jstr(stat[t]), jstr(typ[t] == "" ? "task" : typ[t]), jstr(tf[t]), bl, (ready[t] ? "true" : "false"), jstr(path[t])
+    }
+    printf "],\"counts\":{\"total\":%d,\"resolved\":%d,\"open\":%d,\"claimed\":%d,\"waiting\":%d,\"parked\":%d,\"unknown\":%d,\"ready\":%d}}\n", n, nres, nopen, nclaim, nwait, npark, nunk, nready
     exit 0
   }
 

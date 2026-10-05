@@ -4,7 +4,7 @@
 
 Plan a feature as a graph of small tickets, then work the tickets one at a time or unattended. Every ticket is built by one session and checked by another, scripts check the build and watch for work that weakens the checks, and the whole run has cost and turn limits.
 
-6 skills, 2 agents, 4 scripts, an installer and a test suite. MIT licensed.
+7 skills, 2 agents, 5 scripts, an installer, a demo and a test suite. MIT licensed.
 
 ## Install
 
@@ -24,6 +24,7 @@ It never deletes anything. A file that already exists and differs is kept and re
 | `next-phase` | Works the next ready ticket: claims it, builds it (test first when the ticket says so), proves each Done-when with fresh output, writes the Answer, commits with `auto`. |
 | `review-ticket` | Reviews one finished ticket in a fresh session. Sees the ticket and the diff, not the author's account. Ends with `REVIEW: PASS` or `REVIEW: FAIL`. Refuses to review in a session that wrote the change. |
 | `run-flow` | Runs every remaining ticket unattended: smoke test, build, gate, floor guard, review, repeat. |
+| `show-flow` | Shows the ticket graph as an animated page that can replay the run from git history, and summarises what is ready and what blocks the finish. |
 | `architect-review` | Architecture review of a file, diff or feature, with severity rated findings. Reads CLAUDE.md for the project's own rules. |
 | `automation-design` | Blueprint for an automation pipeline. Hands off to `plan-feature`. |
 
@@ -39,6 +40,7 @@ The skills hold the protocol. The agents add what a skill cannot: tool limits th
 /next-phase csv-export          do one ticket, you watch
 /review-ticket csv-export 02    have a fresh session check ticket 02
 /run-flow csv-export            do all of them unattended
+/show-flow csv-export           watch the ticket graph, animated
 ```
 
 ## What a plan looks like
@@ -57,6 +59,29 @@ plans/
 ```
 
 `commands.md` and `learnings.md` are separate from the map because they follow different rules. Commands are approved by a human and read by the scripts, so they are frozen. Learnings grow with every ticket, so they are append only and a human prunes them (`--check` warns past 40 lines). The map stays short.
+
+## See the graph
+
+```bash
+bash scripts/flow-view.sh csv-export            write the page and open it
+bash scripts/flow-view.sh csv-export --watch    keep it updating during an unattended run
+bash examples/demo.sh --open                    try it on a made up project, no setup needed
+```
+
+One self contained HTML file: no server, no libraries, no network, light and dark. It is written to `.git/flow-<feature>.html`, so it never dirties the tree.
+
+```
+  01 types ──► 02 service ──► 04 acceptance        ● resolved  ◉ ready (pulses)
+        └────► 03 wire ──────────┘                 ◌ being worked (spins)  ○ waiting
+  ▶ replay ──●──────●─────○──────────   drag to scrub through the run
+```
+
+- **Layered left to right**, so the order of work is visible. Dashes flow along the edges into tickets that are ready to start.
+- **Replay** plays the run back from git history: tickets turn green in the order they resolved, and a ticket sent back by the gate, the guard or the reviewer flashes red.
+- **Hover or click** a ticket for its blockers, Done when, Answer, the rounds it was sent back, and what it cost.
+- **Keys:** space plays or pauses, the arrows step, End shows now, `t` switches theme. Reduced motion is respected.
+- **Safe by construction:** ticket text comes from files an agent wrote, so it is escaped when embedded and only ever inserted as text.
+- `flow-status.sh <feature> --json` prints the same data for other tools. Mermaid (`--mermaid`) remains the choice for pull requests, because GitHub renders it.
 
 ## How one ticket flows
 
@@ -122,6 +147,8 @@ bash scripts/flow-status.sh <feature> --next           path of the next ready ti
 bash scripts/flow-status.sh <feature> --counts         one line of counts
 bash scripts/flow-status.sh <feature> --check          cycles, missing blockers, missing Done when, unordered mentions
 bash scripts/flow-status.sh <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
+bash scripts/flow-status.sh <feature> --json           every ticket with status, blockers and readiness
+bash scripts/flow-view.sh <feature> [--watch]          the animated graph page, opened in your browser
 bash scripts/gate.sh <feature>                         run Build, Test and Lint from commands.md
 bash scripts/floor-guard.sh <feature> <NN> [base]      check a ticket's diff, run from the repo root
 bash scripts/auto-flow.sh <feature>                    the unattended loop
@@ -132,6 +159,7 @@ Settings, all optional environment variables:
 | Variable | Default | Meaning |
 |---|---|---|
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
+| `FLOW_NO_OPEN` | unset | `1` makes `flow-view.sh` never open a browser |
 | `FLOW_MAX_TOTAL_USD` | unset | stop the run when its total cost passes this (needs `jq`) |
 | `FLOW_MAX_BUDGET_USD` | unset | per session, passed as `--max-budget-usd` |
 | `FLOW_MAX_TURNS` | unset | per session, passed as `--max-turns` |
@@ -153,7 +181,7 @@ Settings, all optional environment variables:
 ```
  layer          what                                   works with
  1 plan files   tickets, spec, map, commands           anything, it is markdown
- 2 scripts      flow-status, gate, floor-guard         anything with bash, git and awk
+ 2 scripts      flow-status, gate, floor-guard, view   anything with bash, git and awk
  3 skills       plan-feature, next-phase, ...          Claude Code (SKILL.md, slash commands)
  4 the loop     auto-flow.sh                           calls `claude -p`
 ```
@@ -183,7 +211,7 @@ Every ticket still costs at least two sessions (build and review). Use `FLOW_REV
 bash tests/run.sh
 ```
 
-154 checks, offline, no cost. A fake `claude` stands in for the real one, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer, and every way a run should stop. The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `.github/workflows/tests.yml` runs the suite on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
+212 checks, offline, no cost. A fake `claude` stands in for the real one, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer, and the graph page and its data, and every way a run should stop. The page's layout and replay logic are also unit tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `.github/workflows/tests.yml` runs the suite on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
 
 ## Caution
 
