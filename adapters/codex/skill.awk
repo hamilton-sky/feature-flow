@@ -2,7 +2,8 @@
 # usage: awk -v emit=skill|yaml|role -v skills="next-phase review-ticket ..." -f skill.awk FILE
 #   skill  SKILL.md for .agents/skills/<name>/: frontmatter cut to name and a quoted description
 #          (a colon inside a plain YAML value breaks a strict parser), $ARGUMENTS and /slash
-#          mentions turned into prose and $skill mentions, Claude only commands and files replaced
+#          mentions turned into prose and $skill mentions, Claude only commands and files replaced,
+#          the loop started with FLOW_AGENT=codex
 #   yaml   agents/openai.yaml that goes beside it (display name, short description, default
 #          prompt, and the policy that makes the skill explicit only)
 #   role   the body of an agents/*.md file without its frontmatter: the loop and the manual
@@ -82,6 +83,10 @@ function conv(s,    i, a, b, ind, args, rules) {
   s = replace_all(s, "/clear", "a fresh session")
   if (index(s, "- **Auto**: commit the code, the ticket and the map together.") == 1) {
     s = s " If git refuses to write because the sandbox protects `.git`, leave the changes uncommitted and say so: the loop commits them for you."
+  }
+  s = replace_all(s, "bash scripts/auto-flow.sh", "FLOW_AGENT=codex bash scripts/auto-flow.sh")
+  if (index(s, "Run the script with the Bash tool in the background") == 1) {
+    s = s " It starts new Codex sessions, which need the network and files outside the sandbox, so ask for approval to run it outside the sandbox, or give the user the command to run in their own terminal."
   }
   if (index(s, "$ARGUMENTS") > 0) {
     used_args = 1

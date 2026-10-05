@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 Work one ticket of the feature in `$ARGUMENTS`.
 
-Parse `$ARGUMENTS`: the first word is the **feature**. The word `auto` means unattended: ask nothing, commit at the end. A number means "this ticket" instead of the next ready one. Example: `/next-phase csv-export auto`.
+Parse `$ARGUMENTS`: the first word is the **feature**. The word `auto` means unattended: ask nothing, commit at the end. It is meant for the loop (`scripts/auto-flow.sh`), which runs the gate, the floor guard and an independent review afterwards; typed by hand it builds and commits but gets none of those checks, so say so in your report. A number means "this ticket" instead of the next ready one. Example: `/next-phase csv-export auto`.
 
 Default is **manual**: you confirm before work starts and you commit yourself.
 

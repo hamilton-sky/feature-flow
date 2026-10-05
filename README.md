@@ -169,21 +169,45 @@ Settings, all optional environment variables:
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `FLOW_AGENT` | `claude` | `claude` or `codex`: which CLI runs the sessions (see "Running the loop with Codex") |
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
 | `FLOW_NO_OPEN` | unset | `1` makes `flow-view.sh` never open a browser |
-| `FLOW_MAX_TOTAL_USD` | unset | stop the run when its total cost passes this (needs `jq`) |
-| `FLOW_MAX_BUDGET_USD` | unset | per session, passed as `--max-budget-usd` |
-| `FLOW_MAX_TURNS` | unset | per session, passed as `--max-turns` |
+| `FLOW_MAX_TOTAL_USD` | unset | stop the run when its total cost passes this (needs `jq`; claude only) |
+| `FLOW_MAX_BUDGET_USD` | unset | per session, passed as `--max-budget-usd` (claude only) |
+| `FLOW_MAX_TURNS` | unset | per session, passed as `--max-turns` (claude only) |
 | `FLOW_MAX_RETRIES` | `2` | sessions per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops |
 | `FLOW_REVIEW` | `on` | `off` skips the reviewer session and keeps the gate and the floor guard |
 | `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket |
-| `FLOW_AGENTS` | `auto` | `auto` uses the agents when installed, `on` requires them, `off` never uses them |
+| `FLOW_AGENTS` | `auto` | `auto` uses the agents when installed, `on` requires them, `off` never uses them. For codex they are the role files in `.agents/flow-roles/` |
 | `FLOW_MODEL`, `FLOW_REVIEW_MODEL` | unset | model for building, model for reviewing (a different one removes some self-agreement) |
 | `FLOW_SMOKE` | the `Smoke:` line of `commands.md` | command run before every ticket; the run stops if it fails |
 | `FLOW_COST` | `on` | `off` turns the cost log off; the log is `.git/flow-cost-<feature>.log` |
-| `FLOW_CLAUDE_ARGS` | unset | extra flags for every session, e.g. `--setting-sources project,local` |
-| `FLOW_ALLOWED_TOOLS` | `Edit,Write,Read,Glob,Grep,Bash` | tools each building session may use (reviewers get read only tools plus Bash) |
+| `FLOW_CLAUDE_ARGS` | unset | extra flags for every claude session, e.g. `--setting-sources project,local` |
+| `FLOW_CODEX_ARGS` | unset | extra flags for every codex session, e.g. `-c model_reasoning_effort=low` |
+| `FLOW_ALLOWED_TOOLS` | `Edit,Write,Read,Glob,Grep,Bash` | tools each building session may use (reviewers get read only tools plus Bash; claude only) |
+
+### Running the loop with Codex
+
+```bash
+FLOW_AGENT=codex bash scripts/auto-flow.sh csv-export
+```
+
+Same loop, same gate, same floor guard, same ticket file as the judge. Only the session launcher changes, and Codex is different from Claude Code in ways the loop has to work around. These were measured with Codex 0.147.0 in one probe run:
+
+| Codex does this | So the loop does this |
+|---|---|
+| Has no flag to run a whole session as a named agent | The builder runs with `--sandbox workspace-write` and the reviewer with `--sandbox read-only`. The role text from `.agents/flow-roles/` goes in front of the prompt (no role files: the bare `$next-phase ...` prompt). |
+| Keeps `.git` read only in `workspace-write` (`git commit` failed with `index.lock: Operation not permitted`) | The loop commits for the builder once its ticket says `resolved`: `git add -A`, then `feat(<feature>): NN <ticket title>`. Work from a ticket that is not resolved is never committed. If the agent did commit, the loop adds nothing. |
+| Has no network in `workspace-write` (a DNS lookup failed) | Nothing: a builder that needs `npm install` or a download will fail its ticket. Codex can be configured to allow it (`FLOW_CODEX_ARGS`), which is untested here. |
+| Exits 0 even when the task half failed | Nothing new: the ticket file decides, as with Claude. |
+| Reports tokens and no dollars | The cost log gets the tokens (the last two columns) and a dollar figure of 0, and the run prints `tokens this run`. The graph page therefore shows $0 for Codex runs. No prices are invented. |
+| Has no turn limit, budget limit or dollar cap | `FLOW_MAX_TOTAL_USD`, `FLOW_MAX_BUDGET_USD`, `FLOW_MAX_TURNS` and `FLOW_ALLOWED_TOOLS` do not apply and the run says so when they are set. macOS has no `timeout` command either. **Only `FLOW_MAX_RETRIES`, `FLOW_MAX_REVIEW_ROUNDS` and the run limit (a few times the ticket count) stop a runaway Codex run**, so run it on a throwaway branch. |
+| Writes its last message to the `-o` file | The reviewer's `REVIEW: PASS` or `REVIEW: FAIL` is read from that file, never from the event stream. |
+
+Not yet known: whether a read only reviewer can re-run a Done when command that writes files (a test that writes a cache, say). If it cannot, you would see a `REVIEW: FAIL` with a command error in the findings.
+
+The loop starts new Codex sessions, so start it from your own terminal. Started from inside an interactive Codex session it is blocked by that session's sandbox (no network, `.git` read only) unless you approve running it outside the sandbox.
 
 `flow-status.sh` also understands the `.scratch/<feature>/issues/` layout and the statuses `done`, `ready-for-agent`, `ready-for-human` and `closed`: `FLOW_DIR=.scratch FLOW_TICKETS=issues`.
 
@@ -193,14 +217,15 @@ Settings, all optional environment variables:
  layer          what                                   works with
  1 plan files   tickets, spec, map, commands           anything, it is markdown
  2 scripts      flow-status, gate, floor-guard, view   anything with bash, git and awk
- 3 skills       plan-feature, next-phase, ...          Claude Code (SKILL.md, slash commands)
- 4 the loop     auto-flow.sh                           calls `claude -p`
+ 3 skills       plan-feature, next-phase, ...          Claude Code (slash commands), Codex (generated)
+ 4 the loop     auto-flow.sh                           calls `claude -p`, or `codex exec` with FLOW_AGENT=codex
 ```
 
 - **Headless** (`claude -p`): tested for real. This is what the loop does.
 - **Interactive**: the skills are meant to be typed in a normal session. Only the headless path has been tested for real.
-- **Codex skills**: `install.sh --agent codex` generates them. Tested offline: the transform rule by rule, the installed files, and that the generated headers and `openai.yaml` parse as strict YAML. Not yet run in Codex.
-- **Claude Code on the web and other harnesses**: not tested. Layers 1 and 2 are portable as they are. The loop (layer 4) still calls `claude`.
+- **Codex skills**: `install.sh --agent codex` generates them. Tested offline: the transform rule by rule, the installed files, and that the generated headers and `openai.yaml` parse as strict YAML. Not yet run in interactive Codex.
+- **Codex loop** (`FLOW_AGENT=codex`): tested offline with a fake `codex` that models the sandbox (it cannot commit), and probed once against the real CLI.
+- **Claude Code on the web and other harnesses**: not tested. Layers 1 and 2 are portable as they are.
 - The test suite passes in CI on Linux (with `mawk` and with `gawk`) and on macOS. It was developed on macOS with bash 3.2.
 
 ## What a session costs
@@ -223,7 +248,7 @@ Every ticket still costs at least two sessions (build and review). Use `FLOW_REV
 bash tests/run.sh
 ```
 
-299 checks, offline, no cost. A fake `claude` stands in for the real one, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer for both agents, and the graph page and its data, and every way a run should stop. The page's layout and replay logic are also unit tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `.github/workflows/tests.yml` runs the suite on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
+399 checks, offline, no cost. A fake `claude` and a fake `codex` stand in for the real ones, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer for both agents, and the graph page and its data, and every way a run should stop. The page's layout and replay logic are also unit tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `.github/workflows/tests.yml` runs the suite on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
 
 ## Caution
 
