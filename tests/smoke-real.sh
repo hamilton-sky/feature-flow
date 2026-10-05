@@ -1,23 +1,48 @@
 #!/bin/bash
-# runs two tickets through the real claude on a throwaway project, review included.
-# this spends money: each ticket costs at least two sessions.
-# usage: RUN_REAL=1 [FLOW_MAX_BUDGET_USD=2] bash tests/smoke-real.sh
+# runs two tickets through the real agent on a throwaway project, review included.
+# this spends money (claude) or plan quota (codex): each ticket costs at least two sessions.
+# usage: RUN_REAL=1 [FLOW_AGENT=claude|codex] [FLOW_MAX_BUDGET_USD=2] bash tests/smoke-real.sh
+#        [FLOW_AGENT=claude|codex] bash tests/smoke-real.sh --prepare DIR
+#          builds the same project in the empty folder DIR, installed for the agent, and stops.
+#          no model is called, so it costs nothing: use it to try the skills by hand in the agent's own UI.
 
 set -euo pipefail
 
-if [ "${RUN_REAL:-}" != "1" ]; then
-  echo "this spends money. set RUN_REAL=1 to run it." >&2
+PREPARE=""
+if [ "${1:-}" = "--prepare" ]; then
+  PREPARE="${2:-}"
+  [ -n "$PREPARE" ] || { echo "usage: bash tests/smoke-real.sh --prepare DIR" >&2; exit 2; }
+elif [ "${RUN_REAL:-}" != "1" ]; then
+  echo "this spends money or plan quota. set RUN_REAL=1 to run it." >&2
   exit 2
 fi
 
+AGENT="${FLOW_AGENT:-claude}"
+case "$AGENT" in
+  claude | codex) ;;
+  *)
+    echo "FLOW_AGENT must be claude or codex, not $AGENT" >&2
+    exit 2
+    ;;
+esac
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TMP="$(mktemp -d)"
-RUNLOG="$(mktemp)"
-trap 'rm -rf -- "${TMP:?}" "${RUNLOG:?}"' EXIT
+if [ -n "$PREPARE" ]; then
+  mkdir -p "$PREPARE"
+  if [ -n "$(ls -A "$PREPARE")" ]; then
+    echo "$PREPARE is not empty, use a new folder" >&2
+    exit 2
+  fi
+  TMP="$(cd "$PREPARE" && pwd)"
+else
+  TMP="$(mktemp -d)"
+  RUNLOG="$(mktemp)"
+  trap 'rm -rf -- "${TMP:?}" "${RUNLOG:?}"' EXIT
+fi
 cd "$TMP"
 
 mkdir -p plans/hello/tasks
-bash "$ROOT/install.sh" "$TMP" > /dev/null
+bash "$ROOT/install.sh" "$TMP" --agent "$AGENT" > /dev/null
 printf '__pycache__/\n*.pyc\n' > .gitignore
 
 cat > plans/hello/spec.md << 'EOF'
@@ -118,7 +143,26 @@ git config user.name smoke
 git add -A
 git commit -qm init
 
-FLOW_MAX_BUDGET_USD="${FLOW_MAX_BUDGET_USD:-2}" FLOW_MAX_TOTAL_USD="${FLOW_MAX_TOTAL_USD:-12}" bash scripts/auto-flow.sh hello 2>&1 | tee "$RUNLOG"
+if [ -n "$PREPARE" ]; then
+  echo "prepared $TMP for $AGENT. no model was called."
+  if [ "$AGENT" = codex ]; then
+    echo "try it by hand:  cd $TMP && codex    then type:  \$next-phase hello"
+  else
+    echo "try it by hand:  cd $TMP && claude   then type:  /next-phase hello"
+  fi
+  exit 0
+fi
+
+if [ "$AGENT" = codex ]; then
+  # codex has no budget or turn cap, so the loop's own brakes matter: one review round caps the run at 17 sessions
+  FLOW_AGENT=codex FLOW_MAX_RETRIES="${FLOW_MAX_RETRIES:-2}" FLOW_MAX_REVIEW_ROUNDS="${FLOW_MAX_REVIEW_ROUNDS:-1}" bash scripts/auto-flow.sh hello 2>&1 | tee "$RUNLOG"
+  BANNER="codex, builder role ticket-builder, reviewer role ticket-reviewer"
+  COSTLINE="tokens this run"
+else
+  FLOW_MAX_BUDGET_USD="${FLOW_MAX_BUDGET_USD:-2}" FLOW_MAX_TOTAL_USD="${FLOW_MAX_TOTAL_USD:-12}" bash scripts/auto-flow.sh hello 2>&1 | tee "$RUNLOG"
+  BANNER="builder agent ticket-builder, reviewer agent ticket-reviewer"
+  COSTLINE="cost this run"
+fi
 
 fails=0
 check() { if eval "$2" > /dev/null 2>&1; then echo "  ok    $1"; else echo "  FAIL  $1"; fails=$((fails + 1)); fi; }
@@ -129,13 +173,14 @@ check "the tree is clean" '[ -z "$(git status --porcelain)" ]'
 check "ticket 01 has a Proof section" 'grep -q "Proof" plans/hello/tasks/01-greet-function.md'
 check "a test file exists" '[ -f test_hello.py ]'
 check "the gate ran the real commands after each ticket" '[ "$(grep -c "gate: 2 command(s) passed" "$RUNLOG")" -ge 2 ]'
-check "the agents were used" 'grep -q "builder agent ticket-builder, reviewer agent ticket-reviewer" "$RUNLOG"'
+check "the agents were used" 'grep -q "$BANNER" "$RUNLOG"'
+check "each ticket landed as a commit" '[ "$(git rev-list --count HEAD)" -ge 3 ]'
 check "ticket 02 has a Built section" 'grep -q "Built" plans/hello/tasks/02-command-line.md'
 check "the floor guard never objected, so no false alarm on legitimate edits" '! grep -q "floor guard sent" "$RUNLOG"'
 check "commands.md was never modified after the plan" '[ "$(git log --format=%H -- plans/hello/commands.md | wc -l | tr -d " ")" = 1 ]'
 if command -v jq > /dev/null 2>&1; then
   check "the cost log has a line for every session" '[ "$(wc -l < .git/flow-cost-hello.log)" -ge 4 ]'
-  check "the run printed its total cost" 'grep -q "cost this run" "$RUNLOG"'
+  check "the run printed its total" 'grep -q "$COSTLINE" "$RUNLOG"'
 fi
 echo
 git log --oneline

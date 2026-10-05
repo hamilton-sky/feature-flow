@@ -969,6 +969,28 @@ else
   echo "  skip  node is not installed, so the layout and replay unit tests were not run"
 fi
 
+echo "smoke-real.sh, prepare only"
+SM="$ROOT/tests/smoke-real.sh"
+mkdir -p "$TMP/nobin"
+P="$TMP/prep_codex"
+out="$(env PATH="$TMP/nobin:/usr/bin:/bin" FLOW_AGENT=codex bash "$SM" --prepare "$P" 2>&1)"; rc=$?
+expect_rc "--prepare builds the project without any model installed" 0 $rc
+expect_has "it says no model was called" "no model was called" "$out"
+expect_has "and tells a codex user what to type" 'then type:  $next-phase hello' "$out"
+if [ -f "$P/.agents/skills/next-phase/SKILL.md" ] && [ -f "$P/.agents/flow-roles/ticket-reviewer.md" ] && [ ! -e "$P/.claude" ]; then ok "the project is installed for codex only"; else bad "the project is installed for codex only"; fi
+expect_has "the plan passes the ticket check" "OK: 2 tickets" "$(cd "$P" && bash scripts/flow-status.sh hello --check 2>&1)"
+expect_has "and the first ticket is the one that is ready" "01-greet-function.md" "$(cd "$P" && bash scripts/flow-status.sh hello --next 2>&1)"
+if [ -z "$(cd "$P" && git status --porcelain)" ] && [ "$(cd "$P" && git rev-list --count HEAD)" = 1 ]; then ok "it is one clean commit"; else bad "it is one clean commit"; fi
+env FLOW_AGENT=codex bash "$SM" --prepare "$P" > /dev/null 2>&1; expect_rc "a folder that is not empty is refused" 2 $?
+P2="$TMP/prep_claude"
+out="$(env PATH="$TMP/nobin:/usr/bin:/bin" bash "$SM" --prepare "$P2" 2>&1)"; rc=$?
+expect_rc "--prepare defaults to claude" 0 $rc
+expect_has "and tells a claude user what to type" "then type:  /next-phase hello" "$out"
+if [ -f "$P2/.claude/skills/next-phase/SKILL.md" ] && [ ! -e "$P2/.agents" ]; then ok "the project is installed for claude only"; else bad "the project is installed for claude only"; fi
+env RUN_REAL=0 bash "$SM" > /dev/null 2>&1; expect_rc "without RUN_REAL or --prepare nothing runs" 2 $?
+env FLOW_AGENT=bogus bash "$SM" --prepare "$TMP/prep_bogus" > /dev/null 2>&1; expect_rc "an unknown FLOW_AGENT is refused" 2 $?
+bash "$SM" --prepare > /dev/null 2>&1; expect_rc "--prepare without a folder is refused" 2 $?
+
 echo
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]
