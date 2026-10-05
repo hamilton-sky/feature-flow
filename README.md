@@ -12,9 +12,20 @@ Plan a feature as a graph of small tickets, then work the tickets one at a time 
 bash install.sh /path/to/repo            # skills and agents into the repo's .claude/, scripts into scripts/
 bash install.sh /path/to/repo --user     # skills and agents into ~/.claude/ for every project, scripts still into the repo
 bash install.sh /path/to/repo --dry-run  # show what would change, write nothing
+bash install.sh /path/to/repo --agent codex   # the same skills, rewritten for Codex, into the repo's .agents/
+bash install.sh /path/to/repo --agent all     # Claude Code and Codex side by side
 ```
 
-It never deletes anything. A file that already exists and differs is kept and reported; `--force` replaces it. Install `jq` if you want the cost log.
+`--agent` is `claude` (the default, unchanged), `codex` or `all`. It never deletes anything. A file that already exists and differs is kept and reported; `--force` replaces it. Install `jq` if you want the cost log.
+
+**For Codex** the skills are not a second copy: they are generated from `skills/` at install time by `adapters/codex/skill.awk`, so one edit reaches both agents. The Codex copy of each skill:
+
+- keeps only `name` and a quoted `description` in its header, and gets an `agents/openai.yaml` beside it. `next-phase`, `review-ticket`, `run-flow` and `show-flow` are marked `allow_implicit_invocation: false`, so they run only when you name them (the same job `disable-model-invocation` does in Claude Code);
+- says `$next-phase csv-export auto` where Claude Code says `/next-phase csv-export auto`, and `<arguments>` where Claude Code says `$ARGUMENTS`, with one line saying what that means;
+- starts the manual review with `codex exec --sandbox read-only`, putting `.agents/flow-roles/ticket-reviewer.md` in front of the prompt, because Codex has no `--agent`;
+- reads `AGENTS.md` where it read `CLAUDE.md`, and tells the agent to leave changes uncommitted when the sandbox refuses git writes.
+
+The two agents become plain role files in `.agents/flow-roles/` (never your `AGENTS.md`). With `--user` the Codex skills go to `~/.agents/skills/` (`AGENTS_HOME` overrides it); the role files and the scripts stay in the repo, because the skills call them from there.
 
 ## Skills and agents
 
@@ -188,7 +199,8 @@ Settings, all optional environment variables:
 
 - **Headless** (`claude -p`): tested for real. This is what the loop does.
 - **Interactive**: the skills are meant to be typed in a normal session. Only the headless path has been tested for real.
-- **Claude Code on the web, Codex and other harnesses**: not tested. Layers 1 and 2 are portable as they are. Layer 3 uses Claude Code features (`disable-model-invocation`, `$ARGUMENTS`, `--allowedTools`), and layer 4 calls `claude`.
+- **Codex skills**: `install.sh --agent codex` generates them. Tested offline: the transform rule by rule, the installed files, and that the generated headers and `openai.yaml` parse as strict YAML. Not yet run in Codex.
+- **Claude Code on the web and other harnesses**: not tested. Layers 1 and 2 are portable as they are. The loop (layer 4) still calls `claude`.
 - The test suite passes in CI on Linux (with `mawk` and with `gawk`) and on macOS. It was developed on macOS with bash 3.2.
 
 ## What a session costs
@@ -211,7 +223,7 @@ Every ticket still costs at least two sessions (build and review). Use `FLOW_REV
 bash tests/run.sh
 ```
 
-212 checks, offline, no cost. A fake `claude` stands in for the real one, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer, and the graph page and its data, and every way a run should stop. The page's layout and replay logic are also unit tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `.github/workflows/tests.yml` runs the suite on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
+299 checks, offline, no cost. A fake `claude` stands in for the real one, so the suite covers the loop, the retries, the stale claim reset, the gate, the guard, the plan protection, the review rounds, the agents, the cost log and caps, the smoke test, the installer for both agents, and the graph page and its data, and every way a run should stop. The page's layout and replay logic are also unit tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). The checks were also run against deliberately broken copies of the code to confirm they fail when they should. `.github/workflows/tests.yml` runs the suite on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. `tests/smoke-real.sh` installs everything into a throwaway project and runs two tickets through the real `claude`; it spends money, so it asks you to set `RUN_REAL=1`.
 
 ## Caution
 

@@ -1,6 +1,6 @@
 ---
 name: run-flow
-description: Use to run every remaining ticket of a planned feature unattended, one fresh Claude session per ticket, until the feature is complete or stuck. Needs scripts/auto-flow.sh and scripts/flow-status.sh and a clean git tree.
+description: Use to run every remaining ticket of a planned feature unattended, one fresh agent session per ticket, until the feature is complete or stuck. Needs scripts/auto-flow.sh and scripts/flow-status.sh and a clean git tree.
 argument-hint: "[feature]"
 disable-model-invocation: true
 ---
@@ -15,7 +15,7 @@ If no feature was given, list `plans/*/` and ask which one.
 
 1. Ask `flow-status.sh` for the next ready ticket.
 2. Run the **smoke command** (the `Smoke:` line of `commands.md`, or `FLOW_SMOKE`). If the base is already broken, stop before spending a session.
-3. Start a fresh `claude -p "/next-phase <feature> auto"` session. It starts with clean context, and runs as the `ticket-builder` agent when that agent is installed.
+3. Start a fresh agent session on the prompt `/next-phase <feature> auto`. It starts with clean context, and runs with the builder role: the `ticket-builder` agent when that agent is installed.
 4. Read the ticket file. If it is now `resolved`, go on. If not, reset a stale claim and retry (2 attempts by default), then stop.
 5. Stop if the working tree is dirty afterwards, because each ticket should end committed.
 6. Run the **gate**: the `Build`, `Test` and `Lint` commands from `commands.md`. A script runs them, so "the tests pass" is checked, not claimed.
