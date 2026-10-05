@@ -988,7 +988,10 @@ expect_rc "--prepare defaults to claude" 0 $rc
 expect_has "and tells a claude user what to type" "then type:  /next-phase hello" "$out"
 if [ -f "$P2/.claude/skills/next-phase/SKILL.md" ] && [ ! -e "$P2/.agents" ]; then ok "the project is installed for claude only"; else bad "the project is installed for claude only"; fi
 env RUN_REAL=0 bash "$SM" > /dev/null 2>&1; expect_rc "without RUN_REAL or --prepare nothing runs" 2 $?
-env FLOW_AGENT=bogus bash "$SM" --prepare "$TMP/prep_bogus" > /dev/null 2>&1; expect_rc "an unknown FLOW_AGENT is refused" 2 $?
+out="$(env FLOW_AGENT=bogus bash "$SM" --prepare "$TMP/prep_bogus" 2>&1)"; rc=$?
+expect_rc "an unknown FLOW_AGENT is refused" 2 $rc
+expect_has "and the script itself says what is allowed" "FLOW_AGENT must be claude or codex, not bogus" "$out"
+if [ ! -e "$TMP/prep_bogus" ]; then ok "and it creates nothing"; else bad "and it creates nothing"; fi
 bash "$SM" --prepare > /dev/null 2>&1; expect_rc "--prepare without a folder is refused" 2 $?
 
 echo
