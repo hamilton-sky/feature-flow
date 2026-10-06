@@ -10,7 +10,7 @@ Add `skills/feature-flow/SKILL.md`, the one skill a Claude Code user types: `/fe
 What it says, in order:
 
 1. Take the feature from `$ARGUMENTS`; if none, list `plans/*/` and ask. With `show`, follow `guides/show.md` and stop.
-2. If the plan folder is absent, run `FLOW_INVOKE=/feature-flow bash scripts/flow.sh <feature> start` and require `PLAN`. Follow `guides/plan.md` with the user, run `flow-status.sh <feature> --check`, then stop with the created files and a suggested plan commit command. Say to commit the plan and run the skill again; do not claim it is ready while the tree is dirty.
+2. If the plan folder is absent, run `FLOW_INVOKE=/feature-flow python3 scripts/flow.py <feature> start` and require `PLAN`. Follow `guides/plan.md` with the user, run `flow-status.sh <feature> --check`, then stop with the created files and a suggested plan commit command. Say to commit the plan and run the skill again; do not claim it is ready while the tree is dirty.
 3. With a plan present, before `start`: require a clean tree, `flow-status.sh <feature> --check` printing `OK`, and `ticket-builder` and `ticket-reviewer` installed (`.claude/agents/` or `~/.claude/agents/`), else stop and say to run `bash install.sh`. Then run `start`, keep the token from `OK <token>` and pass it as `FLOW_SESSION=<token>` to every later conductor command. If `start` reports another owner, ask before retrying once with `FLOW_TAKEOVER=1`; never take over in `auto` mode. Say what will happen (two subagents per ticket, a handoff every `FLOW_TICKETS_PER_SESSION` tickets) and ask for a yes, unless `auto` was given.
 4. The loop: `next`, act on that line only. `BUILD`: run `prompt` and spawn a `ticket-builder` subagent with its output, asking for a short summary back. `REVIEW`: run `prompt`, spawn `ticket-reviewer`, save its whole reply as the probe found works, run `verdict`, then `next`. Every conductor call carries the same `FLOW_SESSION`. `DONE`: report and suggest `/feature-flow <feature> show`. `STOP`: report the reason and show `flow-status.sh <feature>`. `HANDOFF`: stop and give the user the exact line to type in a new session.
 5. Rules: never run the gate, floor guard or a review yourself, never edit a ticket or commit, never skip or reorder, one short line per phase to the user.
@@ -31,6 +31,6 @@ What it says, in order:
 
 - spec.md § Happy path, Interfaces
 - skills/run-flow/SKILL.md (voice and structure)
-- guides/ and scripts/flow.sh
+- guides/ and scripts/flow.py
 
 ## Answer

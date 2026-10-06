@@ -1,4 +1,4 @@
-# Commands: interactive-flow
+# Commands: interactive-flow-python
 
 The real commands for this project, read from its own config: CI runs `bash tests/run.sh`, there is no build step and no linter. Approved by a human when the plan is approved. Workers read this file and must not change it.
 
