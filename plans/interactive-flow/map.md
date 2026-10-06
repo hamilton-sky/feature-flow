@@ -25,6 +25,7 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 04 - `verdict <file>` records PASS/FAIL/none; `next` checks reviewer edits by tracked diff + HEAD vs review sha, then sends back, re-reviews or moves on; DONE on completion.
 06 - `start` issues an owner token required as FLOW_SESSION; HANDOFF after FLOW_TICKETS_PER_SESSION passes (never on the last ticket) or after every phase with FLOW_RELAY=1; takeover only with FLOW_TAKEOVER=1.
 05 - runtime-neutral `guides/` (build, review, plan, show, templates) copied from the skills; `flow.py <f> prompt` pastes role + guide + filled task, finding guides beside `scripts/` or in `.feature-flow/`.
+07 - one Claude skill `skills/feature-flow/SKILL.md` (60 lines) drives `flow.py`: start/token, BUILD and REVIEW subagents from `prompt`, reply saved with Bash under `.git`, never checks or reviews itself.
 
 ## Open questions
 
