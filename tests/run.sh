@@ -1,5 +1,5 @@
 #!/bin/bash
-# offline tests for the scripts. no network and no real claude: a fake claude stands in.
+# offline tests for the scripts. no network and no model is called.
 # usage: bash tests/run.sh
 # exit code is the number of failed checks, capped at 1.
 
@@ -18,162 +18,6 @@ expect_rc() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "exit $3, wanted $
 expect_has() { if printf '%s' "$3" | grep -qF -- "$2"; then ok "$1"; else bad "$1" "missing: $2"; fi; }
 expect_lacks() { if printf '%s' "$3" | grep -qF -- "$2"; then bad "$1" "unexpected: $2"; else ok "$1"; fi; }
 
-mkdir -p "$TMP/bin"
-cat > "$TMP/bin/claude" << 'FAKE'
-#!/bin/bash
-prompt="$2"
-json=0
-prev=""
-for a in "$@"; do
-  if [ "$prev" = "--output-format" ] && [ "$a" = "json" ]; then json=1; fi
-  prev="$a"
-done
-if [ "$json" = 1 ] && [ -z "${FAKE_INNER:-}" ]; then
-  out="$(FAKE_INNER=1 "$0" "$@" 2> /dev/null)"; rc=$?
-  jq -n --arg r "$out" --arg c "${FAKE_COST:-0.10}" --argjson e "$([ "$rc" -ne 0 ] && echo true || echo false)" \
-    '{type:"result",subtype:"success",is_error:$e,num_turns:3,total_cost_usd:($c|tonumber),result:$r,session_id:"fake"}'
-  exit "$rc"
-fi
-mkdir -p .fake
-echo "$*" >> .fake/calls.log
-setst() { awk -v s="$1" 'FNR<=20 && !d && /^Status:/ {print "Status: " s; d=1; next} {print}' "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
-commit() { git add -A > /dev/null 2>&1; git commit -qm "$1"; }
-case "$prompt" in
-  /next-phase*)
-    feature="$(echo "$prompt" | awk '{print $2}')"
-    t="$(bash scripts/flow-status.sh "$feature" --next 2> /dev/null)" || exit 0
-    n="$(basename "$t" .md)"; num="${n%%-*}"
-    findings=0; grep -q '^## Review findings' "$t" && findings=1
-    case "$FAKE_IMPL" in
-      ok) echo "work $num" > "work-$num.txt"; setst resolved "$t"; commit "feat: $num" ;;
-      noop) exit 0 ;;
-      die_once)
-        if [ ! -e .fake/died ]; then touch .fake/died; setst claimed "$t"; exit 1; fi
-        echo "work $num" > "work-$num.txt"; setst resolved "$t"; commit "feat: $num" ;;
-      tamper_then_fix)
-        if [ "$findings" = 0 ]; then sed -i.bak 's/^- x$/- y/' "$t"; else sed -i.bak 's/^- y$/- x/' "$t"; fi
-        rm -f "$t.bak"; setst resolved "$t"; commit "feat: $num" ;;
-      learn)
-        echo "work $num" > "work-$num.txt"
-        printf -- '- (%s) a lesson\n' "$num" >> "plans/$feature/learnings.md"
-        printf '%s - decided something\n' "$num" >> "plans/$feature/map.md"
-        setst resolved "$t"; commit "feat: $num" ;;
-      break_smoke) touch BROKEN; setst resolved "$t"; commit "feat: $num" ;;
-      fail_test_then_fix)
-        if [ "$findings" = 0 ]; then touch FAILING; else rm -f FAILING; fi
-        echo "work $num" > "work-$num.txt"; setst resolved "$t"; commit "feat: $num" ;;
-      skip_then_fix)
-        mkdir -p tests
-        if [ "$findings" = 0 ]; then
-          printf '@pytest.mark.skip\ndef test_%s():\n    assert True\n' "$num" > "tests/test_$num.py"
-        else
-          printf 'def test_%s():\n    assert True\n' "$num" > "tests/test_$num.py"
-        fi
-        setst resolved "$t"; commit "feat: $num" ;;
-    esac ;;
-  /review-ticket*)
-    num="$(echo "$prompt" | awk '{print $3}')"
-    echo "SPEC"; echo "- checked"
-    case "$FAKE_REVIEW" in
-      pass) echo "REVIEW: PASS" ;;
-      fail_once)
-        if [ ! -e ".fake/reviewed-$num" ]; then
-          touch ".fake/reviewed-$num"; echo "1. major x.py: a bug"; echo "REVIEW: FAIL"
-        else
-          echo "REVIEW: PASS"
-        fi ;;
-      fail_always) echo "1. major x.py: still a bug"; echo "REVIEW: FAIL" ;;
-      noverdict) echo "I am not sure" ;;
-      edits) echo "tampered" >> README.md; echo "REVIEW: PASS" ;;
-    esac ;;
-esac
-exit 0
-FAKE
-chmod +x "$TMP/bin/claude"
-cat > "$TMP/bin/codex" << 'FAKE'
-#!/bin/bash
-# stands in for `codex exec`. like the real sandbox it cannot write .git, so it never commits
-# (unless FAKE_CODEX_GIT=ok). the final message goes to the -o file; --json prints events as the real one does.
-[ "$1" = exec ] || { echo "fake codex: expected exec, got $1" >&2; exit 64; }
-shift
-prompt="" last="" json=0 sandbox="" model=""
-raw="$*"
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --sandbox) sandbox="$2"; shift ;;
-    -o) last="$2"; shift ;;
-    -m) model="$2"; shift ;;
-    -c | -C) shift ;;
-    --json) json=1 ;;
-    -*) ;;
-    *) prompt="$1" ;;
-  esac
-  shift
-done
-mkdir -p .fake
-n=$(( $(ls .fake/codex-prompt-*.txt 2> /dev/null | wc -l) + 1 ))
-printf '%s' "$prompt" > ".fake/codex-prompt-$n.txt"
-role=other
-case "$prompt" in
-  *'$next-phase'*) role=build ;;
-  *'$review-ticket'*) role=review ;;
-esac
-echo "role=$role sandbox=$sandbox model=$model json=$json o=$([ -n "$last" ] && echo y || echo n) args=$(printf '%s' "$raw" | tr '\n' ' ' | cut -c1-200)" >> .fake/codex-calls.log
-setst() { awk -v s="$1" 'FNR<=20 && !d && /^Status:/ {print "Status: " s; d=1; next} {print}' "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
-agent_commit() { [ "${FAKE_CODEX_GIT:-}" = ok ] || return 0; git add -A > /dev/null 2>&1; git commit -qm "agent: $1"; }
-final="done"
-case "$role" in
-  build)
-    feature="$(printf '%s' "$prompt" | grep -o '\$next-phase [^ ]*' | tail -1 | awk '{print $2}')"
-    t="$(bash scripts/flow-status.sh "$feature" --next 2> /dev/null)" || exit 0
-    num="$(basename "$t" .md)"; num="${num%%-*}"
-    findings=0; grep -q '^## Review findings' "$t" && findings=1
-    case "${FAKE_IMPL:-ok}" in
-      ok) echo "work $num" > "work-$num.txt"; setst resolved "$t"; agent_commit "$num" ;;
-      noop) final="nothing done" ;;
-      half) echo "work $num" > "work-$num.txt"; final="stopped halfway" ;;
-      skip_then_fix)
-        mkdir -p tests
-        if [ "$findings" = 0 ]; then
-          printf '@pytest.mark.skip\ndef test_%s():\n    assert True\n' "$num" > "tests/test_$num.py"
-        else
-          printf 'def test_%s():\n    assert True\n' "$num" > "tests/test_$num.py"
-        fi
-        setst resolved "$t"; agent_commit "$num" ;;
-    esac ;;
-  review)
-    num="$(printf '%s' "$prompt" | grep -o '\$review-ticket [^ ]* [^ ]*' | tail -1 | awk '{print $3}')"
-    final="SPEC
-- checked"
-    case "${FAKE_REVIEW:-pass}" in
-      pass) final="$final
-REVIEW: PASS" ;;
-      fail_once)
-        if [ ! -e ".fake/reviewed-$num" ]; then touch ".fake/reviewed-$num"; final="$final
-1. major x.py: a bug
-REVIEW: FAIL"; else final="$final
-REVIEW: PASS"; fi ;;
-      fail_always) final="$final
-1. major x.py: still a bug
-REVIEW: FAIL" ;;
-      noverdict) final="I am not sure" ;;
-    esac ;;
-esac
-[ -z "$last" ] || printf '%s\n' "$final" > "$last"
-if [ "$json" = 1 ]; then
-  [ -z "${FAKE_CODEX_JUNK:-}" ] || printf '%s\n' 'Reading additional input from stdin...'
-  printf '%s\n' '{"type":"thread.started","thread_id":"fake"}'
-  printf '%s\n' '{"type":"item.completed","item":{"id":"item_0","type":"error","message":"loading hooks from both a and b"}}'
-  printf '%s\n' '{"type":"turn.started"}'
-  printf '%s\n' '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"decoy: REVIEW: FAIL"}}'
-  printf '{"type":"turn.completed","usage":{"input_tokens":%s,"cached_input_tokens":500,"cache_write_input_tokens":0,"output_tokens":%s,"reasoning_output_tokens":10}}\n' "${FAKE_TOKENS_IN:-1000}" "${FAKE_TOKENS_OUT:-100}"
-else
-  printf '%s\n' "$final"
-fi
-exit "${FAKE_CODEX_RC:-0}"
-FAKE
-chmod +x "$TMP/bin/codex"
-
 ticket() { # dir name status blocked-by [extra header line]
   printf '# %s\n\nType: task\nStatus: %s\nBlocked by: %s\nTest first: no\n%s\n\nbody\n\n## Done when\n\n- x\n\n## Answer\n' \
     "$2" "$3" "$4" "${5:-}" > "$1"
@@ -188,7 +32,6 @@ newrepo() { # name -> prints the repo dir
     git init -q
     git config user.email t@t
     git config user.name t
-    echo ".fake/" >> .git/info/exclude
     echo "readme" > README.md
     ticket plans/f/tasks/01-a.md A open "—"
     ticket plans/f/tasks/02-b.md B open "01"
@@ -202,14 +45,6 @@ newrepo() { # name -> prints the repo dir
     git commit -qm init
   )
   echo "$d"
-}
-
-flow() { # repo impl review [extra env...] -> sets OUT and RC
-  local d="$1" impl="$2" review="$3"
-  shift 3
-  mkdir -p "$TMP/home"
-  OUT="$(cd "$d" && env PATH="$TMP/bin:$PATH" HOME="$TMP/home" FAKE_IMPL="$impl" FAKE_REVIEW="$review" FLOW_SLEEP=0 "$@" bash scripts/auto-flow.sh f 2>&1)"
-  RC=$?
 }
 
 echo "flow-status.sh"
@@ -393,107 +228,6 @@ mkdir -p plans/h/tasks; cp plans/g/tasks/01-a.md plans/h/tasks/01-a.md
 i=0; : > plans/h/learnings.md; while [ "$i" -lt 45 ]; do echo "- (01) lesson $i" >> plans/h/learnings.md; i=$((i + 1)); done
 out="$(bash "$S" h --check)"; expect_has "a long learnings.md is flagged" "warning: learnings.md has 45 lines" "$out"
 
-echo "auto-flow.sh"
-D="$(newrepo ok)"; flow "$D" ok pass
-expect_rc "all tickets resolve" 0 $RC
-expect_has "reports completion" "f is complete: 4 ticket(s)" "$OUT"
-calls="$(cat "$D/.fake/calls.log")"
-expect_has "each ticket gets a review" "/review-ticket f 04" "$calls"
-first="$(grep -n 'next-phase' "$D/.fake/calls.log" | head -1)"; expect_has "first session is an implementation" "next-phase f auto" "$first"
-order="$(cd "$D" && git log --reverse --format=%s | grep '^feat' | tr '\n' ' ')"
-expect_has "tickets land in dependency order" "feat: 01 feat: 02 feat: 03 feat: 04" "$order"
-
-D="$(newrepo review_off)"; flow "$D" ok pass FLOW_REVIEW=off
-expect_rc "FLOW_REVIEW=off still completes" 0 $RC
-expect_lacks "FLOW_REVIEW=off starts no review" "review-ticket" "$(cat "$D/.fake/calls.log")"
-
-D="$(newrepo noop)"; flow "$D" noop pass
-expect_rc "a session that resolves nothing stops the run" 1 $RC
-expect_has "says which ticket is unresolved" "01-a is still unresolved after 2 attempt(s)" "$OUT"
-n="$(grep -c 'next-phase' "$D/.fake/calls.log")"; expect_rc "and stops after exactly 2 attempts" 2 "$n"
-
-D="$(newrepo die)"; flow "$D" die_once pass
-expect_rc "a session that dies after claiming is retried" 0 $RC
-expect_has "the stale claim was reset and the run finished" "f is complete" "$OUT"
-
-D="$(newrepo guard_loop)"; flow "$D" skip_then_fix pass
-expect_rc "the floor guard sends a ticket back and it recovers" 0 $RC
-expect_has "the guard objected" "floor guard sent 01-a back (round 1)" "$OUT"
-expect_has "findings were written into the ticket" "## Review findings (round 1, floor guard)" "$(cat "$D/plans/f/tasks/01-a.md")"
-
-D="$(newrepo review_once)"; flow "$D" ok fail_once
-expect_rc "a failed review sends the ticket back and it recovers" 0 $RC
-expect_has "the reviewer objected" "independent review sent 01-a back (round 1)" "$OUT"
-expect_has "review findings were written into the ticket" "a bug" "$(cat "$D/plans/f/tasks/01-a.md")"
-
-D="$(newrepo review_always)"; flow "$D" ok fail_always
-expect_rc "a ticket that never passes review stops the run" 1 $RC
-expect_has "after the round limit" "still fails the independent review after 3 round(s)" "$OUT"
-
-D="$(newrepo noverdict)"; flow "$D" ok noverdict
-expect_rc "a review without a verdict stops the run" 1 $RC
-expect_has "says there was no verdict" "no review verdict for 01-a" "$OUT"
-
-D="$(newrepo edits)"; flow "$D" ok edits
-expect_rc "a reviewer that edits files stops the run" 1 $RC
-expect_has "says what the reviewer did wrong" "the reviewer changed tracked files" "$OUT"
-
-D="$(newrepo dirty)"; echo "stray" >> "$D/README.md"; flow "$D" ok pass
-expect_rc "a dirty tree is refused up front" 1 $RC
-expect_has "says why" "working tree is not clean" "$OUT"
-
-echo "auto-flow.sh, cost, limits and smoke"
-D="$(newrepo cost)"; flow "$D" ok pass FAKE_COST=0.25
-expect_rc "a run with cost logging completes" 0 $RC
-expect_has "prints the cost of the run" 'cost this run: $2.0000 over 8 session(s)' "$OUT"
-log="$(cat "$D/.git/flow-cost-f.log")"
-expect_has "the cost log names the ticket and role" "01-a,build" "$log"
-expect_has "the cost log records review sessions" "04-d,review" "$log"
-
-D="$(newrepo cost_off)"; flow "$D" ok pass FLOW_COST=off
-expect_rc "FLOW_COST=off still completes" 0 $RC
-expect_lacks "FLOW_COST=off prints no cost" "cost this run" "$OUT"
-if [ ! -e "$D/.git/flow-cost-f.log" ]; then ok "FLOW_COST=off writes no log"; else bad "FLOW_COST=off writes no log"; fi
-
-D="$(newrepo cap)"; flow "$D" ok pass FAKE_COST=0.25 FLOW_MAX_TOTAL_USD=0.5
-expect_rc "a total cost cap stops the run" 1 $RC
-expect_has "and says why" "total cost cap reached" "$OUT"
-expect_lacks "a claude run prints no codex notes" "does not apply to codex" "$OUT"
-
-D="$(newrepo flags)"
-flow "$D" ok pass FLOW_MAX_TURNS=7 FLOW_MODEL=builder-m FLOW_REVIEW_MODEL=review-m "FLOW_CLAUDE_ARGS=--setting-sources project,local"
-calls="$(cat "$D/.fake/calls.log")"
-build_line="$(grep -- '-p /next-phase' <<< "$calls" | head -1)"
-review_line="$(grep -- '-p /review-ticket' <<< "$calls" | head -1)"
-expect_has "the turn limit reaches builders" "--max-turns 7" "$build_line"
-expect_has "the turn limit reaches reviewers" "--max-turns 7" "$review_line"
-expect_has "the builder model is used for building" "--model builder-m" "$build_line"
-expect_lacks "and not for reviewing" "builder-m" "$review_line"
-expect_has "the review model is used for reviewing" "--model review-m" "$review_line"
-expect_has "extra flags are passed through" "--setting-sources project,local" "$build_line"
-
-D="$(newrepo smoke_start)"; flow "$D" ok pass FLOW_SMOKE=false
-expect_rc "a failing smoke test refuses to start" 1 $RC
-expect_has "and says the base is broken" "smoke test failed before 01-a: the base is already broken" "$OUT"
-if [ ! -e "$D/.fake/calls.log" ]; then ok "and spends no session"; else bad "and spends no session"; fi
-
-D="$(newrepo smoke_mid)"
-printf '# Commands: f\n\nSmoke: `[ ! -e BROKEN ]`\n' > "$D/plans/f/commands.md"
-(cd "$D" && git add -A && git commit -qm smoke)
-flow "$D" break_smoke pass
-expect_rc "a ticket that breaks the base stops the next ticket" 1 $RC
-expect_has "and the smoke test names the ticket that cannot start" "smoke test failed before 02-b" "$OUT"
-
-echo "auto-flow.sh, protecting the plan"
-D="$(newrepo loop_tamper)"; flow "$D" tamper_then_fix pass
-expect_rc "a worker that weakens its own Done when is sent back and recovers" 0 $RC
-expect_has "the guard objected" "floor guard sent 01-a back (round 1)" "$OUT"
-expect_has "the findings name the ticket edit" "ticket-edit" "$(cat "$D/plans/f/tasks/01-a.md")"
-
-D="$(newrepo loop_learn)"; flow "$D" learn pass
-expect_rc "legitimate edits to map.md and learnings.md pass the guard" 0 $RC
-expect_lacks "and nothing is sent back" "back (round" "$OUT"
-
 echo "gate.sh"
 D="$(newrepo gate_unit)"
 cd "$D" || exit 1
@@ -550,204 +284,6 @@ rm -rf -- "$D/feature_flow" "$PY_G" "$TMP"/gate-*.out "$TMP"/gate-*.err
 echo "  compared gate.sh and gate.py on $compared fixture runs (${#gate_fixtures[@]} commands.md files x 3 argument sets)"
 if [ -z "$diffs" ]; then ok "gate.py prints and exits exactly like gate.sh"; else bad "gate.py prints and exits exactly like gate.sh" "$diffs"; fi
 
-echo "auto-flow.sh, gate and agents"
-D="$(newrepo gate_loop)"
-printf '# Commands: f\n\nTest: `[ ! -e FAILING ]`\n' > "$D/plans/f/commands.md"
-(cd "$D" && git add -A && git commit -qm cmds)
-flow "$D" fail_test_then_fix pass
-expect_rc "a failing gate sends the ticket back and it recovers" 0 $RC
-expect_has "the gate objected" "gate sent 01-a back (round 1)" "$OUT"
-expect_has "the findings name the failing command" "gate: Test failed" "$(cat "$D/plans/f/tasks/01-a.md")"
-
-D="$(newrepo gate_off)"
-printf '# Commands: f\n\nTest: `[ ! -e FAILING ]`\n' > "$D/plans/f/commands.md"
-(cd "$D" && git add -A && git commit -qm cmds)
-flow "$D" fail_test_then_fix pass FLOW_GATE=off
-expect_rc "FLOW_GATE=off skips the gate" 0 $RC
-expect_lacks "and nothing is sent back" "back (round" "$OUT"
-
-agents_installed() { # repo
-  mkdir -p "$1/.claude/agents"
-  printf -- '---\nname: ticket-builder\n---\n' > "$1/.claude/agents/ticket-builder.md"
-  printf -- '---\nname: ticket-reviewer\n---\n' > "$1/.claude/agents/ticket-reviewer.md"
-  (cd "$1" && git add -A && git commit -qm agents)
-}
-D="$(newrepo agents_on)"; agents_installed "$D"; flow "$D" ok pass
-calls="$(cat "$D/.fake/calls.log")"
-build_line="$(grep -- '-p /next-phase' <<< "$calls" | head -1)"
-review_line="$(grep -- '-p /review-ticket' <<< "$calls" | head -1)"
-expect_rc "a run with the agents installed completes" 0 $RC
-expect_has "an installed builder agent is used for building" "--agent ticket-builder" "$build_line"
-expect_has "an installed reviewer agent is used for reviewing" "--agent ticket-reviewer" "$review_line"
-expect_lacks "and the reviewer never gets the builder agent" "ticket-builder" "$review_line"
-expect_has "the banner says so" "builder agent ticket-builder, reviewer agent ticket-reviewer" "$OUT"
-
-D="$(newrepo agents_absent)"; flow "$D" ok pass
-expect_lacks "without agent files no agent flag is passed" "--agent" "$(cat "$D/.fake/calls.log")"
-
-D="$(newrepo agents_off)"; agents_installed "$D"; flow "$D" ok pass FLOW_AGENTS=off
-expect_lacks "FLOW_AGENTS=off ignores installed agents" "--agent" "$(cat "$D/.fake/calls.log")"
-
-D="$(newrepo agents_missing)"; flow "$D" ok pass FLOW_AGENTS=on
-expect_rc "FLOW_AGENTS=on without the files stops the run" 1 $RC
-expect_has "and says which agent is missing" "agent ticket-builder is not installed" "$OUT"
-
-n="$(grep -F 'claude "${args[@]}"' "$ROOT/scripts/auto-flow.sh" | grep -c -F '< /dev/null')"; expect_rc "every claude session reads stdin from /dev/null" 2 "$n"
-
-echo "auto-flow.sh, codex"
-n="$(grep -F 'codex "${args[@]}"' "$ROOT/scripts/auto-flow.sh" | grep -c -F '< /dev/null')"; expect_rc "every codex session reads stdin from /dev/null" 2 "$n"
-D="$(newrepo codex_ok)"; flow "$D" ok pass FLOW_AGENT=codex
-expect_rc "a codex run resolves every ticket" 0 $RC
-expect_has "and reports completion" "f is complete: 4 ticket(s)" "$OUT"
-expect_has "the banner says codex" "codex, builder role none, reviewer role none" "$OUT"
-expect_has "a codex run says what stops a runaway" "only the run limit, the retries and the review rounds stop" "$OUT"
-order="$(cd "$D" && git log --reverse --format=%s | grep -v '^init' | tr '\n' '|')"
-expect_has "the loop commits each resolved ticket in dependency order with its title" "feat(f): 01 A|feat(f): 02 B|feat(f): 03 C|feat(f): 04 D|" "$order"
-expect_lacks "and the agent committed nothing itself" "agent:" "$order"
-if [ -z "$(cd "$D" && git status --porcelain)" ]; then ok "the tree is clean at the end"; else bad "the tree is clean at the end"; fi
-if [ ! -e "$D/.fake/calls.log" ]; then ok "no claude session was started"; else bad "no claude session was started"; fi
-calls="$(cat "$D/.fake/codex-calls.log")"
-prompts="$(cat "$D"/.fake/codex-prompt-*.txt)"
-build_line="$(grep 'role=build' <<< "$calls" | head -1)"
-review_line="$(grep 'role=review' <<< "$calls" | head -1)"
-expect_has "builders run in a workspace-write sandbox" "sandbox=workspace-write" "$build_line"
-expect_has "reviewers run in a read-only sandbox" "sandbox=read-only" "$review_line"
-expect_has "the last message is written to a file" "o=y" "$review_line"
-expect_has "the builder is started with a dollar mention and the feature" '$next-phase f auto' "$prompts"
-expect_has "the reviewer gets the feature, the ticket and the base" '$review-ticket f 01 ' "$prompts"
-expect_lacks "no slash command is sent to codex" "/next-phase" "$prompts"
-n="$(grep -c 'role=build' <<< "$calls")"; expect_rc "one builder session per ticket" 4 "$n"
-n="$(grep -c 'role=review' <<< "$calls")"; expect_rc "one review per ticket" 4 "$n"
-expect_lacks "the output is the last message, not the event stream" "decoy" "$OUT"
-log="$(cat "$D/.git/flow-cost-f.log")"
-expect_has "the log has tokens and 0 dollars for a build" '01-a,build,1,0,false,"completed",1000,100' "$log"
-expect_has "and for a review" '04-d,review,1,0,false,"completed",1000,100' "$log"
-expect_has "the run prints its tokens" "tokens this run: 8000 in, 800 out over 8 session(s)" "$OUT"
-expect_lacks "and no dollar figure" "cost this run" "$OUT"
-expect_has "the viewer's cost column stays readable: dollars are column 5" "0" "$(awk -F, 'NR == 1 { print $5 }' "$D/.git/flow-cost-f.log")"
-n="$(awk -F, '$5 != 0' "$D/.git/flow-cost-f.log" | wc -l | tr -d ' ')"; expect_rc "and every dollar figure is 0" 0 "$n"
-expect_has "json events are requested when jq is there" "json=1" "$calls"
-
-D="$(newrepo codex_cost_off)"; flow "$D" ok pass FLOW_AGENT=codex FLOW_COST=off
-calls="$(cat "$D/.fake/codex-calls.log")"
-expect_rc "FLOW_COST=off still completes under codex" 0 $RC
-expect_has "and asks for no event stream" "json=0" "$calls"
-expect_lacks "nor for any" "json=1" "$calls"
-if [ ! -e "$D/.git/flow-cost-f.log" ]; then ok "and writes no log"; else bad "and writes no log"; fi
-expect_lacks "and prints no token total" "tokens this run" "$OUT"
-
-D="$(newrepo codex_flags)"
-flow "$D" ok pass FLOW_AGENT=codex FLOW_MODEL=builder-m FLOW_REVIEW_MODEL=review-m "FLOW_CODEX_ARGS=-c foo=bar" FLOW_MAX_TURNS=7 FLOW_MAX_BUDGET_USD=1 FLOW_MAX_TOTAL_USD=0.001 FLOW_ALLOWED_TOOLS=Read
-calls="$(cat "$D/.fake/codex-calls.log")"
-build_line="$(grep 'role=build' <<< "$calls" | head -1)"
-review_line="$(grep 'role=review' <<< "$calls" | head -1)"
-expect_has "the builder model reaches codex" "model=builder-m" "$build_line"
-expect_lacks "and not the reviewer" "builder-m" "$review_line"
-expect_has "the review model reaches codex" "model=review-m" "$review_line"
-expect_has "extra flags are passed through" "-c foo=bar" "$build_line"
-for f in max-turns max-budget allowedTools; do expect_lacks "claude's --$f is never sent to codex" "$f" "$calls"; done
-expect_rc "a dollar cap that codex cannot report does not stop the run" 0 $RC
-expect_has "and the run says the total cap does not apply" "FLOW_MAX_TOTAL_USD does not apply to codex" "$OUT"
-expect_has "that the turn limit is ignored" "FLOW_MAX_TURNS is ignored" "$OUT"
-expect_has "that the budget limit is ignored" "FLOW_MAX_BUDGET_USD is ignored" "$OUT"
-expect_has "that the tool list is ignored" "FLOW_ALLOWED_TOOLS is ignored" "$OUT"
-
-D="$(newrepo codex_roles)"; mkdir -p "$D/.agents/flow-roles"
-printf 'You are the BUILDER role text.\n' > "$D/.agents/flow-roles/ticket-builder.md"
-printf 'You are the REVIEWER role text.\n' > "$D/.agents/flow-roles/ticket-reviewer.md"
-(cd "$D" && git add -A && git commit -qm roles)
-flow "$D" ok pass FLOW_AGENT=codex
-expect_rc "a codex run with the role files completes" 0 $RC
-expect_has "the banner names the roles" "codex, builder role ticket-builder, reviewer role ticket-reviewer" "$OUT"
-b="$(cat "$D/.fake/codex-prompt-1.txt")"; r="$(cat "$D/.fake/codex-prompt-2.txt")"
-[ "$(head -1 <<< "$b")" = "You are the BUILDER role text." ] && ok "the builder prompt starts with the builder role" || bad "the builder prompt starts with the builder role"
-[ "$(tail -1 <<< "$b")" = '$next-phase f auto' ] && ok "and ends with the skill mention" || bad "and ends with the skill mention"
-[ "$(head -1 <<< "$r")" = "You are the REVIEWER role text." ] && ok "the reviewer prompt starts with the reviewer role" || bad "the reviewer prompt starts with the reviewer role"
-expect_lacks "and never carries the builder's" "BUILDER" "$r"
-D="$(newrepo codex_roles_off)"; mkdir -p "$D/.agents/flow-roles"
-printf 'You are the BUILDER role text.\n' > "$D/.agents/flow-roles/ticket-builder.md"
-printf 'You are the REVIEWER role text.\n' > "$D/.agents/flow-roles/ticket-reviewer.md"
-(cd "$D" && git add -A && git commit -qm roles)
-flow "$D" ok pass FLOW_AGENT=codex FLOW_AGENTS=off
-[ "$(cat "$D/.fake/codex-prompt-1.txt")" = '$next-phase f auto' ] && ok "FLOW_AGENTS=off sends the bare prompt" || bad "FLOW_AGENTS=off sends the bare prompt"
-expect_has "and the banner shows no roles" "builder role none, reviewer role none" "$OUT"
-D="$(newrepo codex_roles_missing)"; flow "$D" ok pass FLOW_AGENT=codex FLOW_AGENTS=on
-expect_rc "FLOW_AGENTS=on without the role files stops the run" 1 $RC
-expect_has "and says which one is missing" "agent ticket-builder is not installed" "$OUT"
-D="$(newrepo codex_no_roles)"; flow "$D" ok pass FLOW_AGENT=codex
-[ "$(cat "$D/.fake/codex-prompt-1.txt")" = '$next-phase f auto' ] && ok "without role files the prompt is bare" || bad "without role files the prompt is bare"
-
-D="$(newrepo codex_review_once)"; flow "$D" ok fail_once FLOW_AGENT=codex
-expect_rc "a failed codex review sends the ticket back and it recovers" 0 $RC
-expect_has "the reviewer objected" "independent review sent 01-a back (round 1)" "$OUT"
-expect_has "the findings from the last message reach the ticket" "a bug" "$(cat "$D/plans/f/tasks/01-a.md")"
-order="$(cd "$D" && git log --reverse --format=%s | tr '\n' '|')"
-expect_has "the fix is committed by the loop again" "feat(f): 01 A|chore(f): 01 review findings, round 1|feat(f): 01 A|" "$order"
-D="$(newrepo codex_review_always)"; flow "$D" ok fail_always FLOW_AGENT=codex
-expect_rc "a ticket that never passes a codex review stops the run" 1 $RC
-expect_has "after the round limit" "still fails the independent review after 3 round(s)" "$OUT"
-D="$(newrepo codex_noverdict)"; flow "$D" ok noverdict FLOW_AGENT=codex
-expect_rc "a codex review without a verdict stops the run" 1 $RC
-expect_has "and says so" "no review verdict for 01-a" "$OUT"
-D="$(newrepo codex_guard)"; flow "$D" skip_then_fix pass FLOW_AGENT=codex
-expect_rc "the floor guard still catches a weakened test under codex and the ticket recovers" 0 $RC
-expect_has "the guard objected" "floor guard sent 01-a back (round 1)" "$OUT"
-
-D="$(newrepo codex_noop)"; flow "$D" noop pass FLOW_AGENT=codex
-expect_rc "a codex session that resolves nothing stops the run" 1 $RC
-expect_has "after the attempt limit" "01-a is still unresolved after 2 attempt(s)" "$OUT"
-expect_has "naming codex when it exits" "unresolved" "$OUT"
-expect_rc "and nothing was committed" 1 "$(cd "$D" && git log --oneline | wc -l | tr -d ' ')"
-D="$(newrepo codex_half)"; flow "$D" half pass FLOW_AGENT=codex
-expect_rc "a session that leaves its ticket open stops the run" 1 $RC
-expect_lacks "and its half done work is never committed" "feat(f)" "$(cd "$D" && git log --format=%s)"
-D="$(newrepo codex_selfcommit)"; flow "$D" ok pass FLOW_AGENT=codex FAKE_CODEX_GIT=ok
-expect_rc "an agent that can commit itself works too" 0 $RC
-order="$(cd "$D" && git log --reverse --format=%s | tr '\n' '|')"
-expect_has "its commits are kept" "agent: 01|agent: 02|agent: 03|agent: 04|" "$order"
-expect_lacks "and the loop adds none" "feat(f)" "$order"
-D="$(newrepo codex_hook)"; printf '#!/bin/sh\nexit 1\n' > "$D/.git/hooks/pre-commit"; chmod +x "$D/.git/hooks/pre-commit"
-flow "$D" ok pass FLOW_AGENT=codex
-expect_rc "a commit the loop cannot make stops the run" 1 $RC
-expect_has "and says why" "could not commit 01-a for codex" "$OUT"
-
-D="$(newrepo codex_nonzero)"; flow "$D" ok pass FLOW_AGENT=codex FAKE_CODEX_RC=3
-expect_has "a non zero exit is reported by agent name" "codex exited non zero on attempt 1" "$OUT"
-expect_rc "but the ticket file still decides, so the run completes" 0 $RC
-expect_has "and the log marks the session as an error" ',true,"completed"' "$(cat "$D/.git/flow-cost-f.log")"
-
-D="$(newrepo codex_junk)"; flow "$D" ok pass FLOW_AGENT=codex FAKE_CODEX_JUNK=1
-expect_rc "lines in the event stream that are not json are ignored" 0 $RC
-expect_has "and the tokens are still counted" "tokens this run: 8000 in, 800 out over 8 session(s)" "$OUT"
-D="$(newrepo codex_claude_files)"; agents_installed "$D"; flow "$D" ok pass FLOW_AGENT=codex
-expect_has "a codex run never takes claude's agent files as its roles" "builder role none, reviewer role none" "$OUT"
-[ "$(cat "$D/.fake/codex-prompt-1.txt")" = '$next-phase f auto' ] && ok "and sends the bare prompt" || bad "and sends the bare prompt"
-D="$(newrepo claude_codex_files)"; mkdir -p "$D/.agents/flow-roles"
-printf 'You are the BUILDER role text.\n' > "$D/.agents/flow-roles/ticket-builder.md"; printf 'You are the REVIEWER role text.\n' > "$D/.agents/flow-roles/ticket-reviewer.md"
-(cd "$D" && git add -A && git commit -qm roles); flow "$D" ok pass
-expect_has "a claude run never takes codex's role files as its agents" "builder agent none, reviewer agent none" "$OUT"
-D="$(newrepo agent_bogus)"; flow "$D" ok pass FLOW_AGENT=bogus
-expect_rc "an unknown FLOW_AGENT stops the run" 1 $RC
-expect_has "and says what is allowed" "FLOW_AGENT must be claude or codex, not bogus" "$OUT"
-mkdir -p "$TMP/nobin"; D="$(newrepo codex_missing)"
-OUT="$(cd "$D" && env PATH="$TMP/nobin:/usr/bin:/bin" HOME="$TMP/home" FLOW_AGENT=codex bash scripts/auto-flow.sh f 2>&1)"; RC=$?
-expect_rc "codex missing from PATH stops the run" 1 $RC
-expect_has "and says so" "codex CLI not found" "$OUT"
-mkdir -p "$TMP/onlyclaude" "$TMP/onlycodex"
-cp "$TMP/bin/claude" "$TMP/onlyclaude/claude"; cp "$TMP/bin/codex" "$TMP/onlycodex/codex"
-D="$(newrepo codex_with_claude_only)"
-OUT="$(cd "$D" && env PATH="$TMP/onlyclaude:/usr/bin:/bin" HOME="$TMP/home" FLOW_AGENT=codex bash scripts/auto-flow.sh f 2>&1)"; RC=$?
-expect_rc "FLOW_AGENT=codex with only claude installed stops the run" 1 $RC
-expect_has "and names codex as the missing one" "codex CLI not found" "$OUT"
-D="$(newrepo claude_with_codex_only)"
-OUT="$(cd "$D" && env PATH="$TMP/onlycodex:/usr/bin:/bin" HOME="$TMP/home" bash scripts/auto-flow.sh f 2>&1)"; RC=$?
-expect_rc "the default agent with only codex installed stops the run" 1 $RC
-expect_has "and names claude as the missing one" "claude CLI not found" "$OUT"
-D="$(newrepo claude_explicit)"; flow "$D" ok pass FLOW_AGENT=claude
-expect_rc "FLOW_AGENT=claude is the default made explicit" 0 $RC
-if [ -e "$D/.fake/calls.log" ] && [ ! -e "$D/.fake/codex-calls.log" ]; then ok "and starts claude, not codex"; else bad "and starts claude, not codex"; fi
-expect_lacks "a claude run prints no codex notes" "codex" "$OUT"
-
 echo "install.sh"
 cd "$TMP" || exit 1
 I="$TMP/inst"; mkdir -p "$I/repo" "$I/fresh"
@@ -756,9 +292,7 @@ expect_rc "installs into a repo" 0 $rc
 for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/flow.py scripts/gate.sh scripts/floor-guard.sh scripts/flow-status.sh scripts/flow-view.sh scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
   if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
 done
-left=""
-for s in plan-feature next-phase review-ticket run-flow show-flow; do [ ! -e "$I/repo/.claude/skills/$s" ] || left="$left $s"; done
-if [ -z "$left" ]; then ok "the old flow skills are not installed"; else bad "the old flow skills are not installed" "$left"; fi
+expect_has "only the three skills are installed" "architect-review automation-design feature-flow" "$(ls "$I/repo/.claude/skills" | tr '\n' ' ')"
 n="$(find "$I/repo/.feature-flow" \( -name __pycache__ -o -name '*.pyc' \) | wc -l | tr -d ' ')"; expect_rc "no __pycache__ is installed" 0 "$n"
 expect_has "it points at the one skill" "next: /feature-flow <feature-name> in Claude Code" "$out"
 out="$(cd "$I/repo" && git init -q && python3 scripts/flow.py f start 2>&1)"
@@ -778,11 +312,10 @@ expect_has "--force replaces it" "update" "$out"
 expect_lacks "and the edit is gone" "my own edit" "$(cat "$I/repo/.claude/skills/feature-flow/SKILL.md")"
 bash "$ROOT/install.sh" "$I/fresh" --dry-run > /dev/null 2>&1
 if [ -z "$(ls -A "$I/fresh")" ]; then ok "--dry-run writes nothing"; else bad "--dry-run writes nothing"; fi
-mkdir -p "$I/old/.claude/skills/next-phase" "$I/old/.claude/skills/run-flow"
-echo "mine" > "$I/old/.claude/skills/next-phase/SKILL.md"
-out="$(bash "$ROOT/install.sh" "$I/old" 2>&1)"
-expect_has "old flow skills are named as no longer part of feature-flow" "no longer part of feature-flow, left in place: next-phase run-flow" "$out"
-[ "$(cat "$I/old/.claude/skills/next-phase/SKILL.md")" = "mine" ] && ok "and left alone" || bad "and left alone"
+mkdir -p "$I/old/.claude/skills/my-skill"
+echo "mine" > "$I/old/.claude/skills/my-skill/SKILL.md"
+bash "$ROOT/install.sh" "$I/old" > /dev/null 2>&1
+[ "$(cat "$I/old/.claude/skills/my-skill/SKILL.md")" = "mine" ] && ok "a skill it does not own is left alone" || bad "a skill it does not own is left alone"
 mkdir -p "$I/repo2"
 CLAUDE_HOME="$I/home/.claude" bash "$ROOT/install.sh" "$I/repo2" --user > /dev/null 2>&1
 if [ -f "$I/home/.claude/skills/feature-flow/SKILL.md" ] && [ -f "$I/home/.claude/agents/ticket-reviewer.md" ]; then ok "--user puts skills and agents in the user folder"; else bad "--user puts skills and agents in the user folder"; fi
@@ -805,9 +338,7 @@ done
 for f in .agents/flow-roles/ticket-builder.md .agents/flow-roles/ticket-reviewer.md scripts/flow.py .feature-flow/feature_flow/cli.py .feature-flow/guides/review.md; do
   if [ -f "$C/repo/$f" ]; then ok "codex installed $f"; else bad "codex installed $f"; fi
 done
-left=""
-for s in plan-feature next-phase review-ticket run-flow show-flow; do [ ! -e "$C/repo/.agents/skills/$s" ] || left="$left $s"; done
-if [ -z "$left" ]; then ok "codex: the old flow skills are not installed"; else bad "codex: the old flow skills are not installed" "$left"; fi
+expect_has "codex: only the three skills are installed" "architect-review automation-design feature-flow" "$(ls "$C/repo/.agents/skills" | tr '\n' ' ')"
 if [ ! -e "$C/repo/.claude" ]; then ok "--agent codex writes no .claude"; else bad "--agent codex writes no .claude"; fi
 [ "$(cat "$C/repo/AGENTS.md")" = "my own instructions" ] && ok "an existing AGENTS.md is never touched" || bad "an existing AGENTS.md is never touched"
 [ "$(cat "$ROOT"/skills/*/SKILL.md "$ROOT"/agents/*.md "$ROOT"/adapters/codex/feature-flow/SKILL.md | cksum)" = "$SKILLS_BEFORE" ] && ok "installing never changes the sources" || bad "installing never changes the sources"
@@ -849,9 +380,6 @@ expect_lacks "a role file has no frontmatter" "tools:" "$RR"
 [ "$(head -1 "$C/repo/.agents/flow-roles/ticket-reviewer.md")" = "You are the reviewer, not the author. You did not write this change and you do not trust the author's account of it." ] && ok "a role file starts with its first sentence" || bad "a role file starts with its first sentence"
 out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
 expect_has "a second codex run adds nothing" "added 0, updated 0" "$out"
-mkdir -p "$CS/next-phase"
-out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
-expect_has "codex: an old flow skill is named and left alone" "no longer part of feature-flow, left in place: next-phase" "$out"
 echo "my own edit" >> "$CS/architect-review/SKILL.md"
 out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
 expect_has "an edited Codex skill is kept and reported" "kept" "$out"
@@ -941,7 +469,6 @@ printf '\n## Review findings (round 1, gate)\n\nfix it\n' >> plans/f/tasks/01-a.
 git add -A; GIT_AUTHOR_DATE="1790002000 +0000" GIT_COMMITTER_DATE="1790002000 +0000" git commit -qm reopen
 set_status plans/f/tasks/01-a.md resolved
 git add -A; GIT_AUTHOR_DATE="1790003000 +0000" GIT_COMMITTER_DATE="1790003000 +0000" git commit -qm resolve-again
-printf '00:00:01,01-a,build,3,0.25,false,"success"\n00:00:02,01-a,review,2,0.10,false,"success"\n00:00:03,01-a,build,4,0.30,false,"success"\n' > "$(git rev-parse --absolute-git-dir)/flow-cost-f.log"
 
 bash "$V" f --no-open --out "$TMP/view.html" > /dev/null 2>&1; expect_rc "the page is written" 0 $?
 page="$(cat "$TMP/view.html")"
@@ -950,7 +477,7 @@ printf '%s' "$data" | jq -e . > /dev/null 2>&1; expect_rc "the embedded data is 
 expect_has "the page has the animated graph code" "@keyframes flow" "$page"
 [ "$(printf '%s' "$data" | jq -r '[.details["01"].history[].status] | join(",")')" = "open,resolved,open,resolved" ] && ok "history lists every status change from git" || bad "history lists every status change from git"
 [ "$(printf '%s' "$data" | jq -r '.details["01"].history[1].t')" = "1790001000" ] && ok "history carries the commit time" || bad "history carries the commit time"
-[ "$(printf '%s' "$data" | jq -r '.details["01"].cost | "\(.build * 1) \(.review * 1) \(.sessions)"')" = "0.55 0.1 3" ] && ok "cost is summed per role from the cost log" || bad "cost is summed per role from the cost log"
+[ "$(printf '%s' "$data" | jq -r '.details["01"] | has("cost")')" = "false" ] && ok "there is no cost data" || bad "there is no cost data"
 [ "$(printf '%s' "$data" | jq -r '.details["01"].rounds[0] | "\(.n) \(.source)"')" = "1 gate" ] && ok "sent back rounds are read from the ticket" || bad "sent back rounds are read from the ticket"
 [ "$(printf '%s' "$data" | jq -r '.details["01"].done_when[0]')" = "x" ] && ok "Done when bullets are included" || bad "Done when bullets are included"
 expect_has "the Answer excerpt is included" "Built: the first thing" "$(printf '%s' "$data" | jq -r '.details["01"].answer')"
@@ -1252,7 +779,7 @@ cd "$ROOT" || exit 1
 echo "flow.py, guides and prompt"
 for g in build review plan show; do
   if [ -f "$ROOT/guides/$g.md" ]; then ok "guides/$g.md exists"; else bad "guides/$g.md exists"; fi
-  n="$(grep -cE '\$ARGUMENTS|/next-phase|/review-ticket|\$next-phase' "$ROOT/guides/$g.md")"
+  n="$(grep -cE '\$ARGUMENTS|(^|[^$])/feature-flow|\$feature-flow' "$ROOT/guides/$g.md")"
   expect_rc "guides/$g.md names no runtime's skill invocation" 0 "$n"
 done
 if [ -f "$ROOT/guides/templates/ticket.md" ]; then ok "guides/templates/ticket.md exists"; else bad "guides/templates/ticket.md exists"; fi
@@ -1346,6 +873,7 @@ expect_rc "--prepare defaults to claude" 0 $rc
 expect_has "and tells a claude user what to type" "then type:  /feature-flow hello" "$out"
 if [ -f "$P2/.claude/skills/feature-flow/SKILL.md" ] && [ ! -e "$P2/.agents" ]; then ok "the project is installed for claude only"; else bad "the project is installed for claude only"; fi
 env RUN_REAL=0 bash "$SM" > /dev/null 2>&1; expect_rc "without RUN_REAL or --prepare nothing runs" 2 $?
+env RUN_REAL=1 PATH="$TMP/nobin:/usr/bin:/bin" bash "$SM" > /dev/null 2>&1; expect_rc "RUN_REAL=1 without --interactive runs nothing either" 2 $?
 out="$(env FLOW_AGENT=bogus bash "$SM" --prepare "$TMP/prep_bogus" 2>&1)"; rc=$?
 expect_rc "an unknown FLOW_AGENT is refused" 2 $rc
 expect_has "and the script itself says what is allowed" "FLOW_AGENT must be claude or codex, not bogus" "$out"
@@ -1358,7 +886,7 @@ printf '#!/bin/bash\necho "$*" >> "$FAKE_CALLS"\nexit 0\n' > "$TMP/silentbin/cla
 out="$(env TMPDIR="$TMP" PATH="$TMP/silentbin:$PATH" FAKE_CALLS="$TMP/silent.calls" RUN_REAL=1 bash "$SM" --interactive 2>&1)"; rc=$?
 expect_rc "--interactive: a session that ends without HANDOFF, DONE or STOP exits 1" 1 $rc
 expect_has "and says so" "  FAIL  session 1 ended without HANDOFF, DONE or STOP" "$out"
-expect_has "and prints the recovery command" "FLOW_TAKEOVER=1 FLOW_TICKETS_PER_SESSION=1 claude -p" "$out"
+expect_has "and prints the recovery command" "FLOW_TAKEOVER=1 FLOW_TICKETS_PER_SESSION=1 claude " "$out"
 expect_rc "and starts no second session" 1 "$(wc -l < "$TMP/silent.calls" | tr -d ' ')"
 expect_has "the session is started as a user would type it" '-p /feature-flow hello auto --allowedTools' "$(cat "$TMP/silent.calls")"
 

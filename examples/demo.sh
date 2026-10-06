@@ -1,7 +1,7 @@
 #!/bin/bash
 # usage: bash examples/demo.sh [target-dir] [--open]
 # builds a throwaway git repo that holds a 10 ticket plan in the middle of a run, with commit
-# history (two tickets were sent back), a cost log, a ticket in progress and tickets ready to
+# history (two tickets were sent back), a ticket in progress and tickets ready to
 # start, then writes the animated graph page for it. use it to see the viewer without a real project.
 
 set -euo pipefail
@@ -80,21 +80,6 @@ ticket 04 api-endpoints "Add the API endpoints" task "02, 03" resolved "independ
 commit 55 "feat(demo): 04 Add the API endpoints"
 
 ticket 05 migrate-data "Migrate the old data" convert "03" claimed
-
-cat > "$(git rev-parse --absolute-git-dir)/flow-cost-demo.log" << 'EOF'
-09:05:00,01-define-types,build,9,0.21,false,"success"
-09:08:00,01-define-types,review,5,0.09,false,"success"
-09:11:00,06-settle-auth,build,6,0.13,false,"success"
-09:19:00,02-build-parser,build,14,0.34,false,"success"
-09:22:00,02-build-parser,build,11,0.27,false,"success"
-09:27:00,02-build-parser,review,7,0.12,false,"success"
-09:33:00,03-build-store,build,12,0.29,false,"success"
-09:36:00,03-build-store,review,6,0.11,false,"success"
-09:44:00,04-api-endpoints,build,18,0.52,false,"success"
-09:47:00,04-api-endpoints,review,9,0.16,false,"success"
-09:55:00,04-api-endpoints,build,13,0.31,false,"success"
-09:58:00,04-api-endpoints,review,6,0.10,false,"success"
-EOF
 
 echo "demo repo: $TARGET"
 if [ "$OPEN" = 1 ]; then

@@ -26,9 +26,8 @@ usage() {
   sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
-# the skills this installs, and the ones earlier versions installed that are no longer part of it
+# the skills this installs
 SKILLS="feature-flow architect-review automation-design"
-OLD_SKILLS="plan-feature next-phase review-ticket run-flow show-flow"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -168,28 +167,14 @@ install_codex() {
   done
 }
 
-# skills an earlier version installed: named once, never deleted
-report_old() {
-  local dir name found=""
-  for dir in "$@"; do
-    for name in $OLD_SKILLS; do
-      [ ! -d "$dir/$name" ] || found="$found $name"
-    done
-  done
-  [ -z "$found" ] || echo "note: no longer part of feature-flow, left in place:$found"
-}
-
 [ "$DRY" = 0 ] || echo "dry run: nothing will be written"
 echo "installing into $TARGET${AGENT_NOTE}"
-OLD_DIRS=()
 if [ "$AGENT" = claude ] || [ "$AGENT" = all ]; then
   for name in $SKILLS; do copy_tree "$HERE/skills/$name" "$CLAUDE_DIR/skills/$name"; done
   copy_tree "$HERE/agents" "$CLAUDE_DIR/agents"
-  OLD_DIRS+=("$CLAUDE_DIR/skills")
 fi
 if [ "$AGENT" = codex ] || [ "$AGENT" = all ]; then
   install_codex
-  OLD_DIRS+=("$AGENTS_DIR/skills")
 fi
 copy_tree "$HERE/scripts" "$TARGET/scripts"
 copy_tree "$HERE/guides" "$TARGET/.feature-flow/guides"
@@ -200,7 +185,6 @@ echo
 VERB="added"
 [ "$DRY" = 0 ] || VERB="would add"
 echo "$VERB $ADDED, updated $UPDATED, already current $SAME, kept $KEPT"
-report_old "${OLD_DIRS[@]}"
 
 if [ "$DRY" = 0 ]; then
   git -C "$TARGET" rev-parse --git-dir > /dev/null 2>&1 || echo "note: $TARGET is not a git repository, and the flow needs one"

@@ -43,10 +43,10 @@ def build(phase, scripts, feature, ticket, num, sha):
         task = ("Your task: build ticket %s of the feature `%s`, in auto mode (`%s auto %s`). The ticket is `%s`. "
                 "The work starts at commit `%s`.\n%s\nWhen you are done, reply with what you built and the "
                 "commit. Do not review your own work." % (num, feature, feature, num, ticket, sha, fresh))
-        intro = "The build guide follows. It is the text the role above calls the next-phase skill; follow it exactly."
+        intro = "The build guide follows. Follow it exactly."
     else:
         task = ("Your task: review ticket %s of the feature `%s` (`%s %s %s`). The ticket is `%s`, and the work "
                 "started at commit `%s`.\n%s\nDo not edit any file or create a commit. Your final reply must end "
                 "with exactly `REVIEW: PASS` or `REVIEW: FAIL`." % (num, feature, feature, num, sha, ticket, sha, fresh))
-        intro = "The review guide follows. It is the text the role above calls the review-ticket skill; follow it exactly."
+        intro = "The review guide follows. Follow it exactly."
     return "\n\n".join([role, "---", intro, guide, "---", task]) + "\n"

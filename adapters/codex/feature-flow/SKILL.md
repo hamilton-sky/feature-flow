@@ -51,10 +51,6 @@ A conductor command looks like this:
 
     FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> next
 
-If the user wants a reviewer that cannot write at all, run the review as a fresh read-only Codex session instead of a subagent, then run `verdict` on its reply as above:
-
-    FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> prompt | codex exec --sandbox read-only -o .feature-flow/state/flow-review-<feature>.txt -
-
 ## Rules while building
 
 These apply from `start` on, once a plan exists. Planning (above) writes the plan files itself.

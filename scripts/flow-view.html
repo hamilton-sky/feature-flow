@@ -245,13 +245,6 @@ function buildFrames(tickets, details) {
     return e;
   }
   function ellipsize(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
-  function money(x) { return "$" + (x || 0).toFixed(2); }
-
-  var totalCost = 0, sessions = 0;
-  tickets.forEach(function (t) {
-    var d = details[t.label];
-    if (d && d.cost) { totalCost += (d.cost.build || 0) + (d.cost.review || 0); sessions += d.cost.sessions || 0; }
-  });
 
   $("feat").textContent = data.feature ? "Ticket flow: " + data.feature : "Ticket flow";
   $("sub").textContent = data.generated ? "generated " + data.generated : "";
@@ -308,9 +301,6 @@ function buildFrames(tickets, details) {
     g.appendChild(sub);
     var rounds = el("text", { "class": "badge", x: O.nodeW - 14, y: 22, "text-anchor": "end" }, "");
     g.appendChild(rounds);
-    var cost = el("text", { "class": "sub", x: O.nodeW - 14, y: 58, "text-anchor": "end" }, "");
-    g.appendChild(cost);
-    if (d.cost && (d.cost.build || d.cost.review)) cost.textContent = money((d.cost.build || 0) + (d.cost.review || 0));
     if (d.rounds && d.rounds.length) { rounds.textContent = "⟳ " + d.rounds.length; rounds.style.fill = "var(--ready)"; }
     nodeLayer.appendChild(g);
     nodeEls[t.label] = { g: g, stripe: stripe, sub: sub, burst: g.querySelector(".burst") };
@@ -373,7 +363,6 @@ function buildFrames(tickets, details) {
     chip(STATUS_COLOR.resolved, count.resolved + " of " + tickets.length + " resolved");
     chip(STATUS_COLOR.ready, count.ready + " ready");
     if (count.claimed) chip(STATUS_COLOR.claimed, count.claimed + " in progress");
-    if (sessions) chip("", money(totalCost) + " over " + sessions + " sessions");
   }
 
   var currentDetail = null;
@@ -406,10 +395,6 @@ function buildFrames(tickets, details) {
       var ul3 = h("ul");
       d.rounds.forEach(function (r) { ul3.appendChild(h("li", {}, "round " + r.n + ": " + r.source)); });
       box.appendChild(ul3);
-    }
-    if (d.cost && (d.cost.build || d.cost.review)) {
-      box.appendChild(h("h3", {}, "Cost"));
-      box.appendChild(h("div", {}, "build " + money(d.cost.build) + " · review " + money(d.cost.review) + " · " + (d.cost.sessions || 0) + " sessions"));
     }
     if (d.answer) {
       box.appendChild(h("h3", {}, "Answer"));

@@ -31,6 +31,7 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 12 - real Claude run passed on `2ebe22a`: two `claude -p` sessions, HANDOFF after ticket 01 and DONE after ticket 02, 16 checks ok, tools `Agent,Task,Bash,Read,Glob,Grep,Edit,Write`; the first attempt failed on a `.git` write and was fixed in #9 and ticket 14.
 13 - skipped by the user (no Codex tokens): Codex runtime unverified by hand; ticket 10 waits on 12 only.
 14 - conductor state, log, findings and the saved review reply live in `.feature-flow/state/` (self-ignoring, `*`), not `.git`; a run kept under `.git` is copied over with its owner.
+10 - headless loop removed: auto-flow.sh, the five old flow skills, the cost log, the fakes and both replaced plans are gone; smoke-real.sh keeps only --prepare and --interactive.
 
 ## Open questions
 
