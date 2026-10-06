@@ -24,6 +24,7 @@ All of feature-flow runs as Python in the `feature_flow` package (standard libra
 03 - gate ported to feature_flow/gate.py (byte-level, bash -c kept); checks.gate runs it in process; parity 15/15 in tests/run.sh
 04 - floor guard ported to feature_flow/floorguard.py (bytes, mawk semantics), conductor calls it in-process; parity on 28 fixtures, bash bugs kept and listed in the ticket.
 05 - flow-view ported to feature_flow/view.py (template and data as bytes, status read in process); parity on 22 fixture runs; the cost log was already gone with interactive-flow ticket 10; bash bugs kept and listed in the ticket.
+06 - installer ported to feature_flow/install.py (root shim install.py), install.sh is a 4-line exec wrapper; parity 17/17 scenarios against tests/install-bash-reference.sh, deleted in 07.
 
 ## Open questions
 

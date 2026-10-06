@@ -366,8 +366,7 @@ done
 if [ -z "$bad_names" ]; then ok "frontmatter is the name, then a quoted description, in every skill"; else bad "frontmatter is the name, then a quoted description, in every skill" "$bad_names"; fi
 if [ "$(sed '1,/^---$/d' "$ROOT/skills/architect-review/SKILL.md" | sed '1,/^---$/d')" = "$(sed '1,/^---$/d' "$CS/architect-review/SKILL.md" | sed '1,/^---$/d')" ]; then ok "the other skills keep their body word for word"; else bad "the other skills keep their body word for word"; fi
 printf -- '---\nname: q\ndescription: Says "hi" \\ there: ok\nargument-hint: "[a]"\n---\n\nbody\n' > "$C/q.md"
-sed -n '/^codex_header()/,/^}/p' "$ROOT/install.sh" > "$C/codex_header.sh"
-out="$(bash -c '. "$1"; codex_header "$2"' _ "$C/codex_header.sh" "$C/q.md")"
+out="$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from feature_flow.install import codex_header; sys.stdout.buffer.write(codex_header(open(sys.argv[2], "rb").read()))' "$ROOT" "$C/q.md")"
 expect_has "a description with quotes and a backslash is escaped" 'description: "Says \"hi\" \\ there: ok"' "$out"
 expect_lacks "and the other header keys are dropped" "argument-hint" "$out"
 if command -v python3 > /dev/null 2>&1 && python3 -c 'import yaml' > /dev/null 2>&1; then
@@ -418,6 +417,74 @@ expect_has "and at Claude Code" "/feature-flow <feature-name> in Claude Code" "$
 bash "$ROOT/install.sh" "$C/fresh" --agent nonsense > /dev/null 2>&1; expect_rc "an unknown agent is a usage error" 2 $?
 bash "$ROOT/install.sh" --agent > /dev/null 2>&1; expect_rc "--agent without a value is a usage error" 2 $?
 out="$(bash "$ROOT/install.sh" "$C/fresh" --agent=codex --dry-run 2>&1)"; expect_has "--agent=codex works too" "(codex)" "$out"
+
+echo "install.sh and install.py parity"
+# every scenario the install.sh checks above use, plus a few edge cases: the bash installer (kept as
+# tests/install-bash-reference.sh, deleted with this section in ticket 07) and install.py run one after
+# the other in the same folder, so the paths they print are the same. the report (stdout and stderr,
+# exit code of every run) and the tree left behind (paths, contents, exec bits) must match.
+IP="$TMP/inst-parity"
+mkdir -p "$IP/src"
+cp -Rp "$ROOT/skills" "$ROOT/agents" "$ROOT/adapters" "$ROOT/scripts" "$ROOT/guides" "$ROOT/feature_flow" "$ROOT/install.py" "$IP/src/"
+cp -p "$ROOT/tests/install-bash-reference.sh" "$IP/src/install.sh"
+chmod +x "$IP/src/scripts/gate.sh" # an exec bit must be kept
+# files the listing skips or sorts: .DS_Store, compiled Python (copied by the Codex skill loop, which
+# skips only .DS_Store), a symlink, and names whose order depends on byte order
+mkdir -p "$IP/src/feature_flow/__pycache__" "$IP/src/skills/architect-review/__pycache__"
+for f in feature_flow/__pycache__/x.pyc feature_flow/y.pyc guides/.DS_Store skills/architect-review/.DS_Store skills/architect-review/__pycache__/z.pyc skills/architect-review/Zeta.md skills/architect-review/a-b.md guides/Zeta.md guides/a-b.md guides/a.b; do echo "$f" > "$IP/src/$f"; done
+ln -s build.md "$IP/src/guides/link.md"
+# headers the two text transforms must rewrite byte for byte
+printf -- '---\nname: automation-design\ndescription: \t Says "hi" \\ there \t\nargument-hint: x\n---\n\n\nbody "q"\n---\nno final newline' > "$IP/src/skills/automation-design/SKILL.md"
+printf -- '---\ntools: x\n---\n\n\nYou are.\n\nmore\r\n' > "$IP/src/agents/zz-role.md"
+printf -- 'no frontmatter\n---\n' > "$IP/src/agents/zz-plain.md"
+R="$IP/run"
+inst() { # the installer of this side, then its exit code
+  if [ "$SIDE" = sh ]; then bash "$IP/src/install.sh" "$@"; else python3 "$IP/src/install.py" "$@"; fi
+  echo "[exit $?]"
+}
+inst_scenarios=(
+  'inst "$R/repo"'
+  'inst "$R/repo"; inst "$R/repo"'
+  'inst "$R/repo"; echo "my own edit" >> "$R/repo/.claude/skills/feature-flow/SKILL.md"; inst "$R/repo"; inst "$R/repo" --force'
+  'inst "$R/fresh" --dry-run'
+  'mkdir -p "$R/old/.claude/skills/my-skill" "$R/old/.claude/skills/old-build" "$R/old/.claude/skills/old-review"; echo mine > "$R/old/.claude/skills/my-skill/SKILL.md"; inst "$R/old"; printf "Run \`bash scripts/flow-status.sh <feature> --next\`.\n" > "$R/old/.claude/skills/old-build/SKILL.md"; printf "End with \`REVIEW: PASS\` or \`REVIEW: FAIL\`.\n" > "$R/old/.claude/skills/old-review/SKILL.md"; inst "$R/old"'
+  'CLAUDE_HOME="$R/home/.claude" inst "$R/repo2" --user'
+  'inst --nonsense'
+  'printf "my own instructions\n" > "$R/repo/AGENTS.md"; inst "$R/repo" --agent codex; mkdir -p "$R/repo/.agents/skills/old-build"; printf "bash scripts/flow-status.sh f\n" > "$R/repo/.agents/skills/old-build/SKILL.md"; inst "$R/repo" --agent codex'
+  'inst "$R/repo" --agent codex; inst "$R/repo" --agent codex; echo "my own edit" >> "$R/repo/.agents/skills/architect-review/SKILL.md"; inst "$R/repo" --agent codex; inst "$R/repo" --agent codex --force'
+  'inst "$R/fresh" --agent codex --dry-run'
+  'AGENTS_HOME="$R/home/.agents" inst "$R/repo2" --agent codex --user'
+  'inst "$R/both" --agent all'
+  'inst "$R/fresh" --agent nonsense; inst --agent; inst "$R/fresh" --agent=codex --dry-run'
+  'inst --help; inst -h; inst "$R/missing"; inst "$R/fresh" --agent=; inst "$R/fresh" --agent --force; inst - ; inst "$R/fresh" --help --nonsense'
+  'git init -q "$R/repo"; inst "$R/repo" --agent all; echo edit >> "$R/repo/scripts/gate.sh"; chmod -x "$R/repo/.feature-flow/agents/ticket-builder.md"; inst "$R/repo" --agent all --dry-run --force; inst "$R/repo" --agent all --force'
+  'mkdir -p "$R/a/b"; cd "$R/a/b" && inst; inst ..; inst "" --agent codex; inst ./../b/ --dry-run'
+  'HOME="$R/h" inst "$R/repo" --user --agent all; HOME="$R/h" CLAUDE_HOME= AGENTS_HOME="$R/h2" inst "$R/repo" --user --agent=all'
+)
+inst_n=0
+inst_diff=""
+for sc in "${inst_scenarios[@]}"; do
+  inst_n=$((inst_n + 1))
+  for SIDE in sh py; do
+    rm -rf -- "$R"; mkdir -p "$R/repo" "$R/fresh" "$R/repo2" "$R/both" "$R/old"
+    (cd "$R" && export LC_ALL=C && eval "$sc") > "$IP/$SIDE.out" 2>&1
+    (cd "$R" && find . | LC_ALL=C sort | while IFS= read -r p; do
+      if [ -f "$p" ] && [ ! -L "$p" ]; then
+        x=-; [ -x "$p" ] && x=x
+        printf '%s %s %s\n' "$x" "$(cksum < "$p")" "$p"
+      else
+        printf 'd %s\n' "$p"
+      fi
+    done) > "$IP/$SIDE.tree"
+    rm -rf -- "$IP/$SIDE"; mv "$R" "$IP/$SIDE"
+  done
+  if ! cmp -s "$IP/sh.out" "$IP/py.out"; then inst_diff="$inst_diff [scenario $inst_n: report]"; fi
+  if ! cmp -s "$IP/sh.tree" "$IP/py.tree" || ! diff -r "$IP/sh" "$IP/py" > /dev/null 2>&1; then inst_diff="$inst_diff [scenario $inst_n: tree]"; fi
+done
+rm -rf -- "$IP"
+unset -f inst
+echo "  compared install.sh and install.py on $inst_n scenarios"
+if [ -z "$inst_diff" ]; then ok "install.py reports, exits and installs exactly like install.sh"; else bad "install.py reports, exits and installs exactly like install.sh" "$inst_diff"; fi
 
 echo "flow-status.sh, json"
 set_status() { awk -v s="$2" 'FNR<=20 && !d && /^Status:/ {print "Status: " s; d=1; next} {print}' "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
