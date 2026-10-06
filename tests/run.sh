@@ -318,6 +318,14 @@ mkdir -p "$I/old/.claude/skills/my-skill"
 echo "mine" > "$I/old/.claude/skills/my-skill/SKILL.md"
 bash "$ROOT/install.sh" "$I/old" > /dev/null 2>&1
 [ "$(cat "$I/old/.claude/skills/my-skill/SKILL.md")" = "mine" ] && ok "a skill it does not own is left alone" || bad "a skill it does not own is left alone"
+mkdir -p "$I/old/.claude/skills/old-build" "$I/old/.claude/skills/old-review"
+printf 'Run `bash scripts/flow-status.sh <feature> --next`.\n' > "$I/old/.claude/skills/old-build/SKILL.md"
+printf 'End with `REVIEW: PASS` or `REVIEW: FAIL`.\n' > "$I/old/.claude/skills/old-review/SKILL.md"
+out="$(bash "$ROOT/install.sh" "$I/old" 2>&1)"
+expect_has "a leftover flow skill from an earlier version is named" "no longer installed: old-build old-review." "$out"
+expect_lacks "but not the user's own skill" "my-skill" "$out"
+if [ -f "$I/old/.claude/skills/old-build/SKILL.md" ]; then ok "and nothing is deleted"; else bad "and nothing is deleted"; fi
+expect_lacks "the installed feature-flow skill is never named as a leftover" "no longer installed" "$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"
 mkdir -p "$I/repo2"
 CLAUDE_HOME="$I/home/.claude" bash "$ROOT/install.sh" "$I/repo2" --user > /dev/null 2>&1
 if [ -f "$I/home/.claude/skills/feature-flow/SKILL.md" ] && [ -f "$I/home/.claude/agents/ticket-reviewer.md" ]; then ok "--user puts skills and agents in the user folder"; else bad "--user puts skills and agents in the user folder"; fi
@@ -340,6 +348,9 @@ done
 for f in .agents/flow-roles/ticket-builder.md .agents/flow-roles/ticket-reviewer.md scripts/flow.py .feature-flow/feature_flow/cli.py .feature-flow/guides/review.md; do
   if [ -f "$C/repo/$f" ]; then ok "codex installed $f"; else bad "codex installed $f"; fi
 done
+mkdir -p "$C/repo/.agents/skills/old-build"; printf 'bash scripts/flow-status.sh f\n' > "$C/repo/.agents/skills/old-build/SKILL.md"
+expect_has "codex: a leftover flow skill is named" "no longer installed: old-build." "$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
+rm -rf "$C/repo/.agents/skills/old-build"
 expect_has "codex: only the three skills are installed" "architect-review automation-design feature-flow" "$(ls "$C/repo/.agents/skills" | tr '\n' ' ')"
 if [ ! -e "$C/repo/.claude" ]; then ok "--agent codex writes no .claude"; else bad "--agent codex writes no .claude"; fi
 [ "$(cat "$C/repo/AGENTS.md")" = "my own instructions" ] && ok "an existing AGENTS.md is never touched" || bad "an existing AGENTS.md is never touched"
