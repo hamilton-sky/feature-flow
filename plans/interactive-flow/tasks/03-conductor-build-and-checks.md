@@ -1,7 +1,7 @@
 # Build the conductor, the build and check phases
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -50,3 +50,14 @@ Judge from the repo, never from the caller. After a BUILD, the next `next` reads
 - plans/in-session-mode/tasks/02-conductor-build-and-checks.md (the earlier version)
 
 ## Answer
+
+Built: the conductor in Python. `feature_flow/` holds `cli.py` (`main()`), `conductor.py` (the state machine), `state.py` (state and log under `.git`), `tickets.py` (Status, set_open, findings, commands.md values), `git.py` (argument-list git calls) and `checks.py` (one function each for `flow-status.sh`, `gate.sh`, `floor-guard.sh` and the smoke command, so the Python port can swap them). `scripts/flow.py` is the shim; `pyproject.toml` declares the package and the `feature-flow` console script; `.gitignore` ignores `__pycache__/` and `*.pyc`.
+
+Proven: `bash tests/run.sh` 437 passed, 0 failed, with a `flow.py, build and checks` section covering each Done when, and `git status --porcelain` empty afterwards. `python3 -m unittest discover -s tests/py` ran 14 tests, OK. The 3.9 parse check and the standard-library import check both came back clean.
+
+For later tickets:
+- State keys: `ticket`, `num`, `base`, `phase` (`build`, `review` or empty), `attempt`, `review_attempt`, `round`, `review_sha`, `runs`, `limit`, `done`. A shared `round` counts gate, guard and review send-backs. `attempt` resets on every send-back, the way `implement()` restarted its own loop.
+- Before handing out a new ticket, `next` runs `flow-status.sh --check` and requires a clean tree, the same as auto-flow's start checks. It then runs the smoke command (`FLOW_SMOKE`, or else commands.md's `Smoke:`) once per ticket.
+- `scripts/flow.py` sets `sys.dont_write_bytecode`, so running it never leaves `__pycache__` in a user's tree. It looks for `feature_flow/` beside `scripts/`, then in `.feature-flow/`, and passes its own folder to `main()` as the scripts folder.
+- `install.sh` copies `scripts/` whole, so it now installs `flow.py` without the package (the dry-run count in tests/run.sh went from 28 to 29). Ticket 09 has to install `feature_flow/` to `.feature-flow/`.
+- The review phase is a placeholder that hands out the same REVIEW again. Ticket 04 replaces `judge_review`.

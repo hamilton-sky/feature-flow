@@ -1,7 +1,7 @@
 # Finish the conductor, the review verdict, the finish and the stops
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 03
 Test first: yes
 
@@ -34,3 +34,12 @@ Extend `scripts/flow.py` with `python3 scripts/flow.py <feature> verdict <file>`
 - tests/run.sh (the `flow.py` section)
 
 ## Answer
+
+Built: `python3 scripts/flow.py <feature> verdict <file>` and the review half of `next` in `feature_flow/conductor.py` (`verdict`, `judge_review`), plus the `verdict` command in `cli.py`. `verdict` reads the last line matching `^REVIEW: (PASS|FAIL)\s*$`, records `pass`, `fail` or `none` in the state, logs `VERDICT-PASS`, `VERDICT-FAIL` or `VERDICT-NONE`, and prints `OK` or `RETRY no review verdict`. With no review pending it prints the reason on stderr and exits 2 without changing anything. A FAIL saves the first 120 lines to `.git/flow-<f>.findings`. The next `next` appends them under `## Review findings (round N, independent review)`, using the same round counter and commit message as the gate send-back.
+
+Proven: `bash tests/run.sh` 464 passed, 0 failed. Its `flow.py, review verdict and finish` section has a check for each Done when: PASS leads to the next BUILD and then DONE, FAIL rounds stop on the 4th failure, two replies with no verdict stop, an uncommitted edit stops, a reviewer commit stops, the run limit stops, and `verdict` with no review pending exits 2 and leaves state, HEAD and status unchanged. `git status --porcelain` was empty afterwards.
+
+For later tickets:
+- `next` checks the reviewer before it reads the verdict. Any tracked change (worktree or index), or a HEAD that differs from `review_sha`, is a STOP. Untracked files don't count here, but after a PASS, `next` requires a fully clean tree before it hands out the next ticket. The session must therefore save the reviewer's reply outside the tree. Ticket 01 checks whether `.git/flow-review-<feature>.txt` works.
+- A verdict is used once: `next` clears it. A REVIEW handed out again with no new `verdict` call counts as a reply with no verdict.
+- DONE reads `DONE <feature> is complete: N ticket(s) resolved in this run`.

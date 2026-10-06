@@ -19,7 +19,9 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 
 ## Decisions so far
 
-<One line per resolved ticket.>
+03 - conductor is `feature_flow/` + `scripts/flow.py`; state in `.git/flow-<f>.state`; bash checks wrapped in `checks.py`; `next` does BUILD, gate, guard, REVIEW.
+04 - `verdict <file>` records PASS/FAIL/none; `next` checks reviewer edits by tracked diff + HEAD vs review sha, then sends back, re-reviews or moves on; DONE on completion.
+06 - `start` issues an owner token required as FLOW_SESSION; HANDOFF after FLOW_TICKETS_PER_SESSION passes (never on the last ticket) or after every phase with FLOW_RELAY=1; takeover only with FLOW_TAKEOVER=1.
 
 ## Open questions
 
