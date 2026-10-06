@@ -2,7 +2,7 @@
 
 Type: settle
 Status: open
-Blocked by: 08, 09
+Blocked by: 02, 14
 Test first: no
 
 Prepare the demo with `FLOW_AGENT=codex bash tests/smoke-real.sh --prepare DIR` and run `$feature-flow hello` in an interactive Codex session, in the mode ticket 02 chose, following every `HANDOFF` by starting a new session with the printed line. This is by hand because relay mode needs a person to start sessions. The user decides whether it costs too much to repeat.
@@ -29,3 +29,25 @@ Sessions used: <number>
 - plans/interactive-flow/tasks/02-probe-codex-sessions.md
 
 ## Answer
+
+## Attempt 2026-10-06
+
+Prepared `/Users/shammaihamilton/ff-codex-run` with the requested command and
+opened Codex 0.147.0 there. The installed `$feature-flow` skill was discovered
+and ran its preflight, but its first conductor command failed before a session
+token could be created:
+
+```
+FLOW_INVOKE='$feature-flow' python3 scripts/flow.py hello start
+PermissionError: [Errno 1] Operation not permitted: '/Users/shammaihamilton/ff-codex-run/.git/flow-hello.state.tmp'
+```
+
+Codex then stopped with: `feature-flow cannot start because this session is not
+permitted to write its state under .git. Please allow .git writes for this
+workspace, then run: $feature-flow hello`.
+
+No builder or reviewer session started, no `.git/flow-hello.log` was created,
+and no `HANDOFF` line was printed, so there was no line with which to start the
+requested new session. The checkout remained clean at its initial commit.
+Ticket 14 is the required fix. The parent Codex session reported 16,953 total
+tokens (16,208 input, 108,288 cached input, 745 output, 161 reasoning) on exit.
