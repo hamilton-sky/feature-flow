@@ -1,4 +1,4 @@
-"""The bash scripts the conductor still calls.
+"""The checks the conductor runs: the bash scripts it still calls, and the ported ones in process.
 
 Each call lives in one function so plans/interactive-flow-python can swap it for an
 in-process call without touching the conductor.
@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from feature_flow import status
+from feature_flow import gate as gate_module
 
 
 class Result:
@@ -47,7 +48,11 @@ def flow_status(scripts, feature, mode):
 
 
 def gate(scripts, feature):
-    return _bash(Path(scripts) / "gate.sh", feature)
+    """The gate, run in process. stderr is folded into the output as the subprocess call did."""
+    chunks = []
+    code = gate_module.run(str(feature), chunks.append, chunks.append)
+    out = b"".join(chunks).decode("utf-8", "replace").replace("\r\n", "\n").replace("\r", "\n")
+    return Result(code, out)
 
 
 def floor_guard(scripts, feature, num, base):

@@ -468,6 +468,38 @@ out="$(bash "$G" nofeature 2>&1)"; rc=$?
 expect_rc "a feature without commands.md is not an error" 0 $rc
 bash "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
 
+echo "gate.sh and gate.py parity"
+# every commands.md and argument set the gate.sh checks above use, plus a few edge cases (a
+# carriage return, a whitespace-only value, output longer than 40 lines without a final newline).
+# deleted with scripts/gate.sh.
+PY_G="$D/scripts/gate.py"
+cp "$ROOT/scripts/gate.py" "$PY_G"
+mkdir -p "$D/feature_flow"
+cp "$ROOT"/feature_flow/*.py "$D/feature_flow/"
+gate_fixtures=(
+  '# Commands: f\n\nBuild: `echo building`\nTest: `echo testing`\nLint: `echo linting`\n'
+  '# Commands: f\n\nBuild: `echo building`\nTest: `echo it broke; exit 3`\nLint: `echo linting`\n'
+  '# Commands: f\n\nBuild: `<command>`\nTest:\nSmoke: `<x>`\n'
+  'Build:\t `echo crlf`\r\nTest: `   `\nLint: `echo to stderr >&2`\n'
+  'Test: `seq 60; printf no-newline; exit 4`\n'
+)
+compared=0
+diffs=""
+for fx in "${gate_fixtures[@]}"; do
+  printf "$fx" > plans/f/commands.md
+  for args in f nofeature ""; do
+    bash "$G" $args > "$TMP/gate-sh.out" 2> "$TMP/gate-sh.err"; sh_rc=$?
+    python3 "$PY_G" $args > "$TMP/gate-py.out" 2> "$TMP/gate-py.err"; py_rc=$?
+    compared=$((compared + 1))
+    if [ "$sh_rc" != "$py_rc" ] || ! cmp -s "$TMP/gate-sh.out" "$TMP/gate-py.out" || ! cmp -s "$TMP/gate-sh.err" "$TMP/gate-py.err"; then
+      diffs="$diffs [fixture $compared, args '$args': exit $sh_rc vs $py_rc]"
+    fi
+  done
+done
+rm -rf -- "$D/feature_flow" "$PY_G" "$TMP"/gate-*.out "$TMP"/gate-*.err
+echo "  compared gate.sh and gate.py on $compared fixture runs (${#gate_fixtures[@]} commands.md files x 3 argument sets)"
+if [ -z "$diffs" ]; then ok "gate.py prints and exits exactly like gate.sh"; else bad "gate.py prints and exits exactly like gate.sh" "$diffs"; fi
+
 echo "auto-flow.sh, gate and agents"
 D="$(newrepo gate_loop)"
 printf '# Commands: f\n\nTest: `[ ! -e FAILING ]`\n' > "$D/plans/f/commands.md"
