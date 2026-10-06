@@ -42,7 +42,7 @@ Say what will happen: for each ticket, a builder subagent and then a reviewer su
 Run `next`, act on its one line, and repeat:
 
 - `BUILD <ticket> <NN> <sha>`: run `prompt`. Spawn a `ticket-builder` subagent with that output as its whole prompt, and ask for a short summary back. Wait for its final reply: an Agent call can return before the subagent finishes, and the reply then arrives as a notification. Then run `next`.
-- `REVIEW <ticket> <NN> <sha>`: run `prompt` and spawn a `ticket-reviewer` subagent with it. Wait for its final reply. Save the whole reply with Bash, not the Write tool: `cat > .git/flow-review-<feature>.txt <<'EOF'` ... `EOF`. Then run `verdict .git/flow-review-<feature>.txt` and `next`. If `verdict` prints `RETRY`, just run `next`.
+- `REVIEW <ticket> <NN> <sha>`: run `prompt` and spawn a `ticket-reviewer` subagent with it. Wait for its final reply. Save the whole reply with Bash, not the Write tool, and not under `.git`: an unattended session is refused there as a sensitive file. Use `cat > "${TMPDIR:-/tmp}/flow-review-<feature>.txt" <<'EOF'` ... `EOF`. Then, as separate commands, run `verdict "${TMPDIR:-/tmp}/flow-review-<feature>.txt"` and `next`. If `verdict` prints `RETRY`, just run `next`.
 - `DONE <summary>`: report it and suggest `/feature-flow <feature> show`.
 - `STOP <reason>`: report the reason, run `bash scripts/flow-status.sh <feature>`, show the table, and stop.
 - `HANDOFF <line>`: stop here. Tell the user to open a new session and type exactly `<line>`. The new session resumes where this one stopped.
