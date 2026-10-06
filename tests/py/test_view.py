@@ -91,8 +91,8 @@ class ShowStatusTests(unittest.TestCase):
         self.assertEqual(view.show_status(b"Status: claimed\n"), b"open")
         self.assertEqual(view.show_status(b"x\n" * 20 + b"Status: resolved\n"), b"")
 
-    def test_a_carriage_return_makes_it_open_like_in_bash(self):
-        self.assertEqual(view.show_status(b"Status: resolved\r\n"), b"open")
+    def test_a_carriage_return_is_ignored(self):
+        self.assertEqual(view.show_status(b"Status: resolved\r\n"), b"resolved")
 
 
 class PageTests(unittest.TestCase):

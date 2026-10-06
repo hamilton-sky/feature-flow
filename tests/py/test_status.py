@@ -77,10 +77,10 @@ class StatusTests(unittest.TestCase):
     def test_json_escapes_like_awk(self):
         self.assertEqual(status.jstr('a"b\\c\td\x01e\x02'), '"a\\"b\\\\c\\td\\ne"')
 
-    def test_records_keep_carriage_returns_and_skip_the_final_newline(self):
+    def test_records_drop_carriage_returns_and_skip_the_final_newline(self):
         path = Path("x.md")
         path.write_bytes(b"a\r\nb\n")
-        self.assertEqual(tickets.records(path), ["a\r", "b"])
+        self.assertEqual(tickets.records(path), ["a", "b"])
         path.write_bytes(b"")
         self.assertEqual(tickets.records(path), [])
 

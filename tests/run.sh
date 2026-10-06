@@ -406,7 +406,7 @@ S="$ROOT/scripts/flow-status.py"
 out="$(python3 "$S" dup --check 2>&1)"; rc=$?
 expect_rc "a duplicate number fails --check" 1 $rc
 expect_has "and the check names it" "01: two tickets share this number" "$out"
-expect_has "a CRLF Status line reads as an unknown status" "02  unknown" "$(python3 "$S" dup)"
+expect_has "a CRLF Status line reads like any other" "02  open" "$(python3 "$S" dup)"
 expect_has "an empty ticket file is skipped" "total=2 " "$(python3 "$S" dup --counts)"
 python3 "$S" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
 expect_has "and the usage line names the Python command" "usage: python3 scripts/flow-status.py <feature>" "$(python3 "$S" 2>&1)"
@@ -516,7 +516,7 @@ expect_has "the Answer keeps quotes, backslashes and tabs" 'Built: "it" \ and	ta
 expect_lacks "and drops a comment line" "a comment" "$(printf '%s' "$ed" | jq -r '.details["01"].answer')"
 [ "$(printf '%s' "$ed" | jq -r '[.details["01"].rounds[] | "\(.n):\(.source)"] | join(",")')" = "3:gate,0:,12:,4:a, b" ] && ok "review rounds are read with and without a number or a source" || bad "review rounds are read with and without a number or a source"
 [ "$(printf '%s' "$ed" | jq -r '.details["02"].answer')" = "" ] && ok "the template's Answer placeholder is no answer" || bad "the template's Answer placeholder is no answer"
-[ "$(printf '%s' "$ed" | jq -r '.details["03"].history[0].status')" = "open" ] && ok "a CRLF Status line reads as open in the history" || bad "a CRLF Status line reads as open in the history"
+[ "$(printf '%s' "$ed" | jq -r '.details["03"].history[0].status')" = "resolved" ] && ok "a CRLF Status line reads like any other in the history" || bad "a CRLF Status line reads like any other in the history"
 [ "$(printf '%s' "$ed" | jq -r '.details["02"].history[0].status')" = "parked" ] && ok "a parked ticket has a parked history" || bad "a parked ticket has a parked history"
 FLOW_DIR=.scratch FLOW_TICKETS=issues ve x --no-open --out "$TMP/vx.html" > /dev/null 2>&1; expect_rc "FLOW_DIR and FLOW_TICKETS relocate the tickets" 0 $?
 ve blank --no-open --out "$TMP/vb.html" > /dev/null 2>&1; expect_rc "an empty ticket file does not stop the page" 0 $?

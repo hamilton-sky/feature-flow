@@ -28,10 +28,10 @@ def command(path, key):
         data = Path(path).read_bytes()
     except OSError:  # awk prints its own error to stderr and the value is empty
         return b""
-    for line in data.split(b"\n"):
+    for line in data.split(b"\n"):  # a Windows checkout may end lines with \r; it is dropped below
         if line.startswith(key + b":"):
             value = re.sub(b"^" + re.escape(key) + b":[ \t]*", b"", line, count=1)
-            return value.replace(b"`", b"")
+            return value.rstrip(b"\r").replace(b"`", b"")
     return b""
 
 

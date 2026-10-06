@@ -101,7 +101,7 @@ def show_status(blob):
     """The status word the bash history awk prints for a ticket as git stored it, or b""."""
     for line in blob.split(b"\n")[:20]:
         if line.startswith(b"Status:"):
-            s = re.sub(rb"^Status:[ \t]*", b"", line).lower()
+            s = re.sub(rb"^Status:[ \t]*", b"", line.rstrip(b"\r")).lower()
             s = re.sub(rb"[ \t(].*$", b"", s, flags=re.S)
             if s in (b"resolved", b"done", b"closed"):
                 return b"resolved"

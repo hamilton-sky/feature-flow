@@ -73,7 +73,7 @@ class GateTests(unittest.TestCase):
     def test_the_value_is_read_like_awk(self):
         path = self.dir / "commands.md"
         path.write_bytes(b" Build: no\nBuild:\t \t`a`b`\r\nBuild: second\n")
-        self.assertEqual(gate.command(path, "Build"), b"ab\r")
+        self.assertEqual(gate.command(path, "Build"), b"ab")
         self.assertEqual(gate.command(path, "Test"), b"")
 
     def test_tail_keeps_the_last_lines_like_tail(self):
