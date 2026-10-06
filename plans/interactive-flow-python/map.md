@@ -1,0 +1,26 @@
+# Map: interactive-flow-python
+
+## Destination
+
+All of feature-flow runs as Python in the `feature_flow` package (standard library, 3.9+), with the same commands and output as the bash scripts it replaces, on Linux, macOS and Windows. This is round two of `plans/interactive-flow`, which wrote the conductor in Python and removed the headless loop.
+
+**The bar.** CI green on Ubuntu, macOS and Windows: `python3 -m unittest discover -s tests/py` passes and a fixture plan driven with `python scripts/flow.py` reaches `REVIEW` on all three, and `ls scripts/*.sh` lists nothing. Ticket 08 runs it.
+
+## How to work this
+
+- See what is ready: `bash scripts/flow-status.sh interactive-flow-python`. Take the lowest numbered READY ticket.
+- Claim: set `Status: claimed` in the ticket and save before starting.
+- Resolve: write the result under `## Answer`, set `Status: resolved`, then add one line to
+  Decisions so far below.
+- See the graph: `bash scripts/flow-status.sh interactive-flow-python --mermaid` (coloured by status, drawn on demand).
+- Commands live in `commands.md` (frozen). Lessons live in `learnings.md` (append only).
+- Status lives only in the ticket files. This map never repeats it.
+- Start only after `plans/interactive-flow` ticket 10 is resolved; ticket 01 checks that.
+
+## Decisions so far
+
+<One line per resolved ticket.>
+
+## Open questions
+
+- Which Python versions the cloud environments ship (ticket 01). If one is older than 3.9, the floor moves down or the README names the requirement.

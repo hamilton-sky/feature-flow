@@ -8,7 +8,7 @@ Users also see seven skills in their agent, copied into every repo, and rewritte
 
 ## Goal and the bar
 
-One interactive way to run a feature, in one skill. The user types `/feature-flow <feature>` in Claude Code (or `$feature-flow <feature>` in Codex), locally or in the cloud. A script, `scripts/flow.sh`, owns the order of phases and the limits and tells the session what to do next. The session hands each build and each review to a fresh subagent. When a session has done enough tickets, the script tells it to hand off, and the user continues in a new session with one line. Where a runtime cannot start subagents, every phase runs in its own session through the same handoff. The headless loop is removed.
+One interactive way to run a feature, in one skill. The user types `/feature-flow <feature>` in Claude Code (or `$feature-flow <feature>` in Codex), locally or in the cloud. A script, `scripts/flow.py`, owns the order of phases and the limits and tells the session what to do next. The session hands each build and each review to a fresh subagent. When a session has done enough tickets, the script tells it to hand off, and the user continues in a new session with one line. Where a runtime cannot start subagents, every phase runs in its own session through the same handoff. The headless loop is removed.
 
 The bar: `RUN_REAL=1 FLOW_TICKETS_PER_SESSION=1 bash tests/smoke-real.sh --interactive` runs `claude -p "/feature-flow hello auto"` twice on the demo project. The first session builds and reviews ticket 01 and stops on `HANDOFF`; the second resumes and finishes ticket 02. It ends with both tickets resolved, a clean tree, the gate and the floor guard run after each ticket, a reviewer subagent's `REVIEW: PASS` for each, a list of `ok` checks, no `FAIL`, and exit 0.
 
@@ -26,7 +26,7 @@ The bar: `RUN_REAL=1 FLOW_TICKETS_PER_SESSION=1 bash tests/smoke-real.sh --inter
 
 **As the** author of a feature, **I want** the order of phases to come from a script that reads the repo, **so that** a session that skips or forgets a step cannot get a ticket past the gate, the guard or the review.
 
-- [ ] The session never decides the next step; it asks `flow.sh` and does what it is told.
+- [ ] The session never decides the next step; it asks `flow.py` and does what it is told.
 - [ ] The script judges build, gate and floor guard from the ticket file and git. The review verdict is the one thing the session relays.
 
 ### Keep going across sessions
@@ -39,11 +39,11 @@ The bar: `RUN_REAL=1 FLOW_TICKETS_PER_SESSION=1 bash tests/smoke-real.sh --inter
 
 ## Scope
 
-In: `scripts/flow.sh` (conductor, prompts, handoff); runtime-neutral guides for planning, building and reviewing; one `feature-flow` skill for Claude Code and one for Codex, written by hand; the installer installing only that skill plus the role files, scripts and guides; removing the headless loop; the README; one paid Claude acceptance run and one hand-run Codex check.
+In: `scripts/flow.py` (conductor, prompts, handoff); runtime-neutral guides for planning, building and reviewing; one `feature-flow` skill for Claude Code and one for Codex, written by hand; the installer installing only that skill plus the role files, scripts and guides; removing the headless loop; the README; one paid Claude acceptance run and one hand-run Codex check.
 
 Not in scope:
-- Fetching feature-flow at run time from a pinned tag, or a PyPI package for the CLI. Delivery stays `install.sh` in this plan; distribution is its own later plan once `flow.sh`'s commands are stable.
-- Porting the scripts to Python. Same reason.
+- Fetching feature-flow at run time from a pinned tag, or a PyPI package for the CLI. Delivery stays `install.sh` in this plan; distribution is its own later plan once `flow.py`'s commands are stable.
+- Porting the existing bash scripts (`flow-status.sh`, `gate.sh`, `floor-guard.sh`, `flow-view.sh`, `install.sh`) to Python. That is `plans/interactive-flow-python`, which starts once this plan has removed the headless loop, so dead code is never ported. The new conductor is written in Python from the start, so nothing new is written twice.
 - `architect-review` and `automation-design`. They are standalone skills, not part of the ticket loop, and stay as they are.
 - A server, MCP or otherwise.
 - Measuring a session's context percentage, unless ticket 02 finds a runtime exposes it. The handoff is count based because the script can count reliably and a model cannot measure its own context.
@@ -51,9 +51,9 @@ Not in scope:
 ## Happy path
 
 1. `/feature-flow csv-export` with no `plans/csv-export/` → the session follows `guides/plan.md` with the user, writes and validates the plan, then stops with the exact files and suggested commit command. It does not claim that the flow is ready while the plan is uncommitted.
-2. After the user commits the plan, `/feature-flow csv-export` again → the skill checks a clean tree, a valid plan and the installed roles, runs `bash scripts/flow.sh csv-export start`, keeps the returned session token for every conductor call, says what will happen, and asks (skipped with `auto`).
-3. `bash scripts/flow.sh csv-export next` → `BUILD plans/csv-export/tasks/01-types.md 01 <sha>` → `bash scripts/flow.sh csv-export prompt` prints the builder prompt → the session spawns a builder subagent with it → the subagent builds, proves and commits the ticket.
-4. `next` → the script sees the ticket resolved and the tree clean, runs the gate and the floor guard, prints `REVIEW …` → `prompt` prints the reviewer prompt → reviewer subagent → the session saves the reply and runs `flow.sh csv-export verdict <file>`.
+2. After the user commits the plan, `/feature-flow csv-export` again → the skill checks a clean tree, a valid plan and the installed roles, runs `python3 scripts/flow.py csv-export start`, keeps the returned session token for every conductor call, says what will happen, and asks (skipped with `auto`).
+3. `python3 scripts/flow.py csv-export next` → `BUILD plans/csv-export/tasks/01-types.md 01 <sha>` → `python3 scripts/flow.py csv-export prompt` prints the builder prompt → the session spawns a builder subagent with it → the subagent builds, proves and commits the ticket.
+4. `next` → the script sees the ticket resolved and the tree clean, runs the gate and the floor guard, prints `REVIEW …` → `prompt` prints the reviewer prompt → reviewer subagent → the session saves the reply and runs `flow.py csv-export verdict <file>`.
 5. `REVIEW: PASS` → `next` prints the next `BUILD`, until it prints `DONE`, or `HANDOFF /feature-flow csv-export` after four tickets.
 6. The user opens a new session and types that line → step 2 again, resuming at the next ticket.
 
@@ -83,7 +83,7 @@ Not in scope:
    you ─ /feature-flow f ─► [session: the one skill]
                               │   ▲
           start / next /      ▼   │  PLAN | BUILD | REVIEW | DONE | STOP | HANDOFF
-          prompt / verdict  [scripts/flow.sh]
+          prompt / verdict  [scripts/flow.py]
                              reads plans/ + git, runs gate + floor guard,
                              state + session owner in .git/flow-<f>.state,
                              log in .git/flow-<f>.log
@@ -94,11 +94,12 @@ Not in scope:
         HANDOFF ─► session stops; user types the printed line in a new session
 ```
 
-Relay mode (no subagents): the same lines, but `flow.sh` prints `HANDOFF` after each BUILD and REVIEW, and the new session does that one phase itself with the prompt from `prompt`.
+Relay mode (no subagents): the same lines, but `flow.py` prints `HANDOFF` after each BUILD and REVIEW, and the new session does that one phase itself with the prompt from `prompt`.
 
 ### Decisions
 
 - **Interactive only** — options: keep both modes, headless only, interactive only. Chosen: interactive only. Why: one state machine instead of two, no CLI adapters or flag preflight, and Claude cloud sessions already keep working with nobody watching. Cost: no terminal-driven overnight runs, and a runtime with neither subagents nor sessions cannot run the flow.
+- **Language** — options: write the new conductor in bash and port it later, port everything first, or write new code in Python now and port the rest after. Chosen: new code in Python now (`feature_flow/` package, standard library only, Python 3.9+), existing bash ported by `plans/interactive-flow-python`. Why: nothing is written twice, `auto-flow.sh` is deleted rather than ported, and the package is ready for a later PyPI release. The black-box checks in `tests/run.sh` work for either language. Note: Python does not remove the need to pass `FLOW_SESSION` on every call; each agent command runs in a fresh shell whatever the language.
 - **Who decides the order** — a conductor script the session has to ask (as in `plans/in-session-mode` Decision C). Why: it needs no harness feature and does not depend on the model's obedience.
 - **One skill, guides as data** — options: seven skills per runtime with renderers, or one skill and guide files the script prints. Chosen: one skill. Why: the only runtime-specific text is how to spawn a subagent and how the skill is invoked, so two hand-written skills replace `skill.awk`, the renderers and the parity checker.
 - **Handoff trigger** — options: context percentage, ticket count. Chosen: ticket count (`FLOW_TICKETS_PER_SESSION`, default 4), at a ticket boundary. Why: the script can count; neither runtime is known to tell a session its context usage. Ticket 02 checks; the skill may add an early handoff if it can.
@@ -108,7 +109,7 @@ Relay mode (no subagents): the same lines, but `flow.sh` prints `HANDOFF` after 
 
 ## Interfaces
 
-`bash scripts/flow.sh <feature> <command>`; every command prints one line on stdout.
+`python3 scripts/flow.py <feature> <command>`; every command prints one line on stdout.
 
 - `start` — marks a new session (resets the per-session ticket count), prints `OK <session-token>` or `PLAN` when the plan folder is missing. With an existing owner it prints `STOP`; `FLOW_TAKEOVER=1` explicitly replaces that owner after a crashed or closed session.
 - `next` — `BUILD <ticket> <NN> <base-sha>`, `REVIEW <ticket> <NN> <base-sha>`, `DONE <summary>`, `HANDOFF <line to type>` (exit 0), or `STOP <reason>` (exit 1).
@@ -119,9 +120,9 @@ Environment: `FLOW_DIR`, `FLOW_TICKETS`, `FLOW_MAX_RETRIES` (2), `FLOW_MAX_REVIE
 
 ## Migration and compatibility
 
-This plan replaces `plans/in-session-mode` and `plans/portable-runtime-skills`. Their useful parts move here: the subagent probe and the conductor from in-session-mode; nothing from the Codex hardening tickets, which only exist for the headless loop. Retiring those two folders is a separate change, not a ticket here.
+This plan replaces `plans/in-session-mode` and `plans/portable-runtime-skills`. Their useful parts move here: the subagent probe and the conductor from in-session-mode; nothing from the Codex hardening tickets, which only exist for the headless loop. Ticket 10 deletes both folders along with the rest of the headless flow.
 
-`install.sh` keeps its options. It stops installing `plan-feature`, `next-phase`, `review-ticket`, `run-flow` and `show-flow` and installs `feature-flow`; existing copies in a user's repo are reported, never deleted. `scripts/auto-flow.sh` is removed only after both the Claude acceptance run and a successful Codex hand run pass.
+`install.sh` keeps its options. It stops installing `plan-feature`, `next-phase`, `review-ticket`, `run-flow` and `show-flow` and installs `feature-flow`; existing copies in a user's repo are reported, never deleted. Nothing headless is kept: ticket 10 deletes `auto-flow.sh`, `/run-flow`, the old skills, the cost log, the headless settings and their tests, and checks the whole repo for leftovers. `scripts/auto-flow.sh` is removed only after both the Claude acceptance run and a successful Codex hand run pass.
 
 ## Risks
 

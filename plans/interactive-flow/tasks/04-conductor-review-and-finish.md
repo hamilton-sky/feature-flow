@@ -5,7 +5,7 @@ Status: open
 Blocked by: 03
 Test first: yes
 
-Extend `scripts/flow.sh` with `bash scripts/flow.sh <feature> verdict <file>`. It takes the reviewer's reply, saved to a file by the session, and completes the review half of the policy, mirroring `review()` and `send_back` in `scripts/auto-flow.sh`.
+Extend `scripts/flow.py` with `python3 scripts/flow.py <feature> verdict <file>`. It takes the reviewer's reply, saved to a file by the session, and completes the review half of the policy, mirroring `review()` and `send_back` in `scripts/auto-flow.sh`.
 
 `verdict` only works while a review is pending (the last thing `next` printed was REVIEW); otherwise it changes nothing and exits 2. It reads the last line of the file matching `^REVIEW: (PASS|FAIL)[[:space:]]*$`, prints `OK`, or `RETRY no review verdict` when there is none, and logs `VERDICT-PASS`, `VERDICT-FAIL` or `VERDICT-NONE`. Then `next` decides:
 
@@ -25,12 +25,12 @@ Extend `scripts/flow.sh` with `bash scripts/flow.sh <feature> verdict <file>`. I
 - A file ending `REVIEW: FAIL` appends `## Review findings (round 1, independent review)` with the file's text and commits; after the 4th failure `next` prints `STOP 01-a still fails the independent review after 3 round(s)` and exits 1.
 - Two files with no verdict line lead to `STOP no review verdict for 01-a after 2 attempt(s)`, exit 1.
 - The reviewer-edit STOP is covered twice: once for an uncommitted tracked edit and once for a reviewer-created commit that leaves the tree clean. Both print the message and exit 1. The run-limit STOP does the same. `verdict` with no review pending exits 2 and leaves the state file, `HEAD` and `git status` unchanged.
-- `bash tests/run.sh` exits 0 with a check for every bullet in the `flow.sh` section.
+- `bash tests/run.sh` exits 0 with a check for every bullet in the `flow.py` section.
 
 ## Reference
 
 - spec.md § Interfaces, Edge cases
 - scripts/auto-flow.sh (read only; `review`, `send_back`, `count_run`, the final loop)
-- tests/run.sh (the `flow.sh` section)
+- tests/run.sh (the `flow.py` section)
 
 ## Answer
