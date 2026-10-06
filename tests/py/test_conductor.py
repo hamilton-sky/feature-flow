@@ -127,15 +127,11 @@ class StateOutsideGit(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.gitdir.glob("flow-*")), [])
         self.assertEqual(self.repo.path(".feature-flow/state/.gitignore").read_text(), "*\n")
 
-    @unittest.skipIf(getattr(os, "geteuid", lambda: 1)() == 0, "root ignores the folder's mode")
     def test_an_unwritable_state_folder_stops_with_a_clear_reason(self):
-        folder = self.repo.path(".feature-flow")
-        folder.mkdir()
-        os.chmod(str(folder), 0o555)
-        try:
-            rc, out = self.repo.flow("start")
-        finally:
-            os.chmod(str(folder), 0o755)
+        # a file where the folder should be: refused for root too, unlike a folder's mode
+        self.repo.path(".feature-flow").write_text("not a folder\n")
+        self.repo.commit("a file named .feature-flow")
+        rc, out = self.repo.flow("start")
         self.assertEqual(rc, 1)
         self.assertIn("STOP cannot write the flow state in", out)
 

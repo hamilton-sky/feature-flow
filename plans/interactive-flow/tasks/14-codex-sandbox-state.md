@@ -67,10 +67,10 @@ Proof: `tests/py/test_conductor.py` class `StateOutsideGit`. It runs every condu
 `.git` at mode 0555: start, a call without the token (STOP), BUILD, REVIEW, verdict from the new
 reply path, HANDOFF with `FLOW_TICKETS_PER_SESSION=1`, then a new `start` without takeover and
 BUILD of ticket 02. It ends with a clean `git status --porcelain` and no `flow-*` file under
-`.git`. Other tests in the class cover an unwritable state folder and moving a run kept under
-`.git`. Run as a non-root user, the new tests fail on the old code (4 failures, 1 error) and
-pass on this one. As root the mode is not enforced, so the unwritable-folder test is skipped
-there, and the no-`flow-*`-under-`.git` assertion still holds. `bash tests/run.sh`: 517
+`.git`. Other tests in the class cover a state folder that cannot be made (a file in its place) and
+moving a run kept under `.git`. Run as a non-root user, the new tests fail on the old code and
+pass on this one. Root ignores the 0555 mode, so as root the no-`flow-*`-under-`.git`
+assertion is what holds the line. `bash tests/run.sh`: 517
 passed, 0 failed (also checks that neither skill writes under `.git`).
 
 Not checked here: a real `codex -C <repo>` session. The automated test stands in for the

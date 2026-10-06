@@ -85,8 +85,8 @@ Not in scope:
           start / next /      ▼   │  PLAN | BUILD | REVIEW | DONE | STOP | HANDOFF
           prompt / verdict  [scripts/flow.py]
                              reads plans/ + git, runs gate + floor guard,
-                             state + session owner in .feature-flow/state/flow-<f>.state,
-                             log in .feature-flow/state/flow-<f>.log (git-ignored)
+                             state + session owner in .git/flow-<f>.state,
+                             log in .git/flow-<f>.log
                               │
         BUILD  ─► builder subagent  (prompt = role + guides/build.md + ticket) ─► commits
         REVIEW ─► reviewer subagent (prompt = role + guides/review.md + ticket + sha)
@@ -103,7 +103,7 @@ Relay mode (no subagents): the same lines, but `flow.py` prints `HANDOFF` after 
 - **Who decides the order** — a conductor script the session has to ask (as in `plans/in-session-mode` Decision C). Why: it needs no harness feature and does not depend on the model's obedience.
 - **One skill, guides as data** — options: seven skills per runtime with renderers, or one skill and guide files the script prints. Chosen: one skill. Why: the only runtime-specific text is how to spawn a subagent and how the skill is invoked, so two hand-written skills replace `skill.awk`, the renderers and the parity checker.
 - **Handoff trigger** — options: context percentage, ticket count. Chosen: ticket count (`FLOW_TICKETS_PER_SESSION`, default 4), at a ticket boundary. Why: the script can count; neither runtime is known to tell a session its context usage. Ticket 02 checks; the skill may add an early handoff if it can.
-- **State** — `.feature-flow/state/flow-<feature>.state` and `flow-<feature>.log`, in a folder whose own `.gitignore` is `*` (ticket 14 moved them out of `.git`, which a normal Codex session cannot write and an unattended Claude session is refused). The state includes a session-owner token and the `HEAD` at which review began. Why: it survives a closed session, never dirties the tree, makes resume and relay possible, prevents two sessions from driving the same feature, and detects reviewer commits as well as dirty files.
+- **State** — `.git/flow-<feature>.state` and `.git/flow-<feature>.log`. The state includes a session-owner token and the `HEAD` at which review began. Why: it survives a closed session, never dirties the tree, makes resume and relay possible, prevents two sessions from driving the same feature, and detects reviewer commits as well as dirty files.
 - **Session ownership** — `start` creates an owner token. Every later command must present it. A second session stops unless the user explicitly authorizes takeover; `HANDOFF` releases the owner. Why: automatically treating every outstanding phase as a crashed session can start duplicate builders while the first session is still alive.
 - **Review independence** — a fresh subagent, or a fresh session in relay mode, with no Edit or Write tools where the runtime allows it. The script STOPs if the tree is dirty or `HEAD` differs from the saved review-start SHA.
 
