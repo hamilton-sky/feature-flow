@@ -26,6 +26,14 @@ python3 install.py /path/to/your/repo --agent all      # both, side by side
 # `bash install.sh ...` still works on Linux and macOS: it only runs install.py
 ```
 
+Without a clone, once the package is on PyPI (it is not published yet), the same installer runs from it:
+
+```bash
+uvx feature-flow-cli install /path/to/your/repo --agent all   # or: pipx run feature-flow-cli install ...
+```
+
+The package puts a `feature-flow` command on your PATH with `install`, `status <feature>` and `view <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
+
 Then, in your repo, in the agent:
 
 | | Claude Code | Codex |
@@ -238,6 +246,8 @@ python3 -m unittest discover -s tests/py
 
 Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
 
+A `package` job builds the wheel and the sdist and runs `tests/package_smoke.py` on Ubuntu (Python 3.9 and the latest), macOS and Windows: it installs the wheel in a fresh virtual environment, runs `feature-flow install`, and checks that the repo gets the same files as from `install.py` in a clone. Run it locally with `python3 -m pip install build && python3 tests/package_smoke.py`.
+
 `RUN_REAL=1 bash tests/smoke-real.sh --interactive` is the acceptance run with Claude Code. It runs real sessions on the demo project and spends money, which is why it asks for `RUN_REAL=1`.
 
 ## Upgrading
@@ -250,6 +260,10 @@ Earlier versions had seven skills and an unattended loop. The five flow skills a
 - `/run-flow` and `scripts/auto-flow.sh` → `/feature-flow <feature> auto`, with a `HANDOFF` every few tickets. There is no cost log any more.
 
 The installer never deletes the old skill folders, but it names any it finds. Delete them from `.claude/skills/` or `.agents/skills/` yourself.
+
+## Releasing to PyPI
+
+The package is `feature-flow-cli` (the shorter `feature-flow` is likely refused by PyPI as too close to the existing `featureflow`). Its version is `__version__` in `feature_flow/__init__.py`. To release: bump it, then `python3 -m build` and `python3 -m twine upload dist/*` with a PyPI API token, or publish from a GitHub Actions workflow set up as a PyPI trusted publisher. Nothing in this repo uploads on its own.
 
 ## Caution
 

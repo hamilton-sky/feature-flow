@@ -34,6 +34,9 @@ a file that already exists and differs is kept and reported, unless --force is g
 nothing is ever deleted. CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrides ~/.agents for --user.
 """
 
+# inside an installed package the skills, roles, guides and scripts sit in this folder of feature_flow
+BUNDLE = "_bundle"
+
 # the skills this installs
 SKILLS = ("feature-flow", "architect-review", "automation-design")
 
@@ -119,6 +122,13 @@ def _files(src, skip_python=True):
     return sorted(found, key=os.fsencode)
 
 
+def source_root():
+    """Where the skills, roles, guides and scripts are: the copy inside an installed package, else the checkout."""
+    package = os.path.dirname(os.path.abspath(__file__))
+    bundle = os.path.join(package, BUNDLE)
+    return bundle if os.path.isdir(bundle) else os.path.dirname(package)
+
+
 def _read(path):
     try:
         with open(path, "rb") as f:
@@ -153,6 +163,11 @@ class Installer:
         else:
             self.claude_dir = target + "/.claude"
             self.agents_dir = target + "/.agents"
+        # the Python package: the checkout's, else (inside an installed package) this one
+        package = here + "/feature_flow"
+        if not os.path.isfile(package + "/__init__.py"):
+            package = os.path.dirname(os.path.abspath(__file__))
+        self.package = package
         self.added = self.updated = self.same = self.kept = 0
 
     def place(self, file, dest, data=None):
@@ -186,11 +201,15 @@ class Installer:
             f.write(data)
         os.chmod(dest, 0o644)
 
-    def copy_tree(self, src, dest):
+    def copy_tree(self, src, dest, skip=None):
+        """Every file under src, except those under src/skip."""
         if not os.path.isdir(src):
             return
         for file in _files(src):
-            self.place(file, dest + "/" + file[len(src) + 1:])
+            rel = file[len(src) + 1:]
+            if skip and rel.startswith(skip + "/"):
+                continue
+            self.place(file, dest + "/" + rel)
 
     def install_codex(self):
         here = self.here
@@ -250,7 +269,7 @@ class Installer:
         self.copy_tree(here + "/scripts", self.target + "/scripts")
         self.copy_tree(here + "/guides", self.target + "/.feature-flow/guides")
         self.copy_tree(here + "/agents", self.target + "/.feature-flow/agents")
-        self.copy_tree(here + "/feature_flow", self.target + "/.feature-flow/feature_flow")
+        self.copy_tree(self.package, self.target + "/.feature-flow/feature_flow", skip=BUNDLE)
 
         self.out("")
         verb = "would add" if self.dry else "added"
