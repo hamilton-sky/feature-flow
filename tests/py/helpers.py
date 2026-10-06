@@ -86,9 +86,9 @@ class Repo:
         self.commit(message)
 
     def state(self):
-        text = self.path(".git/flow-f.state").read_text()
+        text = self.path(".feature-flow/state/flow-f.state").read_text()
         return dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
 
     def log(self):
-        path = self.path(".git/flow-f.log")
+        path = self.path(".feature-flow/state/flow-f.log")
         return path.read_text() if path.exists() else ""

@@ -1,7 +1,7 @@
 # Make flow state writable in a normal Codex session
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -41,3 +41,39 @@ message.
 - install.sh (installed runtime layout)
 
 ## Answer
+
+The conductor's state, log and review findings now live in `.feature-flow/state/` at the
+top of the worktree (`git rev-parse --show-toplevel`), as `flow-<feature>.state`, `.log` and
+`.findings`. `state.state_dir` creates the folder on first use with its own `.gitignore`
+holding `*`, so the folder ignores itself and `git status --porcelain` stays empty without
+touching the user's `.gitignore` or `.git/info/exclude`. The installer needs no change: the
+folder sits beside the installed `.feature-flow/{guides,agents,feature_flow}` and is made at
+run time. Both skills save the reviewer's reply to `.feature-flow/state/flow-review-<feature>.txt`
+(Claude no longer uses `${TMPDIR:-/tmp}`; Codex no longer uses `.git`, including the optional
+`codex exec -o` path).
+
+- Ownership: unchanged. The owner token, takeover and handoff live in the same state file.
+- Old runs: when `.git/flow-<f>.state` exists and the new folder has none, the state, log and
+  findings are copied over (state last, owner included), so the owning session keeps its
+  token and a takeover still needs `FLOW_TAKEOVER=1`. The old files are only read, never
+  written, so this works in the Codex sandbox too.
+- Clear failure: if the folder cannot be written, every command prints
+  `STOP cannot write the flow state in <path>: <reason>. this session must be allowed to write there`.
+- The conductor's own commit of review findings (`send_back`) used to ignore a failed
+  `git commit`. It now stops with `cannot commit the <source> findings to <ticket>`, instead of
+  leaving a dirty tree for the next check to report as something else.
+
+Proof: `tests/py/test_conductor.py` class `StateOutsideGit`. It runs every conductor call with
+`.git` at mode 0555: start, a call without the token (STOP), BUILD, REVIEW, verdict from the new
+reply path, HANDOFF with `FLOW_TICKETS_PER_SESSION=1`, then a new `start` without takeover and
+BUILD of ticket 02. It ends with a clean `git status --porcelain` and no `flow-*` file under
+`.git`. Other tests in the class cover an unwritable state folder and moving a run kept under
+`.git`. Run as a non-root user, the new tests fail on the old code (4 failures, 1 error) and
+pass on this one. As root the mode is not enforced, so the unwritable-folder test is skipped
+there, and the no-`flow-*`-under-`.git` assertion still holds. `bash tests/run.sh`: 517
+passed, 0 failed (also checks that neither skill writes under `.git`).
+
+Not checked here: a real `codex -C <repo>` session. The automated test stands in for the
+sandbox's refusal of `.git`. The real run is ticket 13. A sandboxed builder still needs
+`git commit`, which writes `.git`. Ticket 02's probe saw a child commit, but only in the
+Codex desktop app; ticket 13 will show whether a normal CLI session asks to approve it.

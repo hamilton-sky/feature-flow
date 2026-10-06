@@ -176,8 +176,8 @@ if [ "$INTERACTIVE" = 1 ]; then
   for n in 1 2 3; do
     echo "session $n: claude -p \"/feature-flow hello auto\""
     claude -p "/feature-flow hello auto" --allowedTools "$TOOLS" --max-budget-usd "$BUDGET" < /dev/null || true
-    ended="$(cut -d, -f3 .git/flow-hello.log 2> /dev/null | grep -E '^(HANDOFF|DONE|STOP)$' | tail -1 || true)"
-    last="$(tail -1 .git/flow-hello.log 2> /dev/null | cut -d, -f3 || true)"
+    ended="$(cut -d, -f3 .feature-flow/state/flow-hello.log 2> /dev/null | grep -E '^(HANDOFF|DONE|STOP)$' | tail -1 || true)"
+    last="$(tail -1 .feature-flow/state/flow-hello.log 2> /dev/null | cut -d, -f3 || true)"
     if [ "$ended" != "$last" ] || [ -z "$ended" ]; then
       echo "  FAIL  session $n ended without HANDOFF, DONE or STOP"
       echo "the feature is still owned by that session. once you are sure no claude session is working in $TMP, continue with:"
@@ -189,7 +189,7 @@ if [ "$INTERACTIVE" = 1 ]; then
   done
   fails=0
   check() { if eval "$2" > /dev/null 2>&1; then echo "  ok    $1"; else echo "  FAIL  $1"; fails=$((fails + 1)); fi; }
-  has() { grep -q ",$1,$2\$" .git/flow-hello.log; }
+  has() { grep -q ",$1,$2\$" .feature-flow/state/flow-hello.log; }
   echo "checks"
   check "the run ended on DONE" '[ "$ended" = DONE ]'
   check "the bar holds" '[ "$(python3 hello.py Ada)" = "Hello, Ada!" ]'
@@ -199,9 +199,9 @@ if [ "$INTERACTIVE" = 1 ]; then
   for t in 01 02; do
     for e in BUILD GATE-PASS GUARD-PASS REVIEW VERDICT-PASS; do check "ticket $t: the log has $e" "has $t $e"; done
   done
-  check "the first session handed off once, between the tickets" '[ "$(grep -c ",HANDOFF$" .git/flow-hello.log)" = 1 ] && [ "$(grep -n ",HANDOFF$" .git/flow-hello.log | cut -d: -f1)" -lt "$(grep -n ",02,BUILD$" .git/flow-hello.log | head -1 | cut -d: -f1)" ]'
+  check "the first session handed off once, between the tickets" '[ "$(grep -c ",HANDOFF$" .feature-flow/state/flow-hello.log)" = 1 ] && [ "$(grep -n ",HANDOFF$" .feature-flow/state/flow-hello.log | cut -d: -f1)" -lt "$(grep -n ",02,BUILD$" .feature-flow/state/flow-hello.log | head -1 | cut -d: -f1)" ]'
   echo
-  cat .git/flow-hello.log
+  cat .feature-flow/state/flow-hello.log
   git log --oneline
   [ "$fails" -eq 0 ]
   exit

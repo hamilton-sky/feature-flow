@@ -28,6 +28,7 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 07 - one Claude skill `skills/feature-flow/SKILL.md` (60 lines) drives `flow.py`: start/token, BUILD and REVIEW subagents from `prompt`, reply saved with Bash under `.git`, never checks or reviews itself.
 08 - hand-written Codex skill in `adapters/codex/feature-flow/` (explicit only): same steps with `$feature-flow`, subagents via `spawn_agent` + `wait_agent`, optional hard read-only review through `codex exec --sandbox read-only`.
 09 - installer installs feature-flow (+ architect-review, automation-design), roles, scripts and `.feature-flow/{guides,agents,feature_flow}`; old flow skills reported, never deleted; `skill.awk` gone.
+14 - conductor state, log, findings and the saved review reply live in `.feature-flow/state/` (self-ignoring, `*`), not `.git`; a run kept under `.git` is copied over with its owner.
 
 ## Open questions
 

@@ -45,12 +45,18 @@ class Conductor:
         self.per_session = _env_int("FLOW_TICKETS_PER_SESSION", 4)
         self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
         self.invoke = os.environ.get("FLOW_INVOKE") or "/feature-flow"
-        gdir = git.git_dir()
-        if gdir is None:
-            raise Stop("not inside a git repository")
-        self.state_file = state.state_path(gdir, feature)
-        self.log_file = state.log_path(gdir, feature)
-        self.findings_file = Path(gdir) / ("flow-%s.findings" % feature)
+        top = git.toplevel()
+        if top is None:
+            raise Stop("not inside a git worktree")
+        try:
+            folder = state.state_dir(top)
+            state.migrate(git.git_dir(), folder, feature)
+        except OSError as err:
+            raise Stop("cannot write the flow state in %s: %s. this session must be allowed to write there"
+                       % (top / state.STATE_DIR, err.strerror or err))
+        self.state_file = state.state_path(folder, feature)
+        self.log_file = state.log_path(folder, feature)
+        self.findings_file = state.file_path(folder, feature, "findings")
         self.st = state.load(self.state_file)
 
     # ---- small helpers -------------------------------------------------
@@ -139,8 +145,10 @@ class Conductor:
         self.st["round"] = round_no
         tickets.append_findings(self.ticket(), round_no, source, findings)
         tickets.set_open(self.ticket())
-        git.commit_file(self.ticket(), "chore(%s): %s review findings, round %d"
-                        % (self.feature, self.get("num"), round_no))
+        if not git.commit_file(self.ticket(), "chore(%s): %s review findings, round %d"
+                               % (self.feature, self.get("num"), round_no)):
+            raise Stop("cannot commit the %s findings to %s. this session must be allowed to run git commit"
+                       % (source, self.ticket_name()))
         self.st["attempt"] = 0
         self.st["review_attempt"] = 0
         return self.hand_out_build()

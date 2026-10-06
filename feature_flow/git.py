@@ -19,6 +19,13 @@ def git_dir():
     return Path(result.stdout.strip())
 
 
+def toplevel():
+    result = _git("rev-parse", "--show-toplevel", check=False)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return Path(result.stdout.strip())
+
+
 def head():
     return _git("rev-parse", "HEAD").stdout.strip()
 

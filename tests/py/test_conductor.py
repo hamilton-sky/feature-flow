@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from helpers import Repo
@@ -17,7 +18,7 @@ class BuildAndChecks(unittest.TestCase):
         sha = self.repo.head()
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, sha)))
-        self.assertTrue(self.repo.path(".git/flow-f.state").is_file())
+        self.assertTrue(self.repo.path(".feature-flow/state/flow-f.state").is_file())
         self.assertIn(",01,BUILD", self.repo.log())
         self.assertEqual(self.repo.porcelain(), "")
 
@@ -80,3 +81,70 @@ class BuildAndChecks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StateOutsideGit(unittest.TestCase):
+    """Ticket 14: a normal Codex session can write the worktree but not .git."""
+
+    def setUp(self):
+        self.repo = Repo()
+        self.gitdir = self.repo.path(".git")
+
+    def tearDown(self):
+        os.chmod(str(self.gitdir), 0o755)
+        self.repo.close()
+
+    def flow(self, *args, **env):
+        """Run the conductor with .git unwritable, as the sandbox has it. Root ignores the mode,
+        so the run also checks that no flow file ever appears under .git."""
+        os.chmod(str(self.gitdir), 0o555)
+        try:
+            return self.repo.flow(*args, **env)
+        finally:
+            os.chmod(str(self.gitdir), 0o755)
+
+    def review_pass(self, token, **env):
+        reply = self.repo.path(".feature-flow/state/flow-review-f.txt")
+        reply.write_text("looks right\nREVIEW: PASS\n")
+        self.assertEqual(self.flow("verdict", str(reply), FLOW_SESSION=token, **env), (0, "OK"))
+
+    def test_a_run_hands_off_and_resumes_without_writing_git(self):
+        env = {"FLOW_TICKETS_PER_SESSION": "1", "FLOW_INVOKE": "$feature-flow"}
+        rc, out = self.flow("start", **env)
+        self.assertEqual(rc, 0, out)
+        token = out.split()[1]
+        self.assertEqual(self.flow("next", **env)[0], 1, "a call without the owner's token stops")
+        self.assertTrue(self.flow("next", FLOW_SESSION=token, **env)[1].startswith("BUILD %s 01 " % T1))
+        self.repo.resolve(T1)
+        self.assertTrue(self.flow("next", FLOW_SESSION=token, **env)[1].startswith("REVIEW %s 01 " % T1))
+        self.review_pass(token, **env)
+        self.assertEqual(self.flow("next", FLOW_SESSION=token, **env), (0, "HANDOFF $feature-flow f"))
+        rc, out = self.flow("start", **env)
+        self.assertEqual(rc, 0, "the next session starts without a takeover: %s" % out)
+        token = out.split()[1]
+        self.assertTrue(self.flow("next", FLOW_SESSION=token, **env)[1].startswith("BUILD %s 02 " % T2))
+        self.assertEqual(self.repo.porcelain(), "")
+        self.assertEqual(sorted(p.name for p in self.gitdir.glob("flow-*")), [])
+        self.assertEqual(self.repo.path(".feature-flow/state/.gitignore").read_text(), "*\n")
+
+    @unittest.skipIf(getattr(os, "geteuid", lambda: 1)() == 0, "root ignores the folder's mode")
+    def test_an_unwritable_state_folder_stops_with_a_clear_reason(self):
+        folder = self.repo.path(".feature-flow")
+        folder.mkdir()
+        os.chmod(str(folder), 0o555)
+        try:
+            rc, out = self.repo.flow("start")
+        finally:
+            os.chmod(str(folder), 0o755)
+        self.assertEqual(rc, 1)
+        self.assertIn("STOP cannot write the flow state in", out)
+
+    def test_a_run_kept_under_git_moves_over_with_its_owner(self):
+        self.repo.path(".git/flow-f.state").write_text("owner=abc123\nphase=\nsession_done=0\n")
+        self.repo.path(".git/flow-f.log").write_text("10:00:00,-,START\n")
+        rc, out = self.flow("start")
+        self.assertEqual(rc, 1, "the old owner still holds the feature")
+        self.assertIn("owned by session abc123", out)
+        self.assertTrue(self.flow("next", FLOW_SESSION="abc123")[1].startswith("BUILD %s 01 " % T1))
+        self.assertIn("10:00:00,-,START", self.repo.log())
+        self.assertEqual(self.repo.state()["owner"], "abc123")
