@@ -17,9 +17,9 @@ import shutil
 import subprocess
 import sys
 
-# the help text, lines 2 to 14 of the bash installer with the comment marks taken off (parity)
+# the help text
 USAGE = """\
-usage: bash install.sh [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]
+usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]
 copies the feature-flow skill, its roles, scripts and guides into a repo so the flow works there.
   --agent claude (default)
     skills  go to <target>/.claude/skills/   (or ~/.claude/skills/ with --user)
@@ -37,7 +37,8 @@ nothing is ever deleted. CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrid
 # the skills this installs
 SKILLS = ("feature-flow", "architect-review", "automation-design")
 
-LEFTOVER = re.compile(rb"scripts/flow-status\.sh|REVIEW: PASS")
+# an old skill that runs the ticket script (the bash one or the Python one) or ends a review with a verdict
+LEFTOVER = re.compile(rb"scripts/flow-status\.(?:sh|py)|REVIEW: PASS")
 
 
 class Usage(Exception):

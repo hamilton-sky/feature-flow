@@ -60,6 +60,21 @@ class RunTests(unittest.TestCase):
         self.assertIn("  update  ", out)
         self.assertNotIn(b"my own edit", skill.read_bytes())
 
+    def test_the_python_commands_are_installed_and_no_bash_scripts(self):
+        self.run_install()
+        scripts = sorted(p.name for p in (self.target / "scripts").iterdir())
+        self.assertEqual(scripts, ["floor-guard.py", "flow-status.py", "flow-view.html", "flow-view.py",
+                                   "flow.py", "gate.py"])
+
+    def test_an_old_skill_that_runs_the_ticket_script_is_named(self):
+        for name, text in (("old-review", "End with `REVIEW: PASS`.\n"), ("old-py", "run python3 scripts/flow-status.py f\n"),
+                           ("mine", "my own skill\n")):
+            (self.target / ".claude" / "skills" / name).mkdir(parents=True)
+            (self.target / ".claude" / "skills" / name / "SKILL.md").write_text(text)
+        _, out, _ = self.run_install()
+        self.assertIn("no longer installed: old-py old-review.", out)
+        self.assertNotIn("mine", out)
+
     @unittest.skipIf(os.name == "nt", "file modes are POSIX only")
     def test_a_generated_codex_file_is_mode_644(self):
         self.run_install("--agent", "codex")
@@ -75,7 +90,7 @@ class RunTests(unittest.TestCase):
         self.assertEqual(install.run([str(self.target / "missing")], helpers.ROOT, out.append, err.append), 2)
         self.assertEqual(err, ["no such directory: %s" % (self.target / "missing")])
         self.assertEqual(install.run(["--help", "--nonsense"], helpers.ROOT, out.append, err.append), 0)
-        self.assertTrue(out[0].startswith("usage: bash install.sh"))
+        self.assertTrue(out[0].startswith("usage: python3 install.py"))
 
 
 if __name__ == "__main__":

@@ -9,11 +9,11 @@ output it must print. The last ticket runs it.>
 
 ## How to work this
 
-- See what is ready: `bash scripts/flow-status.sh <feature>`. Take the lowest numbered READY ticket.
+- See what is ready: `python3 scripts/flow-status.py <feature>`. Take the lowest numbered READY ticket.
 - Claim: set `Status: claimed` in the ticket and save before starting.
 - Resolve: write the result under `## Answer`, set `Status: resolved`, then add one line to
   Decisions so far below.
-- See the graph: `bash scripts/flow-status.sh <feature> --mermaid` (coloured by status, drawn on demand).
+- See the graph: `python3 scripts/flow-status.py <feature> --mermaid` (coloured by status, drawn on demand).
 - Commands live in `commands.md` (frozen). Lessons live in `learnings.md` (append only).
 - Status lives only in the ticket files. This map never repeats it.
 

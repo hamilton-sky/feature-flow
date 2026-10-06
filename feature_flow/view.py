@@ -24,7 +24,7 @@ import time
 
 from feature_flow import status, tickets
 
-USAGE = "usage: bash scripts/flow-view.sh <feature> [--watch] [--no-open] [--out FILE]"  # parity; ticket 07
+USAGE = "usage: python3 scripts/flow-view.py <feature> [--watch] [--no-open] [--out FILE]"
 REFRESH = b'<meta http-equiv="refresh" content="3">'
 BLANK = " \t\n\r\v\f"  # what splits fields in mawk; a line made only of these has NF == 0
 _UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

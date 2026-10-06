@@ -10,7 +10,7 @@ import sys
 
 from feature_flow import tickets
 
-USAGE = "usage: bash scripts/flow-status.sh <feature> [--next | --counts | --check | --mermaid [plain] | --json]"
+USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --mermaid [plain] | --json]"
 
 
 def _env(name, default):

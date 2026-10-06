@@ -48,7 +48,7 @@ def run(feature, out, err):
     """Run the gate for feature. out and err take bytes. Returns the exit code."""
     if not feature:
         # the bash gate's usage line, word for word (parity); ticket 07 switches it to gate.py
-        err(b"usage: bash scripts/gate.sh <feature>\n")
+        err(b"usage: python3 scripts/gate.py <feature>\n")
         return 2
     name = os.fsencode(feature)
     path = Path(os.environ.get("FLOW_DIR") or "plans") / feature / "commands.md"

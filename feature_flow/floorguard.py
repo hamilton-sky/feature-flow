@@ -21,7 +21,7 @@ import re
 import subprocess
 import sys
 
-USAGE = "usage: bash scripts/floor-guard.sh <feature> <NN> [base-commit]"  # parity; ticket 07 switches it
+USAGE = "usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit]"
 
 SKIP = re.compile(rb"@pytest\.mark\.(skip|xfail)|pytest\.skip\(|(^|[^A-Za-z_])(it|test|describe)\.(skip|todo)\("
                   rb"|(^|[^A-Za-z_])(xit|xdescribe|xtest)\(|@Disabled|t\.Skip\(|#\[ignore\]|unittest\.skip")

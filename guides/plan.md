@@ -78,7 +78,7 @@ Ask them to confirm, edit or cancel. Write nothing until they say yes. Skip this
 
 ## Step 5: Check
 
-Run `bash scripts/flow-status.sh <feature> --check`. It fails on a missing blocker, a cycle, a missing Done when, a duplicate number, a bad `Test first` value, or no ready ticket, and it warns about tickets that name another ticket in their text without being ordered against it. If the script is not installed, check those by hand. Fix every problem and every warning before reporting.
+Run `python3 scripts/flow-status.py <feature> --check`. It fails on a missing blocker, a cycle, a missing Done when, a duplicate number, a bad `Test first` value, or no ready ticket, and it warns about tickets that name another ticket in their text without being ordered against it. If the script is not installed, check those by hand. Fix every problem and every warning before reporting.
 
 ## Step 6: Report
 
@@ -87,7 +87,7 @@ Planned: plans/<feature>/
 Tickets: N (M ready now)
 The bar: <the command and expected output>
 
-Graph: bash scripts/flow-status.sh <feature> --mermaid
+Graph: python3 scripts/flow-status.py <feature> --mermaid
 
 Next: commit the plan, then start the feature-flow skill for <feature>
 ```

@@ -189,7 +189,7 @@ has() { grep -q ",$1,$2\$" .feature-flow/state/flow-hello.log; }
 echo "checks"
 check "the run ended on DONE" '[ "$ended" = DONE ]'
 check "the bar holds" '[ "$(python3 hello.py Ada)" = "Hello, Ada!" ]'
-check "both tickets are resolved" 'bash scripts/flow-status.sh hello --next; [ $? -eq 10 ]'
+check "both tickets are resolved" 'python3 scripts/flow-status.py hello --next; [ $? -eq 10 ]'
 check "the tree is clean" '[ -z "$(git status --porcelain)" ]'
 check "each ticket landed as a commit" '[ "$(git rev-list --count HEAD)" -ge 3 ]'
 for t in 01 02; do

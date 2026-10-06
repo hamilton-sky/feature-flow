@@ -20,8 +20,6 @@ class Repo:
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
         (self.dir / "scripts").mkdir()
-        for script in (ROOT / "scripts").glob("*.sh"):
-            shutil.copy(script, self.dir / "scripts")
         shutil.copy(ROOT / "scripts" / "flow.py", self.dir / "scripts")
         shutil.copytree(ROOT / "feature_flow", self.dir / "feature_flow",
                         ignore=shutil.ignore_patterns("__pycache__"))
