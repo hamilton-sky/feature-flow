@@ -1229,6 +1229,16 @@ expect_rc "an unknown FLOW_AGENT is refused" 2 $rc
 expect_has "and the script itself says what is allowed" "FLOW_AGENT must be claude or codex, not bogus" "$out"
 if [ ! -e "$TMP/prep_bogus" ]; then ok "and it creates nothing"; else bad "and it creates nothing"; fi
 bash "$SM" --prepare > /dev/null 2>&1; expect_rc "--prepare without a folder is refused" 2 $?
+env RUN_REAL=0 bash "$SM" --interactive > /dev/null 2>&1; expect_rc "--interactive without RUN_REAL is refused" 2 $?
+bash "$SM" --bogus > /dev/null 2>&1; expect_rc "an unknown option is refused" 2 $?
+mkdir -p "$TMP/silentbin"
+printf '#!/bin/bash\necho "$*" >> "$FAKE_CALLS"\nexit 0\n' > "$TMP/silentbin/claude"; chmod +x "$TMP/silentbin/claude"
+out="$(env TMPDIR="$TMP" PATH="$TMP/silentbin:$PATH" FAKE_CALLS="$TMP/silent.calls" RUN_REAL=1 bash "$SM" --interactive 2>&1)"; rc=$?
+expect_rc "--interactive: a session that ends without HANDOFF, DONE or STOP exits 1" 1 $rc
+expect_has "and says so" "  FAIL  session 1 ended without HANDOFF, DONE or STOP" "$out"
+expect_has "and prints the recovery command" "FLOW_TAKEOVER=1 FLOW_TICKETS_PER_SESSION=1 claude -p" "$out"
+expect_rc "and starts no second session" 1 "$(wc -l < "$TMP/silent.calls" | tr -d ' ')"
+expect_has "the session is started as a user would type it" '-p /feature-flow hello auto --allowedTools' "$(cat "$TMP/silent.calls")"
 
 echo
 echo "$PASS passed, $FAILS failed"
