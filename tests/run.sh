@@ -531,6 +531,114 @@ sleep 2
 expect_has "watching a running feature writes a page that refreshes itself" 'http-equiv="refresh"' "$(cat "$TMP/watch_live.html" 2> /dev/null)"
 kill "$(cat "$TMP/watch.pid")" 2> /dev/null || true
 
+echo "flow-view.py, parity with flow-view.sh"
+# every fixture the flow-view.sh checks above use, plus a few edge cases, run through both: same
+# stdout, stderr, exit code and written page. the page's "generated" field is the clock, so it is
+# blanked before the pages are compared. the runs happen in a clone of the view repo, checked out at
+# each state the checks above saw, so the repo above is left as it is. ASCII only: the awks disagree
+# on non-ASCII text, tests/py/test_view.py pins what the port does there. deleted with flow-view.sh.
+VP_SH="$V"
+VP_PY="$ROOT/scripts/flow-view.py"
+vp_n=0
+vp_diff=""
+view_parity() { # dir page VAR=value... -- args...   (page: the file the run writes, - for none)
+  local dir="$1" pagef="$2" side part envs=()
+  shift 2
+  while [ "$1" != "--" ]; do envs+=("$1"); shift; done
+  shift
+  for side in sh py; do
+    [ "$pagef" = - ] || rm -f -- "$pagef"
+    if [ "$side" = sh ]; then
+      (cd "$dir" && env "${envs[@]}" bash "$VP_SH" ${1+"$@"} > "$TMP/vp-$side.out" 2> "$TMP/vp-$side.err"); echo "$?" > "$TMP/vp-$side.rc"
+    else
+      (cd "$dir" && env "${envs[@]}" python3 "$VP_PY" ${1+"$@"} > "$TMP/vp-$side.out" 2> "$TMP/vp-$side.err"); echo "$?" > "$TMP/vp-$side.rc"
+    fi
+    if [ "$pagef" != - ] && [ -f "$pagef" ]; then
+      sed 's/"generated":"[^"]*"/"generated":""/' "$pagef" > "$TMP/vp-$side.page"
+    else
+      echo "no page" > "$TMP/vp-$side.page"
+    fi
+  done
+  vp_n=$((vp_n + 1))
+  for part in rc out err page; do
+    cmp -s "$TMP/vp-sh.$part" "$TMP/vp-py.$part" || { vp_diff="$vp_diff [run $vp_n, ${*:-no arguments}: $part]"; break; }
+  done
+}
+VC="$TMP/viewp"
+git clone -q "$TMP/view" "$VC"
+VP_A="$(cd "$VC" && git rev-parse HEAD~2)" # the plan the first checks above read
+VP_B="$(cd "$VC" && git rev-parse HEAD~1)" # every ticket resolved, for watching a finished feature
+mkdir -p "$VC/.scratch/x/issues" "$VC/plans/empty/tasks" "$VC/plans/blank/tasks" "$TMP/vp_tmp"
+ticket "$VC/.scratch/x/issues/01-a.md" A ready-for-agent "—"
+: > "$VC/plans/blank/tasks/01-zero.md"
+# edge cases, committed twice for a history: capitals in headings, more than 8 Done when bullets,
+# a bullet over 240 characters, an Answer over 700, quotes, backslashes and tabs, review rounds
+# with and without a number or a source, the template's Answer placeholder, a CRLF Status line
+vp_long="$(printf '%0300d' 0)"
+mkdir -p "$VC/plans/e/tasks"
+{
+  printf '# Edge "quoted" \\ back\tslash\n\nType: task\nStatus: open\nBlocked by: —\nTest first: no\n\nbody\n\n## DONE WHEN\n\n'
+  printf -- '- %s\n' "$vp_long"
+  for i in 1 2 3 4 5 6 7 8 9 10; do printf -- '- bullet %s\n' "$i"; done
+  printf -- '\n## Answer\n\n<!-- a comment -->\nBuilt: "it" \\ and\ttab\n   indented\n\t\n<b>skipped</b>\n'
+  printf '%s%s%s\nafter the cut\n' "$vp_long" "$vp_long" "$vp_long"
+  printf '\n## Review findings (round 3, gate)\n\nx\n## Review findings\n## review findings (round 12)\n## Review Findings (round 4, a, b) (c)\n'
+} > "$VC/plans/e/tasks/01-a.md"
+printf '# B\n\nStatus: parked (later)\nBlocked by: 01\n\n## Done when\n\n- y\n\n## Answer\n\n<left empty until the ticket is resolved>\nleft empty until done\n' > "$VC/plans/e/tasks/02-b.md"
+printf '# C\r\n\r\nStatus: resolved\r\nBlocked by: 01\r\n\r\n## Done when\r\n\r\n- z\r\n' > "$VC/plans/e/tasks/03-c.md"
+(cd "$VC" && git add plans/e && GIT_AUTHOR_DATE="1790004000 +0000" GIT_COMMITTER_DATE="1790004000 +0000" git commit -qm edge)
+set_status "$VC/plans/e/tasks/01-a.md" "Done (by hand)"
+(cd "$VC" && git add plans/e && GIT_AUTHOR_DATE="1790005000 +0000" GIT_COMMITTER_DATE="1790005000 +0000" git commit -qm edge-done)
+VP_OUT="$TMP/vp.html"
+# the plan as the live watch check saw it
+view_parity "$VC" "$VP_OUT" FLOW_NO_OPEN=1 -- f --no-open --out "$VP_OUT"
+view_parity "$VC" "$VP_OUT" FLOW_NO_OPEN=1 -- e --no-open --out "$VP_OUT"
+view_parity "$VC" "$VC/.git/flow-e.html" FLOW_NO_OPEN=1 -- e
+view_parity "$VC" "$VC/rel/dir/x.html" FLOW_NO_OPEN=1 -- f --out rel/dir/x.html
+view_parity "$VC" "$VC/.git/flow-x.html" FLOW_NO_OPEN=1 FLOW_DIR=.scratch FLOW_TICKETS=issues -- x --no-open
+view_parity "$VC" "$VC/.git/flow-blank.html" FLOW_NO_OPEN=1 -- blank --no-open
+view_parity "$VC" "$VP_OUT" FLOW_NO_OPEN=1 TMPDIR="$TMP/vp_tmp" -- empty --no-open --out "$VP_OUT"
+# a live watch, both at once, stopped once each has written its page
+rm -f -- "$TMP"/vpl-*
+( cd "$VC" || exit 1; FLOW_NO_OPEN=1 TMPDIR="$TMP/vp_tmp" FLOW_WATCH_SECONDS=0.2 bash "$V" f --watch --out "$TMP/vpl-sh.html" > "$TMP/vpl-sh.out" 2> "$TMP/vpl-sh.err" & echo $! > "$TMP/vpl-sh.pid" )
+( cd "$VC" || exit 1; FLOW_NO_OPEN=1 TMPDIR="$TMP/vp_tmp" FLOW_WATCH_SECONDS=0.2 python3 "$VP_PY" f --watch --out "$TMP/vpl-py.html" > "$TMP/vpl-py.out" 2> "$TMP/vpl-py.err" & echo $! > "$TMP/vpl-py.pid" )
+i=0
+while [ "$i" -lt 100 ] && ! { grep -qs watching "$TMP/vpl-sh.out" && grep -qs watching "$TMP/vpl-py.out"; }; do sleep 0.1; i=$((i + 1)); done
+kill "$(cat "$TMP/vpl-sh.pid")" "$(cat "$TMP/vpl-py.pid")" 2> /dev/null || true
+vp_n=$((vp_n + 1))
+sed 's/vpl-py/vpl-sh/' "$TMP/vpl-py.out" > "$TMP/vpl-py.out2"
+for side in sh py; do sed 's/"generated":"[^"]*"/"generated":""/' "$TMP/vpl-$side.html" > "$TMP/vpl-$side.page" 2> /dev/null; done
+if ! grep -qF 'http-equiv="refresh"' "$TMP/vpl-sh.page" || ! cmp -s "$TMP/vpl-sh.out" "$TMP/vpl-py.out2" || ! cmp -s "$TMP/vpl-sh.err" "$TMP/vpl-py.err" || ! cmp -s "$TMP/vpl-sh.page" "$TMP/vpl-py.page"; then
+  vp_diff="$vp_diff [run $vp_n, a live --watch]"
+fi
+# the plan with every ticket resolved
+(cd "$VC" && git checkout -q "$VP_B")
+view_parity "$VC" "$VP_OUT" FLOW_NO_OPEN=1 FLOW_WATCH_SECONDS=0.1 -- f --watch --no-open --out "$VP_OUT"
+view_parity "$VC" "$VC/.git/flow-f.html" FLOW_NO_OPEN=1 -- f --watch
+# the plan the first checks above read
+(cd "$VC" && git checkout -q "$VP_A")
+view_parity "$VC" "$VP_OUT" FLOW_NO_OPEN=1 -- f --no-open --out "$VP_OUT"
+view_parity "$VC" "$VC/.git/flow-f.html" FLOW_NO_OPEN=1 -- f --no-open
+view_parity "$VC" "$VC/.git/flow-f.html" FLOW_NO_OPEN=1 -- f
+view_parity "$VC" "$VP_OUT" FLOW_NO_OPEN=1 -- f --no-open --out "$TMP/other.html" --no-open --out "$VP_OUT"
+view_parity "$VC" - FLOW_NO_OPEN=1 -- nosuchfeature --no-open
+view_parity "$VC" - FLOW_NO_OPEN=1 -- f --bogus
+view_parity "$VC" - FLOW_NO_OPEN=1 --
+view_parity "$VC" - FLOW_NO_OPEN=1 -- ""
+view_parity "$VC" - FLOW_NO_OPEN=1 -- f --out
+view_parity "$VC" - FLOW_NO_OPEN=1 -- f --no-open --out ""
+view_parity "$TMP/nogit" "$TMP/nogit_out/flow-f.html" FLOW_NO_OPEN=1 TMPDIR="$TMP/nogit_out" -- f --no-open
+# a copy of the scripts without the page template
+mkdir -p "$TMP/vp_notpl/scripts"
+cp "$ROOT/scripts/flow-view.sh" "$ROOT/scripts/flow-status.sh" "$ROOT/scripts/flow-view.py" "$TMP/vp_notpl/scripts/"
+cp -R "$ROOT/feature_flow" "$TMP/vp_notpl/feature_flow"
+VP_SH="$TMP/vp_notpl/scripts/flow-view.sh"
+VP_PY="$TMP/vp_notpl/scripts/flow-view.py"
+view_parity "$VC" - FLOW_NO_OPEN=1 -- f --no-open
+rm -rf -- "$TMP/vp_notpl" "$TMP"/vp-* "$TMP"/vpl-*
+echo "  compared flow-view.sh and flow-view.py on $vp_n fixture runs"
+if [ -z "$vp_diff" ]; then ok "flow-view.py prints, exits and writes the page exactly like flow-view.sh"; else bad "flow-view.py prints, exits and writes the page exactly like flow-view.sh" "differs on:$vp_diff"; fi
+
 echo "demo and viewer logic"
 out="$(bash "$ROOT/examples/demo.sh" "$TMP/demo" 2>&1)"; rc=$?
 expect_rc "the demo builds a project and its page" 0 $rc
