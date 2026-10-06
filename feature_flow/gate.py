@@ -21,6 +21,15 @@ KEYS = ("Build", "Test", "Lint")
 TAIL = 40
 
 
+def shell(cmd):
+    """How to run a command from commands.md: bash -c on Linux and macOS, the system shell (cmd.exe)
+    on Windows, where `bash` on PATH may be the Windows Subsystem for Linux stub and git-bash is not
+    a requirement. Returns (args, use_shell) for subprocess."""
+    if sys.platform == "win32":
+        return cmd, True
+    return ["bash", "-c", cmd], False
+
+
 def command(path, key):
     """The first `<key>:` line of commands.md, as the awk line in the bash gate reads it, or b""."""
     key = key.encode()
@@ -63,7 +72,8 @@ def run(feature, out, err):
         ran += 1
         out(b"gate: " + key.encode() + b": " + cmd + b"\n")
         with tempfile.TemporaryFile() as log:
-            code = subprocess.call(["bash", "-c", os.fsdecode(cmd)], stdout=log, stderr=subprocess.STDOUT)
+            args, use_shell = shell(os.fsdecode(cmd))
+            code = subprocess.call(args, shell=use_shell, stdout=log, stderr=subprocess.STDOUT)
             if code != 0:
                 log.seek(0)
                 out(b"gate: " + key.encode() + b" failed. the last lines of its output:\n")

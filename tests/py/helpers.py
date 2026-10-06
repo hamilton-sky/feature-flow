@@ -26,12 +26,12 @@ class Repo:
         tasks = self.dir / "plans" / "f" / "tasks"
         tasks.mkdir(parents=True)
         for slug, title, blocked in tickets:
-            (tasks / ("%s.md" % slug)).write_text(ticket_text(title, "open", blocked))
+            (tasks / ("%s.md" % slug)).write_text(ticket_text(title, "open", blocked), encoding="utf-8")
         plan = self.dir / "plans" / "f"
-        (plan / "map.md").write_text("# Map: f\n\n## Decisions so far\n\n<One line per resolved ticket.>\n")
-        (plan / "learnings.md").write_text("# Learnings: f\n\n- (NN) <what you found>\n")
-        (plan / "commands.md").write_text("# Commands: f\n\nBuild: `<command>`\nSmoke: `<the quickest command>`\n")
-        (plan / "spec.md").write_text("# Spec\n")
+        (plan / "map.md").write_text("# Map: f\n\n## Decisions so far\n\n<One line per resolved ticket.>\n", encoding="utf-8")
+        (plan / "learnings.md").write_text("# Learnings: f\n\n- (NN) <what you found>\n", encoding="utf-8")
+        (plan / "commands.md").write_text("# Commands: f\n\nBuild: `<command>`\nSmoke: `<the quickest command>`\n", encoding="utf-8")
+        (plan / "spec.md").write_text("# Spec\n", encoding="utf-8")
         self.git("init", "-q")
         self.git("config", "user.email", "t@t")
         self.git("config", "user.name", "t")
@@ -70,23 +70,23 @@ class Repo:
 
     def set_status(self, rel, status):
         path = self.path(rel)
-        lines = path.read_text().splitlines(True)
+        lines = path.read_text(encoding="utf-8").splitlines(True)
         for i, line in enumerate(lines):
             if line.startswith("Status:"):
                 lines[i] = "Status: %s\n" % status
                 break
-        path.write_text("".join(lines))
+        path.write_text("".join(lines), encoding="utf-8")
 
     def resolve(self, rel, message="feat: work"):
         name = Path(rel).stem
-        self.path("work-%s.txt" % name).write_text("work\n")
+        self.path("work-%s.txt" % name).write_text("work\n", encoding="utf-8")
         self.set_status(rel, "resolved")
         self.commit(message)
 
     def state(self):
-        text = self.path(".feature-flow/state/flow-f.state").read_text()
+        text = self.path(".feature-flow/state/flow-f.state").read_text(encoding="utf-8")
         return dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
 
     def log(self):
         path = self.path(".feature-flow/state/flow-f.log")
-        return path.read_text() if path.exists() else ""
+        return path.read_text(encoding="utf-8") if path.exists() else ""

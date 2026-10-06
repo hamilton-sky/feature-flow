@@ -13,7 +13,7 @@ class TicketTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "01-a.md"
-        self.path.write_text(helpers.ticket_text("A", "Claimed (by me)", "—"))
+        self.path.write_text(helpers.ticket_text("A", "Claimed (by me)", "—"), encoding="utf-8")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -22,9 +22,9 @@ class TicketTests(unittest.TestCase):
         self.assertEqual(tickets.status(self.path), "claimed")
 
     def test_set_open_changes_only_the_status_line(self):
-        before = self.path.read_text()
+        before = self.path.read_text(encoding="utf-8")
         tickets.set_open(self.path)
-        after = self.path.read_text()
+        after = self.path.read_text(encoding="utf-8")
         self.assertEqual(tickets.status(self.path), "open")
         self.assertEqual(before.replace("Status: Claimed (by me)", "Status: open"), after)
 
@@ -34,11 +34,11 @@ class TicketTests(unittest.TestCase):
 
     def test_findings_are_appended_under_a_heading(self):
         tickets.append_findings(self.path, 2, "gate", "gate: Test failed\n")
-        self.assertTrue(self.path.read_text().endswith("\n## Review findings (round 2, gate)\n\ngate: Test failed\n"))
+        self.assertTrue(self.path.read_text(encoding="utf-8").endswith("\n## Review findings (round 2, gate)\n\ngate: Test failed\n"))
 
     def test_commands_value_skips_placeholders(self):
         cmd = Path(self.tmp.name) / "commands.md"
-        cmd.write_text("Build: `<command>`\nTest: `bash tests/run.sh`\n")
+        cmd.write_text("Build: `<command>`\nTest: `bash tests/run.sh`\n", encoding="utf-8")
         self.assertEqual(tickets.commands_value(cmd, "Build"), "")
         self.assertEqual(tickets.commands_value(cmd, "Test"), "bash tests/run.sh")
         self.assertEqual(tickets.commands_value(cmd, "Lint"), "")

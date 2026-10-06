@@ -152,7 +152,7 @@ class RunTests(unittest.TestCase):
     def test_writes_the_page_into_git_with_history(self):
         self.repo.resolve("plans/f/tasks/01-a.md")
         code, out, err = self.run_view("f", "--no-open")
-        page = os.path.join(self.repo.git("rev-parse", "--absolute-git-dir"), "flow-f.html")
+        page = self.repo.git("rev-parse", "--absolute-git-dir") + "/flow-f.html"
         self.assertEqual((code, out, err), (0, "wrote %s\n" % page, ""))
         data = data_of(page)
         self.assertEqual(data["generated"], "1970-01-01T00:00:00Z")
@@ -160,14 +160,14 @@ class RunTests(unittest.TestCase):
         self.assertEqual(data["details"]["02"]["done_when"], ["x"])
         self.assertNotIn("cost", data["details"]["01"])  # the cost log went with the headless loop
         self.assertEqual(data["counts"]["resolved"], 1)
-        self.assertNotIn("http-equiv", Path(page).read_text())
+        self.assertNotIn("http-equiv", Path(page).read_text(encoding="utf-8"))
         self.assertEqual(self.repo.porcelain(), "")
 
     def test_angle_brackets_in_the_data_are_escaped(self):
         self.repo.set_status("plans/f/tasks/01-a.md", "open")
-        Path("plans/f/tasks/01-a.md").write_text(helpers.ticket_text("</script><b>", "open", "—"))
+        Path("plans/f/tasks/01-a.md").write_text(helpers.ticket_text("</script><b>", "open", "—"), encoding="utf-8")
         self.run_view("f", "--out", "o/p.html")
-        text = Path("o/p.html").read_text()
+        text = Path("o/p.html").read_text(encoding="utf-8")
         self.assertIn("\\u003c/script>\\u003cb>", text)
         self.assertNotIn("</script><b>", text)
 
@@ -186,7 +186,7 @@ class RunTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as plan, tempfile.TemporaryDirectory() as tmp:
             os.chdir(plan)
             Path("plans/f/tasks").mkdir(parents=True)
-            Path("plans/f/tasks/01-a.md").write_text(helpers.ticket_text("A", "open", "—"))
+            Path("plans/f/tasks/01-a.md").write_text(helpers.ticket_text("A", "open", "—"), encoding="utf-8")
             with mock.patch.dict(os.environ, {"TMPDIR": tmp, "GIT_CEILING_DIRECTORIES": os.path.dirname(plan)}):
                 code, out, _ = self.run_view("f", "--no-open")
             self.assertEqual((code, out), (0, "wrote %s/flow-f.html\n" % tmp))
@@ -199,13 +199,13 @@ class RunTests(unittest.TestCase):
         code, out, _ = self.run_view("f", "--watch", "--out", "w.html")
         self.assertEqual(code, 0)
         self.assertEqual(out, "wrote w.html\nwatching, press Ctrl-C to stop\nfeature complete, final page written\n")
-        self.assertNotIn("http-equiv", Path("w.html").read_text())
+        self.assertNotIn("http-equiv", Path("w.html").read_text(encoding="utf-8"))
 
     def test_watching_rewrites_with_a_refresh_until_complete(self):
         seen = []
 
         def sleep(seconds):
-            seen.append((seconds, "http-equiv" in Path("w.html").read_text()))
+            seen.append((seconds, "http-equiv" in Path("w.html").read_text(encoding="utf-8")))
             self.repo.resolve("plans/f/tasks/0%d-%s.md" % (len(seen), "ab"[len(seen) - 1]))
 
         os.environ["FLOW_WATCH_SECONDS"] = "0.5"
@@ -214,7 +214,7 @@ class RunTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(seen, [(0.5, True), (0.5, True)])
         self.assertTrue(out.endswith("feature complete, final page written\n"))
-        self.assertNotIn("http-equiv", Path("w.html").read_text())
+        self.assertNotIn("http-equiv", Path("w.html").read_text(encoding="utf-8"))
 
     def test_an_existing_directory_as_out_gets_the_page_inside_like_mv(self):
         Path("d").mkdir()
@@ -224,7 +224,7 @@ class RunTests(unittest.TestCase):
 
 class ScriptDirTests(unittest.TestCase):
     def test_relative_and_absolute(self):
-        self.assertEqual(view.script_dir("/a/b/../c/x.py"), "/a/c")
+        self.assertEqual(view.script_dir("/a/b/../c/x.py"), os.path.abspath("/a/c"))
         with mock.patch.dict(os.environ, {"PWD": os.getcwd()}):
             self.assertEqual(view.script_dir("x.py"), os.getcwd())
 

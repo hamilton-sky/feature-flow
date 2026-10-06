@@ -37,10 +37,10 @@ class FixtureDrive(unittest.TestCase):
         (plan / "tasks").mkdir(parents=True)
         (plan / "tasks" / "01-a.md").write_text(TICKET_TEXT % ("A", "open", "—"), encoding="utf-8")
         (plan / "tasks" / "02-b.md").write_text(TICKET_TEXT % ("B", "open", "01"), encoding="utf-8")
-        (plan / "map.md").write_text("# Map: f\n\n## Decisions so far\n\n<One line per resolved ticket.>\n")
-        (plan / "learnings.md").write_text("# Learnings: f\n\n- (NN) <what you found>\n")
-        (plan / "commands.md").write_text(COMMANDS)
-        (plan / "spec.md").write_text("# Spec\n")
+        (plan / "map.md").write_text("# Map: f\n\n## Decisions so far\n\n<One line per resolved ticket.>\n", encoding="utf-8")
+        (plan / "learnings.md").write_text("# Learnings: f\n\n- (NN) <what you found>\n", encoding="utf-8")
+        (plan / "commands.md").write_text(COMMANDS, encoding="utf-8")
+        (plan / "spec.md").write_text("# Spec\n", encoding="utf-8")
         self.git("init", "-q")
         self.git("config", "user.email", "t@t")
         self.git("config", "user.name", "t")
@@ -77,7 +77,7 @@ class FixtureDrive(unittest.TestCase):
         path = self.dir / TICKET
         path.write_text(path.read_text(encoding="utf-8").replace("Status: open", "Status: resolved"),
                         encoding="utf-8")
-        (self.dir / "work-01-a.txt").write_text("work\n")
+        (self.dir / "work-01-a.txt").write_text("work\n", encoding="utf-8")
         self.git("add", "-A")
         self.git("commit", "-qm", "feat: 01")
 

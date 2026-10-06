@@ -12,7 +12,8 @@ sys.path.insert(0, str(helpers.ROOT))
 from feature_flow import checks, gate  # the package under test, from this checkout
 
 
-@unittest.skipUnless(shutil.which("bash"), "the gate runs commands through bash")
+@unittest.skipUnless(shutil.which("bash") and os.name != "nt",
+                     "these commands are bash syntax; the gate runs commands through cmd.exe on Windows")
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -62,7 +63,7 @@ class GateTests(unittest.TestCase):
 
     def test_flow_dir_moves_the_plans(self):
         (self.dir / "other" / "f").mkdir(parents=True)
-        (self.dir / "other" / "f" / "commands.md").write_text("Test: `echo moved`\n")
+        (self.dir / "other" / "f" / "commands.md").write_text("Test: `echo moved`\n", encoding="utf-8")
         os.environ["FLOW_DIR"] = "other"
         try:
             code, out, _ = self.run_gate()

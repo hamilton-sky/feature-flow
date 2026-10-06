@@ -70,7 +70,7 @@ class RunTests(unittest.TestCase):
         for name, text in (("old-review", "End with `REVIEW: PASS`.\n"), ("old-py", "run python3 scripts/flow-status.py f\n"),
                            ("mine", "my own skill\n")):
             (self.target / ".claude" / "skills" / name).mkdir(parents=True)
-            (self.target / ".claude" / "skills" / name / "SKILL.md").write_text(text)
+            (self.target / ".claude" / "skills" / name / "SKILL.md").write_text(text, encoding="utf-8")
         _, out, _ = self.run_install()
         self.assertIn("no longer installed: old-py old-review.", out)
         self.assertNotIn("mine", out)

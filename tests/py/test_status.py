@@ -32,7 +32,7 @@ class StatusTests(unittest.TestCase):
 
     def ticket(self, slug, title, state, blocked, body="body"):
         text = helpers.ticket_text(title, state, blocked).replace("body", body)
-        (self.tasks / ("%s.md" % slug)).write_text(text)
+        (self.tasks / ("%s.md" % slug)).write_text(text, encoding="utf-8")
 
     def run_status(self, *args):
         out, err = Out(), Out()

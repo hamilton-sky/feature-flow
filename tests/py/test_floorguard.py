@@ -116,10 +116,10 @@ class RunTests(unittest.TestCase):
 
     def test_findings_and_assert_warning(self):
         self.repo.path("tests").mkdir()
-        self.repo.path("tests/test_x.py").write_text("def test_x():\n    assert 1\n")
+        self.repo.path("tests/test_x.py").write_text("def test_x():\n    assert 1\n", encoding="utf-8")
         self.repo.commit("tests")
         base = self.repo.head()
-        self.repo.path("tests/test_x.py").write_text("@pytest.mark.skip\ndef test_x():\n    pass\n")
+        self.repo.path("tests/test_x.py").write_text("@pytest.mark.skip\ndef test_x():\n    pass\n", encoding="utf-8")
         with open(str(self.repo.path("plans/f/spec.md")), "a") as f:
             f.write("more\n")
         self.repo.commit("weaken")
