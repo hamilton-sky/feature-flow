@@ -298,11 +298,13 @@ out="$(guard_both "$G" f 01 "$B1" 2>&1)"; rc=$?
 expect_rc "a worker cannot excuse itself by adding Floor: allow" 1 $rc
 expect_has "and the edit to its own header is reported" "ticket-edit: plans/f/tasks/01-a.md" "$out"
 guard_both "$G" f 99 "$B1" > /dev/null 2>&1; expect_rc "a missing ticket exits 2" 2 $?
-# more fixtures, compared for parity only (the parity section below counts them)
+# more fixtures, compared for parity only (the parity section below counts them). ASCII only: mawk cuts
+# a finding at 100 bytes and gawk at 100 characters, so a non-ASCII line has no single bash answer;
+# tests/py/test_floorguard.py pins the port's byte cut, which follows mawk.
 ticket plans/f/tasks/04-d.md D open "02, 03" "Floor: skip, Config"
 git add -A; git commit -qm extras-base; B2="$(git rev-parse HEAD)"
 long="$(printf 'x%.0s' $(seq 1 120))"
-printf 'it.skip("a", () => {})\nxit("b")\ntest.todo("c")\ndescribe.skip(x)\nmy_it.skip(y)\ntry { x() } catch (e) {}\ntry { y() } catch {   }\n// eslint-disable-next-line\n// @ts-ignore\nexpect(1).toBe(1)\n\t  // nolint %s\n# noqa %s\303\251 cut inside the two bytes of e-acute\n' "$long" "${long:0:92}" > src/web.test.js
+printf 'it.skip("a", () => {})\nxit("b")\ntest.todo("c")\ndescribe.skip(x)\nmy_it.skip(y)\ntry { x() } catch (e) {}\ntry { y() } catch {   }\n// eslint-disable-next-line\n// @ts-ignore\nexpect(1).toBe(1)\n\t  // nolint %s\n# noqa %s cut at the hundredth character\n' "$long" "${long:0:92}" > src/web.test.js
 printf '[pytest]\naddopts = --cov-fail-under=10\n' > pytest.ini
 printf '#[ignore]\n#[allow(dead_code)]\nt.Skip("no")\n@Disabled\n' > src/lib.rs
 mkdir -p .github/workflows; printf 'on: push\n' > .github/workflows/ci.yml
