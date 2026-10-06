@@ -6,22 +6,24 @@
 
 Plan a feature as a graph of small tickets, then build them in the session you are already in. One command, `/feature-flow`, does both. Every ticket is built by one fresh subagent and checked by another that never saw the builder's reasoning. A script, not the agent, decides the order of the steps, runs the build and tests, and watches for work that weakens the checks, and the whole run has limits.
 
-One skill, 2 agent roles, a Python conductor, 4 scripts, an installer for both agents, a demo and a test suite. MIT licensed.
+One skill, 2 agent roles, a Python conductor, 4 Python scripts, an installer for both agents, a demo and a test suite. All of it is Python (standard library only), so it runs on Linux, macOS and Windows. MIT licensed.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets)
 - [See the graph](#see-the-graph) · [Long features and handoff](#long-features-and-handoff) · [What is tested](#what-is-tested) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
 
-You need `bash`, `git`, `awk` and `python3` (3.9 or later, standard library only), and Claude Code or Codex.
+You need `git` and `python3` (3.9 or later, standard library only), and Claude Code or Codex. No `bash` or `awk` is needed to run feature-flow: every script is Python. On Windows use `python` where this page says `python3`.
 
 ```bash
 git clone https://github.com/hamilton-sky/feature-flow.git
 cd feature-flow
 
-bash install.sh /path/to/your/repo                  # for Claude Code
-bash install.sh /path/to/your/repo --agent codex    # for Codex
-bash install.sh /path/to/your/repo --agent all      # both, side by side
+python3 install.py /path/to/your/repo                  # for Claude Code
+python3 install.py /path/to/your/repo --agent codex    # for Codex
+python3 install.py /path/to/your/repo --agent all      # both, side by side
+
+# `bash install.sh ...` still works on Linux and macOS: it only runs install.py
 ```
 
 Then, in your repo, in the agent:
@@ -144,8 +146,8 @@ Floor: allow config        optional, only when a human decides the guard may let
 ## See the graph
 
 ```bash
-bash scripts/flow-view.sh csv-export            write the page and open it
-bash scripts/flow-view.sh csv-export --watch    keep it updating while tickets are built
+python3 scripts/flow-view.py csv-export            write the page and open it
+python3 scripts/flow-view.py csv-export --watch    keep it updating while tickets are built
 bash examples/demo.sh --open                    try it on a made up project, no setup needed
 ```
 
@@ -162,7 +164,7 @@ One self contained HTML file: no server, no libraries, no network, light and dar
 - **Hover or click** a ticket for its blockers, Done when, Answer, and the rounds it was sent back.
 - **Keys:** space plays or pauses, the arrows step, End shows now, `t` switches theme. Reduced motion is respected.
 - **Safe by construction:** ticket text comes from files an agent wrote, so it is escaped when embedded and only ever inserted as text.
-- `flow-status.sh <feature> --json` prints the same data for other tools. Mermaid (`--mermaid`) remains the choice for pull requests, because GitHub renders it.
+- `flow-status.py <feature> --json` prints the same data for other tools. Mermaid (`--mermaid`) remains the choice for pull requests, because GitHub renders it.
 
 ## Long features and handoff
 
@@ -179,20 +181,20 @@ The state lives in `.feature-flow/state/` (the state, a log of every step, and t
 
 ```bash
 python3 scripts/flow.py <feature> start|next|prompt|verdict <file>   the conductor (the skill runs it)
-bash scripts/flow-status.sh <feature>                  table of tickets and which are READY
-bash scripts/flow-status.sh <feature> --next           path of the next ready ticket (exit 10 = done, 11 = stuck)
-bash scripts/flow-status.sh <feature> --counts         one line of counts
-bash scripts/flow-status.sh <feature> --check          cycles, missing blockers, missing Done when, unordered mentions
-bash scripts/flow-status.sh <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
-bash scripts/flow-status.sh <feature> --json           every ticket with status, blockers and readiness
-bash scripts/flow-view.sh <feature> [--watch]          the animated graph page, opened in your browser
-bash scripts/gate.sh <feature>                         run Build, Test and Lint from commands.md
-bash scripts/floor-guard.sh <feature> <NN> [base]      check a ticket's diff, run from the repo root
+python3 scripts/flow-status.py <feature>                  table of tickets and which are READY
+python3 scripts/flow-status.py <feature> --next           path of the next ready ticket (exit 10 = done, 11 = stuck)
+python3 scripts/flow-status.py <feature> --counts         one line of counts
+python3 scripts/flow-status.py <feature> --check          cycles, missing blockers, missing Done when, unordered mentions
+python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
+python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
+python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser
+python3 scripts/gate.py <feature>                         run Build, Test and Lint from commands.md
+python3 scripts/floor-guard.py <feature> <NN> [base]      check a ticket's diff, run from the repo root
 ```
 
-`scripts/flow-status.py`, `gate.py` and `floor-guard.py` are Python ports of the bash scripts of the same name and print the same output. The bash versions go once the port is finished.
+The commands in `commands.md` run through `bash -c` on Linux and macOS and through the system shell (`cmd.exe`) on Windows, so write them for the platform your team uses, or call `python` as in the examples.
 
-`flow-status.sh` also understands the `.scratch/<feature>/issues/` layout and the statuses `done`, `ready-for-agent`, `ready-for-human` and `closed`: `FLOW_DIR=.scratch FLOW_TICKETS=issues`.
+`flow-status.py` also understands the `.scratch/<feature>/issues/` layout and the statuses `done`, `ready-for-agent`, `ready-for-human` and `closed`: `FLOW_DIR=.scratch FLOW_TICKETS=issues`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -204,8 +206,8 @@ bash scripts/floor-guard.sh <feature> <NN> [base]      check a ticket's diff, ru
 | `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket |
 | `FLOW_SMOKE` | the `Smoke:` line of `commands.md` | command run before every ticket; the run stops if it fails |
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
-| `FLOW_NO_OPEN` | unset | `1` makes `flow-view.sh` never open a browser |
-| `FLOW_WATCH_SECONDS` | `3` | how often `flow-view.sh --watch` rewrites the page |
+| `FLOW_NO_OPEN` | unset | `1` makes `flow-view.py` never open a browser |
+| `FLOW_WATCH_SECONDS` | `3` | how often `flow-view.py --watch` rewrites the page |
 
 The run also stops on its own after a number of steps that grows with the ticket count, so a loop of failures cannot go on forever.
 
@@ -234,7 +236,7 @@ bash tests/run.sh
 python3 -m unittest discover -s tests/py
 ```
 
-Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS.
+Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
 
 `RUN_REAL=1 bash tests/smoke-real.sh --interactive` is the acceptance run with Claude Code. It runs real sessions on the demo project and spends money, which is why it asks for `RUN_REAL=1`.
 

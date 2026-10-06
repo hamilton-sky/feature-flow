@@ -20,7 +20,7 @@ Run `git status --porcelain`.
 
 ## Step 3: Pick the ticket
 
-Run `bash scripts/flow-status.sh <feature> --next`.
+Run `python3 scripts/flow-status.py <feature> --next`.
 
 - Exit 0: the path printed is your ticket.
 - Exit 10: the feature is complete. Say so and stop.
@@ -121,7 +121,7 @@ You wrote this change, so you are the wrong one to judge it.
 
 ## Step 11: What is next
 
-Run `bash scripts/flow-status.sh <feature> --counts` and `--next`, then report:
+Run `python3 scripts/flow-status.py <feature> --counts` and `--next`, then report:
 
 ```
 NN resolved: <title>

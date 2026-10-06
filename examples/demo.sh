@@ -83,7 +83,7 @@ ticket 05 migrate-data "Migrate the old data" convert "03" claimed
 
 echo "demo repo: $TARGET"
 if [ "$OPEN" = 1 ]; then
-  bash "$ROOT/scripts/flow-view.sh" demo
+  python3 "$ROOT/scripts/flow-view.py" demo
 else
-  bash "$ROOT/scripts/flow-view.sh" demo --no-open
+  python3 "$ROOT/scripts/flow-view.py" demo --no-open
 fi

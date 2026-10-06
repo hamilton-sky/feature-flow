@@ -38,14 +38,14 @@ class BuildAndChecks(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual(rc, 0)
         self.assertTrue(out.startswith("BUILD %s 01 " % T1))
-        self.assertIn("Status: open", self.repo.path(T1).read_text())
+        self.assertIn("Status: open", self.repo.path(T1).read_text(encoding="utf-8"))
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (1, "STOP 01-a is still unresolved after 2 attempt(s)"))
 
     def test_failing_gate_sends_the_ticket_back_then_stops(self):
         cmd = self.repo.path("plans/f/commands.md")
-        cmd.write_text(cmd.read_text() + "Test: `test ! -e FAILING`\n")
-        self.repo.path("FAILING").write_text("x\n")
+        cmd.write_text(cmd.read_text(encoding="utf-8") + "Test: `python -c \"import os, sys; sys.exit(os.path.exists('FAILING'))\"`\n", encoding="utf-8")
+        self.repo.path("FAILING").write_text("x\n", encoding="utf-8")
         self.repo.commit("failing test")
         self.repo.flow("next")
         for round_no in (1, 2, 3):
@@ -53,7 +53,7 @@ class BuildAndChecks(unittest.TestCase):
             rc, out = self.repo.flow("next")
             self.assertEqual(rc, 0)
             self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
-            text = self.repo.path(T1).read_text()
+            text = self.repo.path(T1).read_text(encoding="utf-8")
             self.assertIn("## Review findings (round %d, gate)" % round_no, text)
             self.assertIn("Status: open", text)
             self.assertEqual(self.repo.git("log", "-1", "--format=%s"), "chore(f): 01 review findings, round %d" % round_no)
@@ -65,7 +65,7 @@ class BuildAndChecks(unittest.TestCase):
         self.repo.flow("next")
         self.repo.set_status(T1, "resolved")
         self.repo.commit("feat: 01")
-        self.repo.path("stray.txt").write_text("x\n")
+        self.repo.path("stray.txt").write_text("x\n", encoding="utf-8")
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (1, "STOP working tree is dirty after 01-a, it should have been committed"))
 
@@ -105,7 +105,7 @@ class StateOutsideGit(unittest.TestCase):
 
     def review_pass(self, token, **env):
         reply = self.repo.path(".feature-flow/state/flow-review-f.txt")
-        reply.write_text("looks right\nREVIEW: PASS\n")
+        reply.write_text("looks right\nREVIEW: PASS\n", encoding="utf-8")
         self.assertEqual(self.flow("verdict", str(reply), FLOW_SESSION=token, **env), (0, "OK"))
 
     def test_a_run_hands_off_and_resumes_without_writing_git(self):
@@ -125,19 +125,19 @@ class StateOutsideGit(unittest.TestCase):
         self.assertTrue(self.flow("next", FLOW_SESSION=token, **env)[1].startswith("BUILD %s 02 " % T2))
         self.assertEqual(self.repo.porcelain(), "")
         self.assertEqual(sorted(p.name for p in self.gitdir.glob("flow-*")), [])
-        self.assertEqual(self.repo.path(".feature-flow/state/.gitignore").read_text(), "*\n")
+        self.assertEqual(self.repo.path(".feature-flow/state/.gitignore").read_text(encoding="utf-8"), "*\n")
 
     def test_an_unwritable_state_folder_stops_with_a_clear_reason(self):
         # a file where the folder should be: refused for root too, unlike a folder's mode
-        self.repo.path(".feature-flow").write_text("not a folder\n")
+        self.repo.path(".feature-flow").write_text("not a folder\n", encoding="utf-8")
         self.repo.commit("a file named .feature-flow")
         rc, out = self.repo.flow("start")
         self.assertEqual(rc, 1)
         self.assertIn("STOP cannot write the flow state in", out)
 
     def test_a_run_kept_under_git_moves_over_with_its_owner(self):
-        self.repo.path(".git/flow-f.state").write_text("owner=abc123\nphase=\nsession_done=0\n")
-        self.repo.path(".git/flow-f.log").write_text("10:00:00,-,START\n")
+        self.repo.path(".git/flow-f.state").write_text("owner=abc123\nphase=\nsession_done=0\n", encoding="utf-8")
+        self.repo.path(".git/flow-f.log").write_text("10:00:00,-,START\n", encoding="utf-8")
         rc, out = self.flow("start")
         self.assertEqual(rc, 1, "the old owner still holds the feature")
         self.assertIn("owned by session abc123", out)

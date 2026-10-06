@@ -12,7 +12,8 @@ sys.path.insert(0, str(helpers.ROOT))
 from feature_flow import checks, gate  # the package under test, from this checkout
 
 
-@unittest.skipUnless(shutil.which("bash"), "the gate runs commands through bash")
+@unittest.skipUnless(shutil.which("bash") and os.name != "nt",
+                     "these commands are bash syntax; the gate runs commands through cmd.exe on Windows")
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -58,11 +59,11 @@ class GateTests(unittest.TestCase):
         self.assertEqual(self.run_gate("nofeature"), (0, "gate: no commands.md for nofeature, nothing to run\n", ""))
 
     def test_no_feature_is_a_usage_error(self):
-        self.assertEqual(self.run_gate(""), (2, "", "usage: bash scripts/gate.sh <feature>\n"))
+        self.assertEqual(self.run_gate(""), (2, "", "usage: python3 scripts/gate.py <feature>\n"))
 
     def test_flow_dir_moves_the_plans(self):
         (self.dir / "other" / "f").mkdir(parents=True)
-        (self.dir / "other" / "f" / "commands.md").write_text("Test: `echo moved`\n")
+        (self.dir / "other" / "f" / "commands.md").write_text("Test: `echo moved`\n", encoding="utf-8")
         os.environ["FLOW_DIR"] = "other"
         try:
             code, out, _ = self.run_gate()
@@ -73,7 +74,7 @@ class GateTests(unittest.TestCase):
     def test_the_value_is_read_like_awk(self):
         path = self.dir / "commands.md"
         path.write_bytes(b" Build: no\nBuild:\t \t`a`b`\r\nBuild: second\n")
-        self.assertEqual(gate.command(path, "Build"), b"ab\r")
+        self.assertEqual(gate.command(path, "Build"), b"ab")
         self.assertEqual(gate.command(path, "Test"), b"")
 
     def test_tail_keeps_the_last_lines_like_tail(self):
@@ -96,18 +97,23 @@ class GateTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertIn("gate: Test failed", result.out)
         self.assertIn("out\nerr\n", result.out)
-        self.assertEqual(checks.gate("scripts", "").out, "usage: bash scripts/gate.sh <feature>\n")
+        self.assertEqual(checks.gate("scripts", "").out, "usage: python3 scripts/gate.py <feature>\n")
 
-    def test_the_shim_matches_the_bash_gate(self):
+    def test_the_shim_runs_the_gate(self):
         self.commands(b"Build: `echo b`\nTest: `echo t; exit 2`\n")
         env = dict(os.environ)
         env.pop("FLOW_DIR", None)
-        for args in (["f"], [], ["nofeature"]):
-            py = subprocess.run([sys.executable, str(helpers.ROOT / "scripts" / "gate.py")] + args,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-            sh = subprocess.run(["bash", str(helpers.ROOT / "scripts" / "gate.sh")] + args,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-            self.assertEqual((py.returncode, py.stdout, py.stderr), (sh.returncode, sh.stdout, sh.stderr))
+        shim = str(helpers.ROOT / "scripts" / "gate.py")
+        expected = (
+            (["f"], 1, "gate: Build: echo b\ngate: Test: echo t; exit 2\ngate: Test failed. the last lines of its output:\nt\n", ""),
+            ([], 2, "", "usage: python3 scripts/gate.py <feature>\n"),
+            (["nofeature"], 0, "gate: no commands.md for nofeature, nothing to run\n", ""),
+        )
+        for args, code, out, err in expected:
+            run = subprocess.run([sys.executable, shim] + args, cwd=str(self.dir),
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+                                 universal_newlines=True)
+            self.assertEqual((run.returncode, run.stdout, run.stderr), (code, out, err))
 
 
 if __name__ == "__main__":

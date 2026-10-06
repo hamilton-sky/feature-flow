@@ -28,7 +28,6 @@ ticket() { # dir name status blocked-by [extra header line]
 newrepo() { # name -> prints the repo dir
   local d="$TMP/$1"
   mkdir -p "$d/scripts" "$d/plans/f/tasks"
-  cp "$ROOT"/scripts/*.sh "$d/scripts/"
   (
     cd "$d" || exit 1
     git init -q
@@ -49,77 +48,60 @@ newrepo() { # name -> prints the repo dir
   echo "$d"
 }
 
-echo "flow-status.sh"
+echo "flow-status.py"
 D="$(newrepo status)"
-S="$D/scripts/flow-status.sh"
+S="$ROOT/scripts/flow-status.py"
 cd "$D" || exit 1
-out="$(bash "$S" f)"; expect_has "table marks the first ticket READY" "01  open      READY" "$out"
+out="$(python3 "$S" f)"; expect_has "table marks the first ticket READY" "01  open      READY" "$out"
 expect_has "table shows blockers" "after 02,03" "$out"
-out="$(bash "$S" f --next)"; expect_has "--next prints the lowest ready ticket" "plans/f/tasks/01-a.md" "$out"
-out="$(bash "$S" f --counts)"; expect_has "--counts" "total=4 resolved=0 open=4" "$out"
-out="$(bash "$S" f --check)"; expect_has "--check passes on a good graph" "OK: 4 tickets" "$out"
-out="$(bash "$S" f --mermaid)"; expect_has "--mermaid has nodes" 'T01["01 A"]:::ready' "$out"
+out="$(python3 "$S" f --next)"; expect_has "--next prints the lowest ready ticket" "plans/f/tasks/01-a.md" "$out"
+out="$(python3 "$S" f --counts)"; expect_has "--counts" "total=4 resolved=0 open=4" "$out"
+out="$(python3 "$S" f --check)"; expect_has "--check passes on a good graph" "OK: 4 tickets" "$out"
+out="$(python3 "$S" f --mermaid)"; expect_has "--mermaid has nodes" 'T01["01 A"]:::ready' "$out"
 expect_has "--mermaid has edges" "T02 --> T04" "$out"
-out="$(bash "$S" f --mermaid plain)"; expect_lacks "--mermaid plain has no colours" "classDef" "$out"
-bash "$S" f --next > /dev/null; expect_rc "--next exits 0 when something is ready" 0 $?
+out="$(python3 "$S" f --mermaid plain)"; expect_lacks "--mermaid plain has no colours" "classDef" "$out"
+python3 "$S" f --next > /dev/null; expect_rc "--next exits 0 when something is ready" 0 $?
 
 mkdir -p plans/stuck/tasks plans/done/tasks plans/bad/tasks plans/aws/tasks
 ticket plans/stuck/tasks/01-a.md A claimed "—"; ticket plans/stuck/tasks/02-b.md B open "01"
-bash "$S" stuck --next > /dev/null 2>&1; expect_rc "--next exits 11 when stuck" 11 $?
+python3 "$S" stuck --next > /dev/null 2>&1; expect_rc "--next exits 11 when stuck" 11 $?
 ticket plans/done/tasks/01-a.md A resolved "—"; ticket plans/done/tasks/02-b.md B parked "01"
-bash "$S" done --next > /dev/null 2>&1; expect_rc "--next exits 10 when complete" 10 $?
+python3 "$S" done --next > /dev/null 2>&1; expect_rc "--next exits 10 when complete" 10 $?
 ticket plans/aws/tasks/01-a.md A done "—"; ticket plans/aws/tasks/02-b.md B ready-for-agent "01"; ticket plans/aws/tasks/03-c.md C ready-for-human "—"
-out="$(bash "$S" aws)"; expect_has "aws status words: done counts as resolved" "01  resolved" "$out"
+out="$(python3 "$S" aws)"; expect_has "aws status words: done counts as resolved" "01  resolved" "$out"
 expect_has "aws status words: ready-for-agent is open and ready" "02  open      READY" "$out"
 expect_has "aws status words: ready-for-human waits" "03  waiting" "$out"
 ticket plans/bad/tasks/01-a.md A open "03"; ticket plans/bad/tasks/02-b.md B open "01"; ticket plans/bad/tasks/03-c.md C open "02"
 ticket plans/bad/tasks/04-d.md D banana "99"; printf '# E\n\nStatus: open\nBlocked by: —\nTest first: maybe\n' > plans/bad/tasks/05-e.md
-out="$(bash "$S" bad --check 2>&1)"; rc=$?
+out="$(python3 "$S" bad --check 2>&1)"; rc=$?
 expect_rc "--check exits 1 on a bad graph" 1 $rc
 expect_has "--check finds the cycle" "part of a dependency cycle" "$out"
 expect_has "--check finds a missing blocker" "blocked by 99, which does not exist" "$out"
 expect_has "--check finds an unknown status" "unrecognised Status value" "$out"
 expect_has "--check finds a missing Done when" "no ## Done when section" "$out"
 expect_has "--check finds a bad Test first" "Test first must be yes or no" "$out"
-bash "$S" nope --next > /dev/null 2>&1; expect_rc "a missing feature exits 2" 2 $?
+python3 "$S" nope --next > /dev/null 2>&1; expect_rc "a missing feature exits 2" 2 $?
 mkdir -p .scratch/x/issues; ticket .scratch/x/issues/01-a.md A ready-for-agent "—"
-FLOW_DIR=.scratch FLOW_TICKETS=issues bash "$S" x --next > /dev/null; expect_rc "FLOW_DIR and FLOW_TICKETS relocate the tickets" 0 $?
+FLOW_DIR=.scratch FLOW_TICKETS=issues python3 "$S" x --next > /dev/null; expect_rc "FLOW_DIR and FLOW_TICKETS relocate the tickets" 0 $?
 
-echo "floor-guard.sh"
-PARITY_LOG="$TMP/floor-guard-parity.log"
-: > "$PARITY_LOG"
-guard_both() { # floor-guard.sh-path args... -> runs it like bash would, and also runs floor-guard.py on the same args
-  local sh="$1" rc prc
-  shift
-  bash "$sh" "$@" > "$TMP/fg.sh.out" 2> "$TMP/fg.sh.err"; rc=$?
-  python3 "$ROOT/scripts/floor-guard.py" "$@" > "$TMP/fg.py.out" 2> "$TMP/fg.py.err"; prc=$?
-  if [ "$rc" = "$prc" ] && cmp -s "$TMP/fg.sh.out" "$TMP/fg.py.out" && cmp -s "$TMP/fg.sh.err" "$TMP/fg.py.err"; then
-    echo "same $*" >> "$PARITY_LOG"
-  else
-    echo "DIFF in $(pwd): $* (exit $rc vs $prc)" >> "$PARITY_LOG"
-    diff "$TMP/fg.sh.out" "$TMP/fg.py.out" >> "$PARITY_LOG"
-    diff "$TMP/fg.sh.err" "$TMP/fg.py.err" >> "$PARITY_LOG"
-  fi
-  cat "$TMP/fg.sh.out"; cat "$TMP/fg.sh.err" >&2
-  return "$rc"
-}
+echo "floor-guard.py"
+guard() { python3 "$ROOT/scripts/floor-guard.py" "$@"; } # run from the repo under test, like the flow does
 D="$(newrepo guard)"
 cd "$D" || exit 1
-G="$D/scripts/floor-guard.sh"
 mkdir -p tests src
 printf 'def test_a():\n    assert 1 == 1\n' > tests/test_a.py; printf 'x = 1\n' > src/app.py
 printf 'fail_under = 80\n' > setup.cfg; printf '{}\n' > .eslintrc.json; printf 'def test_gone():\n    assert True\n' > tests/test_gone.py
 ticket plans/f/tasks/02-b.md B open "01" "Floor: allow skip, suppress, empty-catch, threshold, config, test-delete"
 git add -A; git commit -qm base; B0="$(git rev-parse HEAD)"
 printf 'x = 2\ny = 3\n' > src/app.py; git add -A; git commit -qm clean
-guard_both "$G" f 01 "$B0" > /dev/null; expect_rc "a clean diff passes" 0 $?
+guard f 01 "$B0" > /dev/null; expect_rc "a clean diff passes" 0 $?
 B1="$(git rev-parse HEAD)"
 printf '@pytest.mark.skip\ndef test_a():\n    assert 1 == 1\n' > tests/test_a.py
 printf 'x = 2  # noqa\ntry:\n    y = 1\nexcept Exception: pass\n' > src/app.py
 printf 'fail_under = 10\n' > setup.cfg; printf '{"rules": {}}\n' > .eslintrc.json
 git add -A; git commit -qm weaken
 git rm -q tests/test_gone.py; git commit -qm delete
-out="$(guard_both "$G" f 01 "$B1" 2>&1)"; rc=$?
+out="$(guard f 01 "$B1" 2>&1)"; rc=$?
 expect_rc "a weakening diff fails" 1 $rc
 expect_has "finds a skipped test" "skip: tests/test_a.py" "$out"
 expect_has "finds a silenced check" "suppress: src/app.py" "$out"
@@ -128,16 +110,16 @@ expect_has "finds a lowered threshold" "threshold: setup.cfg" "$out"
 expect_has "finds edited lint config" "config: .eslintrc.json" "$out"
 expect_has "finds a deleted test" "test-delete: tests/test_gone.py" "$out"
 expect_has "warns about fewer assertions" "assertion line(s) removed" "$out"
-guard_both "$G" f 02 "$B1" > /dev/null 2>&1; expect_rc "Floor: allow in the ticket at base lets the diff through" 0 $?
+guard f 02 "$B1" > /dev/null 2>&1; expect_rc "Floor: allow in the ticket at base lets the diff through" 0 $?
 ticket plans/f/tasks/01-a.md A open "—" "Floor: allow skip, suppress, empty-catch, threshold, config, test-delete, ticket-edit"
 git add -A; git commit -qm selfallow
-out="$(guard_both "$G" f 01 "$B1" 2>&1)"; rc=$?
+out="$(guard f 01 "$B1" 2>&1)"; rc=$?
 expect_rc "a worker cannot excuse itself by adding Floor: allow" 1 $rc
 expect_has "and the edit to its own header is reported" "ticket-edit: plans/f/tasks/01-a.md" "$out"
-guard_both "$G" f 99 "$B1" > /dev/null 2>&1; expect_rc "a missing ticket exits 2" 2 $?
-# more fixtures, compared for parity only (the parity section below counts them). ASCII only: mawk cuts
-# a finding at 100 bytes and gawk at 100 characters, so a non-ASCII line has no single bash answer;
-# tests/py/test_floorguard.py pins the port's byte cut, which follows mawk.
+guard f 99 "$B1" > /dev/null 2>&1; expect_rc "a missing ticket exits 2" 2 $?
+# more fixtures: other languages, config files, odd arguments. ASCII only: mawk cuts a finding at 100
+# bytes and gawk at 100 characters, so a non-ASCII line has no single answer in an awk-based check;
+# tests/py/test_floorguard.py pins the byte cut.
 ticket plans/f/tasks/04-d.md D open "02, 03" "Floor: skip, Config"
 git add -A; git commit -qm extras-base; B2="$(git rev-parse HEAD)"
 long="$(printf 'x%.0s' $(seq 1 120))"
@@ -148,17 +130,34 @@ mkdir -p .github/workflows; printf 'on: push\n' > .github/workflows/ci.yml
 printf 'def test_b():\n    assert 2 == 2\n' > tests/test_assert_names.py
 git add -A; git commit -qm extras
 git rm -q tests/test_a.py; git commit -qm "drop test_a"
-guard_both "$G" f 03 "$B2" > /dev/null 2>&1
-guard_both "$G" f 04 "$B2" > /dev/null 2>&1
-guard_both "$G" f 03 > /dev/null 2>&1
-guard_both "$G" f 03 "" > /dev/null 2>&1
-guard_both "$G" f 03 no-such-commit > /dev/null 2>&1
-guard_both "$G" f > /dev/null 2>&1
-guard_both "$G" > /dev/null 2>&1
-FLOW_DIR=elsewhere guard_both "$G" f 03 "$B2" > /dev/null 2>&1
-FLOW_TICKETS=issues guard_both "$G" f 03 "$B2" > /dev/null 2>&1
+out="$(guard f 03 "$B2" 2>&1)"; rc=$?
+expect_rc "other languages and config files fail the guard" 1 $rc
+expect_has "JS skips are found" 'skip: src/web.test.js: it.skip("a", () => {})' "$out"
+expect_has "so are xit, test.todo and describe.skip" 'skip: src/web.test.js: describe.skip(x)' "$out"
+expect_lacks "my_it.skip is not a skip" "my_it.skip" "$out"
+expect_has "both empty catch forms are found" 'empty-catch: src/web.test.js: try { y() } catch {   }' "$out"
+expect_has "ts-ignore is a suppression" "suppress: src/web.test.js: // @ts-ignore" "$out"
+expect_has "Rust and Go skips are found" 'skip: src/lib.rs: t.Skip("no")' "$out"
+expect_has "a Rust allow is a suppression" "suppress: src/lib.rs: #[allow(dead_code)]" "$out"
+expect_has "a lowered coverage threshold is found" "threshold: pytest.ini: addopts = --cov-fail-under=10" "$out"
+expect_has "a workflow file is config" "config: .github/workflows/ci.yml" "$out"
+expect_has "a finding is cut at 100 characters" "# noqa xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" "$out"
+expect_lacks "and nothing past the cut is shown" "cut at the hundredth" "$out"
+out="$(guard f 04 "$B2" 2>&1)"; rc=$?
+expect_rc "Floor: skip, Config in the ticket allows those categories only" 1 $rc
+expect_lacks "an allowed skip is not reported" "skip: src/web.test.js" "$out"
+expect_lacks "an allowed config is not reported" "config: pytest.ini" "$out"
+expect_has "but a suppression still is" "suppress: src/web.test.js: // @ts-ignore" "$out"
+out="$(guard f 03 2>&1)"; expect_has "the base commit defaults to HEAD~1" "test-delete: tests/test_a.py" "$out"
+out="$(guard f 03 "" 2>&1)"; expect_has "an empty base commit means the default too" "test-delete: tests/test_a.py" "$out"
+guard f 03 no-such-commit > /dev/null 2>&1; expect_rc "a bad base commit exits with 128 from the revision lookup" 128 $?
+guard f > /dev/null 2>&1; expect_rc "a missing ticket number is a usage error" 2 $?
+guard > /dev/null 2>&1; expect_rc "no arguments is a usage error" 2 $?
+expect_has "the usage line names the Python command" "usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit]" "$(guard 2>&1)"
+FLOW_DIR=elsewhere guard f 03 "$B2" > /dev/null 2>&1; expect_rc "FLOW_DIR moves the plans folder" 2 $?
+FLOW_TICKETS=issues guard f 03 "$B2" > /dev/null 2>&1; expect_rc "FLOW_TICKETS moves the tickets folder" 2 $?
 
-echo "floor-guard.sh, protecting the plan"
+echo "floor-guard.py, protecting the plan"
 addfloor() { awk -v l="$2" '{ print } /^Test first:/ { print l }' "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
 tamper() { # name expected(clean|flag) mutation [prelude]
   local d out rc base slug
@@ -170,7 +169,7 @@ tamper() { # name expected(clean|flag) mutation [prelude]
     base="$(git rev-parse HEAD)"
     eval "$3"
     git add -A; git commit -qm change
-    guard_both scripts/floor-guard.sh f 01 "$base" > .guard.out 2>&1
+    guard f 01 "$base" > .guard.out 2>&1
     echo $? > .guard.rc
   )
   rc="$(cat "$d/.guard.rc")"; out="$(cat "$d/.guard.out")"
@@ -200,27 +199,16 @@ tamper "commands.md may change when the ticket allows it" clean "printf 'Test: \
 tamper "a ticket may allow ticket-edit" clean "printf 'more\n' >> plans/f/spec.md" \
   "addfloor $T/01-a.md 'Floor: allow ticket-edit'"
 
-echo "floor-guard.sh and floor-guard.py, parity"
-PARITY_N="$(grep -c '^same ' "$PARITY_LOG")"
-PARITY_DIFF="$(grep -c '^DIFF ' "$PARITY_LOG")"
-echo "  compared floor-guard.sh and floor-guard.py on $((PARITY_N + PARITY_DIFF)) fixtures"
-if [ "$PARITY_DIFF" = 0 ] && [ "$PARITY_N" -gt 0 ]; then
-  ok "floor-guard.py prints the same and exits the same as floor-guard.sh on all $PARITY_N fixtures"
-else
-  bad "floor-guard.py prints the same and exits the same as floor-guard.sh" "$PARITY_DIFF of $((PARITY_N + PARITY_DIFF)) differ"
-  sed 's/^/        /' "$PARITY_LOG"
-fi
-
-echo "flow-status.sh, ordering hints"
+echo "flow-status.py, ordering hints"
 cd "$TMP" || exit 1
 mkdir -p ord/plans/g/tasks
 cd ord || exit 1
-S="$ROOT/scripts/flow-status.sh"
+S="$ROOT/scripts/flow-status.py"
 printf '# A\n\nType: task\nStatus: open\nBlocked by: —\nTest first: no\n\nTicket 02 builds on this.\n\n## Not in this ticket\n\n- ticket 03 is separate\n\n## Done when\n\n- x\n' > plans/g/tasks/01-a.md
 printf '# B\n\nType: task\nStatus: open\nBlocked by: 01\nTest first: no\n\nbody\n\n## Done when\n\n- x\n' > plans/g/tasks/02-b.md
 printf '# C\n\nType: task\nStatus: open\nBlocked by: 01\nTest first: no\n\nUses the output of ticket 02 directly.\n\n## Done when\n\n- x\n' > plans/g/tasks/03-c.md
 printf '# D\n\nType: task\nStatus: open\nBlocked by: 03\nTest first: no\n\nNeeds what tickets 01 and 02 leave behind.\n\n## Done when\n\n- x\n' > plans/g/tasks/04-d.md
-out="$(bash "$S" g --check)"; rc=$?
+out="$(python3 "$S" g --check)"; rc=$?
 expect_rc "ordering warnings do not fail --check" 0 $rc
 expect_has "a ticket that uses another without ordering is warned" "03: mentions ticket 02 but is not ordered against it" "$out"
 expect_lacks "mentioning a later ticket that builds on this one is fine" "01: mentions" "$out"
@@ -228,72 +216,41 @@ expect_lacks "mentioning an ancestor through the chain is fine" "04: mentions ti
 expect_has "an ancestor not on any chain is warned" "04: mentions ticket 02 but is not ordered against it" "$out"
 mkdir -p plans/h/tasks; cp plans/g/tasks/01-a.md plans/h/tasks/01-a.md
 i=0; : > plans/h/learnings.md; while [ "$i" -lt 45 ]; do echo "- (01) lesson $i" >> plans/h/learnings.md; i=$((i + 1)); done
-out="$(bash "$S" h --check)"; expect_has "a long learnings.md is flagged" "warning: learnings.md has 45 lines" "$out"
+out="$(python3 "$S" h --check)"; expect_has "a long learnings.md is flagged" "warning: learnings.md has 45 lines" "$out"
 
-echo "gate.sh"
+echo "gate.py"
 D="$(newrepo gate_unit)"
 cd "$D" || exit 1
-G="$D/scripts/gate.sh"
+G="$ROOT/scripts/gate.py"
 printf '# Commands: f\n\nBuild: `echo building`\nTest: `echo testing`\nLint: `echo linting`\n' > plans/f/commands.md
-out="$(bash "$G" f 2>&1)"; rc=$?
+out="$(python3 "$G" f 2>&1)"; rc=$?
 expect_rc "all three commands passing exits 0" 0 $rc
 expect_has "it reports the count" "gate: 3 command(s) passed" "$out"
 order="$(printf '%s' "$out" | grep -oE 'gate: (Build|Test|Lint):' | tr '\n' ' ')"
 expect_has "it runs build, then test, then lint" "gate: Build: gate: Test: gate: Lint:" "$order"
 printf '# Commands: f\n\nBuild: `echo building`\nTest: `echo it broke; exit 3`\nLint: `echo linting`\n' > plans/f/commands.md
-out="$(bash "$G" f 2>&1)"; rc=$?
+out="$(python3 "$G" f 2>&1)"; rc=$?
 expect_rc "a failing command exits 1" 1 $rc
 expect_has "it names the failing step" "gate: Test failed" "$out"
 expect_has "it shows what the command printed" "it broke" "$out"
 expect_lacks "it stops before the later steps" "gate: Lint:" "$out"
 printf '# Commands: f\n\nBuild: `<command>`\nTest:\nSmoke: `<x>`\n' > plans/f/commands.md
-out="$(bash "$G" f 2>&1)"; rc=$?
+out="$(python3 "$G" f 2>&1)"; rc=$?
 expect_rc "placeholders and empty values are skipped" 0 $rc
 expect_has "and it says nothing ran" "no commands defined" "$out"
-out="$(bash "$G" nofeature 2>&1)"; rc=$?
+out="$(python3 "$G" nofeature 2>&1)"; rc=$?
 expect_rc "a feature without commands.md is not an error" 0 $rc
-bash "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
+python3 "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
 
-echo "gate.sh and gate.py parity"
-# every commands.md and argument set the gate.sh checks above use, plus a few edge cases (a
-# carriage return, a whitespace-only value, output longer than 40 lines without a final newline).
-# deleted with scripts/gate.sh.
-PY_G="$D/scripts/gate.py"
-cp "$ROOT/scripts/gate.py" "$PY_G"
-mkdir -p "$D/feature_flow"
-cp "$ROOT"/feature_flow/*.py "$D/feature_flow/"
-gate_fixtures=(
-  '# Commands: f\n\nBuild: `echo building`\nTest: `echo testing`\nLint: `echo linting`\n'
-  '# Commands: f\n\nBuild: `echo building`\nTest: `echo it broke; exit 3`\nLint: `echo linting`\n'
-  '# Commands: f\n\nBuild: `<command>`\nTest:\nSmoke: `<x>`\n'
-  'Build:\t `echo crlf`\r\nTest: `   `\nLint: `echo to stderr >&2`\n'
-  'Test: `seq 60; printf no-newline; exit 4`\n'
-)
-compared=0
-diffs=""
-for fx in "${gate_fixtures[@]}"; do
-  printf "$fx" > plans/f/commands.md
-  for args in f nofeature ""; do
-    bash "$G" $args > "$TMP/gate-sh.out" 2> "$TMP/gate-sh.err"; sh_rc=$?
-    python3 "$PY_G" $args > "$TMP/gate-py.out" 2> "$TMP/gate-py.err"; py_rc=$?
-    compared=$((compared + 1))
-    if [ "$sh_rc" != "$py_rc" ] || ! cmp -s "$TMP/gate-sh.out" "$TMP/gate-py.out" || ! cmp -s "$TMP/gate-sh.err" "$TMP/gate-py.err"; then
-      diffs="$diffs [fixture $compared, args '$args': exit $sh_rc vs $py_rc]"
-    fi
-  done
-done
-rm -rf -- "$D/feature_flow" "$PY_G" "$TMP"/gate-*.out "$TMP"/gate-*.err
-echo "  compared gate.sh and gate.py on $compared fixture runs (${#gate_fixtures[@]} commands.md files x 3 argument sets)"
-if [ -z "$diffs" ]; then ok "gate.py prints and exits exactly like gate.sh"; else bad "gate.py prints and exits exactly like gate.sh" "$diffs"; fi
-
-echo "install.sh"
+echo "install.py"
 cd "$TMP" || exit 1
 I="$TMP/inst"; mkdir -p "$I/repo" "$I/fresh"
-out="$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"; rc=$?
+out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"; rc=$?
 expect_rc "installs into a repo" 0 $rc
-for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/flow.py scripts/gate.sh scripts/floor-guard.sh scripts/flow-status.sh scripts/flow-view.sh scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
+for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/flow.py scripts/gate.py scripts/floor-guard.py scripts/flow-status.py scripts/flow-view.py scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
   if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
 done
+n="$(find "$I/repo/scripts" -name '*.sh' | wc -l | tr -d ' ')"; expect_rc "no bash script is installed under scripts/" 0 "$n"
 expect_has "only the three skills are installed" "architect-review automation-design feature-flow" "$(ls "$I/repo/.claude/skills" | tr '\n' ' ')"
 n="$(find "$I/repo/.feature-flow" \( -name __pycache__ -o -name '*.pyc' \) | wc -l | tr -d ' ')"; expect_rc "no __pycache__ is installed" 0 "$n"
 expect_has "it points at the one skill" "next: /feature-flow <feature-name> in Claude Code" "$out"
@@ -303,41 +260,44 @@ mkdir -p "$I/repo/plans/f/tasks"
 out="$(cd "$I/repo" && python3 scripts/flow.py f start 2>&1)"
 expect_has "and starts a session on a plan" "OK " "$out"
 rm -rf "$I/repo/.git" "$I/repo/plans"
-out="$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"
+out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"
 expect_has "a second run adds nothing" "added 0, updated 0" "$out"
 echo "my own edit" >> "$I/repo/.claude/skills/feature-flow/SKILL.md"
-out="$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"
+out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"
 expect_has "a changed file is kept and reported" "kept" "$out"
 expect_has "and it still has the user's edit" "my own edit" "$(cat "$I/repo/.claude/skills/feature-flow/SKILL.md")"
-out="$(bash "$ROOT/install.sh" "$I/repo" --force 2>&1)"
+out="$(python3 "$ROOT/install.py" "$I/repo" --force 2>&1)"
 expect_has "--force replaces it" "update" "$out"
 expect_lacks "and the edit is gone" "my own edit" "$(cat "$I/repo/.claude/skills/feature-flow/SKILL.md")"
-bash "$ROOT/install.sh" "$I/fresh" --dry-run > /dev/null 2>&1
+python3 "$ROOT/install.py" "$I/fresh" --dry-run > /dev/null 2>&1
 if [ -z "$(ls -A "$I/fresh")" ]; then ok "--dry-run writes nothing"; else bad "--dry-run writes nothing"; fi
 mkdir -p "$I/old/.claude/skills/my-skill"
 echo "mine" > "$I/old/.claude/skills/my-skill/SKILL.md"
-bash "$ROOT/install.sh" "$I/old" > /dev/null 2>&1
+python3 "$ROOT/install.py" "$I/old" > /dev/null 2>&1
 [ "$(cat "$I/old/.claude/skills/my-skill/SKILL.md")" = "mine" ] && ok "a skill it does not own is left alone" || bad "a skill it does not own is left alone"
 mkdir -p "$I/old/.claude/skills/old-build" "$I/old/.claude/skills/old-review"
-printf 'Run `bash scripts/flow-status.sh <feature> --next`.\n' > "$I/old/.claude/skills/old-build/SKILL.md"
+printf 'Run `python3 scripts/flow-status.py <feature> --next`.\n' > "$I/old/.claude/skills/old-build/SKILL.md"
 printf 'End with `REVIEW: PASS` or `REVIEW: FAIL`.\n' > "$I/old/.claude/skills/old-review/SKILL.md"
-out="$(bash "$ROOT/install.sh" "$I/old" 2>&1)"
+out="$(python3 "$ROOT/install.py" "$I/old" 2>&1)"
 expect_has "a leftover flow skill from an earlier version is named" "no longer installed: old-build old-review." "$out"
 expect_lacks "but not the user's own skill" "my-skill" "$out"
 if [ -f "$I/old/.claude/skills/old-build/SKILL.md" ]; then ok "and nothing is deleted"; else bad "and nothing is deleted"; fi
-expect_lacks "the installed feature-flow skill is never named as a leftover" "no longer installed" "$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"
+expect_lacks "the installed feature-flow skill is never named as a leftover" "no longer installed" "$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"
 mkdir -p "$I/repo2"
-CLAUDE_HOME="$I/home/.claude" bash "$ROOT/install.sh" "$I/repo2" --user > /dev/null 2>&1
+CLAUDE_HOME="$I/home/.claude" python3 "$ROOT/install.py" "$I/repo2" --user > /dev/null 2>&1
 if [ -f "$I/home/.claude/skills/feature-flow/SKILL.md" ] && [ -f "$I/home/.claude/agents/ticket-reviewer.md" ]; then ok "--user puts skills and agents in the user folder"; else bad "--user puts skills and agents in the user folder"; fi
 if [ -f "$I/repo2/scripts/flow.py" ] && [ -f "$I/repo2/.feature-flow/guides/build.md" ] && [ ! -e "$I/repo2/.claude" ]; then ok "--user still puts scripts and .feature-flow in the repo and no .claude"; else bad "--user still puts scripts and .feature-flow in the repo and no .claude"; fi
-bash "$ROOT/install.sh" --nonsense > /dev/null 2>&1; expect_rc "an unknown option is a usage error" 2 $?
+python3 "$ROOT/install.py" --nonsense > /dev/null 2>&1; expect_rc "an unknown option is a usage error" 2 $?
+mkdir -p "$I/viash"
+bash "$ROOT/install.sh" "$I/viash" --dry-run > /dev/null 2>&1; expect_rc "the install.sh wrapper runs the Python installer" 0 $?
+expect_has "and passes its arguments on" "would add" "$(bash "$ROOT/install.sh" "$I/viash" --dry-run 2>&1)"
 if [ ! -e "$ROOT/adapters/codex/skill.awk" ]; then ok "adapters/codex/skill.awk is gone"; else bad "adapters/codex/skill.awk is gone"; fi
 
-echo "install.sh, codex"
+echo "install.py, codex"
 C="$TMP/codex"; mkdir -p "$C/repo" "$C/fresh" "$C/home"
 SKILLS_BEFORE="$(cat "$ROOT"/skills/*/SKILL.md "$ROOT"/agents/*.md "$ROOT"/adapters/codex/feature-flow/SKILL.md | cksum)"
 printf 'my own instructions\n' > "$C/repo/AGENTS.md"
-out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"; rc=$?
+out="$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"; rc=$?
 expect_rc "--agent codex installs" 0 $rc
 expect_has "it says which agent" "(codex)" "$out"
 expect_has "it points at the Codex invocation" 'next: $feature-flow <feature-name> in Codex' "$out"
@@ -348,8 +308,8 @@ done
 for f in .agents/flow-roles/ticket-builder.md .agents/flow-roles/ticket-reviewer.md scripts/flow.py .feature-flow/feature_flow/cli.py .feature-flow/guides/review.md; do
   if [ -f "$C/repo/$f" ]; then ok "codex installed $f"; else bad "codex installed $f"; fi
 done
-mkdir -p "$C/repo/.agents/skills/old-build"; printf 'bash scripts/flow-status.sh f\n' > "$C/repo/.agents/skills/old-build/SKILL.md"
-expect_has "codex: a leftover flow skill is named" "no longer installed: old-build." "$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
+mkdir -p "$C/repo/.agents/skills/old-build"; printf 'python3 scripts/flow-status.py f\n' > "$C/repo/.agents/skills/old-build/SKILL.md"
+expect_has "codex: a leftover flow skill is named" "no longer installed: old-build." "$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"
 rm -rf "$C/repo/.agents/skills/old-build"
 expect_has "codex: only the three skills are installed" "architect-review automation-design feature-flow" "$(ls "$C/repo/.agents/skills" | tr '\n' ' ')"
 if [ ! -e "$C/repo/.claude" ]; then ok "--agent codex writes no .claude"; else bad "--agent codex writes no .claude"; fi
@@ -366,8 +326,7 @@ done
 if [ -z "$bad_names" ]; then ok "frontmatter is the name, then a quoted description, in every skill"; else bad "frontmatter is the name, then a quoted description, in every skill" "$bad_names"; fi
 if [ "$(sed '1,/^---$/d' "$ROOT/skills/architect-review/SKILL.md" | sed '1,/^---$/d')" = "$(sed '1,/^---$/d' "$CS/architect-review/SKILL.md" | sed '1,/^---$/d')" ]; then ok "the other skills keep their body word for word"; else bad "the other skills keep their body word for word"; fi
 printf -- '---\nname: q\ndescription: Says "hi" \\ there: ok\nargument-hint: "[a]"\n---\n\nbody\n' > "$C/q.md"
-sed -n '/^codex_header()/,/^}/p' "$ROOT/install.sh" > "$C/codex_header.sh"
-out="$(bash -c '. "$1"; codex_header "$2"' _ "$C/codex_header.sh" "$C/q.md")"
+out="$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from feature_flow.install import codex_header; sys.stdout.buffer.write(codex_header(open(sys.argv[2], "rb").read()))' "$ROOT" "$C/q.md")"
 expect_has "a description with quotes and a backslash is escaped" 'description: "Says \"hi\" \\ there: ok"' "$out"
 expect_lacks "and the other header keys are dropped" "argument-hint" "$out"
 if command -v python3 > /dev/null 2>&1 && python3 -c 'import yaml' > /dev/null 2>&1; then
@@ -391,44 +350,44 @@ expect_has "the builder role keeps its rules" "You are the builder." "$RB"
 expect_has "the reviewer role keeps its rules" "You are the reviewer, not the author." "$RR"
 expect_lacks "a role file has no frontmatter" "tools:" "$RR"
 [ "$(head -1 "$C/repo/.agents/flow-roles/ticket-reviewer.md")" = "You are the reviewer, not the author. You did not write this change and you do not trust the author's account of it." ] && ok "a role file starts with its first sentence" || bad "a role file starts with its first sentence"
-out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
+out="$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"
 expect_has "a second codex run adds nothing" "added 0, updated 0" "$out"
 echo "my own edit" >> "$CS/architect-review/SKILL.md"
-out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
+out="$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"
 expect_has "an edited Codex skill is kept and reported" "kept" "$out"
 expect_has "and keeps the user's edit" "my own edit" "$(cat "$CS/architect-review/SKILL.md")"
-out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex --force 2>&1)"
+out="$(python3 "$ROOT/install.py" "$C/repo" --agent codex --force 2>&1)"
 expect_has "--force rewrites it" "update" "$out"
 expect_lacks "and the edit is gone" "my own edit" "$(cat "$CS/architect-review/SKILL.md")"
-bash "$ROOT/install.sh" "$C/fresh" --agent codex --dry-run > /dev/null 2>&1
+python3 "$ROOT/install.py" "$C/fresh" --agent codex --dry-run > /dev/null 2>&1
 if [ -z "$(ls -A "$C/fresh")" ]; then ok "--agent codex --dry-run writes nothing"; else bad "--agent codex --dry-run writes nothing"; fi
-out="$(bash "$ROOT/install.sh" "$C/fresh" --agent codex --dry-run 2>&1)"
+out="$(python3 "$ROOT/install.py" "$C/fresh" --agent codex --dry-run 2>&1)"
 expect_has "and still reports what it would add" "would add" "$out"
 mkdir -p "$C/repo2"
-AGENTS_HOME="$C/home/.agents" bash "$ROOT/install.sh" "$C/repo2" --agent codex --user > /dev/null 2>&1
+AGENTS_HOME="$C/home/.agents" python3 "$ROOT/install.py" "$C/repo2" --agent codex --user > /dev/null 2>&1
 if [ -f "$C/home/.agents/skills/feature-flow/SKILL.md" ] && [ -f "$C/home/.agents/skills/feature-flow/agents/openai.yaml" ]; then ok "--user puts the Codex skills in the user folder"; else bad "--user puts the Codex skills in the user folder"; fi
 if [ -f "$C/repo2/.agents/flow-roles/ticket-reviewer.md" ] && [ -f "$C/repo2/scripts/flow.py" ] && [ ! -e "$C/repo2/.agents/skills" ]; then ok "--user keeps roles and scripts in the repo"; else bad "--user keeps roles and scripts in the repo"; fi
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"
-out="$(bash "$ROOT/install.sh" "$C/both" --agent all 2>&1)"
+out="$(python3 "$ROOT/install.py" "$C/both" --agent all 2>&1)"
 if [ -f "$C/both/.claude/skills/feature-flow/SKILL.md" ] && [ -f "$C/both/.agents/skills/feature-flow/SKILL.md" ] && [ -f "$C/both/.claude/agents/ticket-builder.md" ] && [ -f "$C/both/.agents/flow-roles/ticket-builder.md" ]; then ok "--agent all installs both"; else bad "--agent all installs both"; fi
 expect_has "and points at both" 'next: $feature-flow' "$out"
 expect_has "and at Claude Code" "/feature-flow <feature-name> in Claude Code" "$out"
-bash "$ROOT/install.sh" "$C/fresh" --agent nonsense > /dev/null 2>&1; expect_rc "an unknown agent is a usage error" 2 $?
-bash "$ROOT/install.sh" --agent > /dev/null 2>&1; expect_rc "--agent without a value is a usage error" 2 $?
-out="$(bash "$ROOT/install.sh" "$C/fresh" --agent=codex --dry-run 2>&1)"; expect_has "--agent=codex works too" "(codex)" "$out"
+python3 "$ROOT/install.py" "$C/fresh" --agent nonsense > /dev/null 2>&1; expect_rc "an unknown agent is a usage error" 2 $?
+python3 "$ROOT/install.py" --agent > /dev/null 2>&1; expect_rc "--agent without a value is a usage error" 2 $?
+out="$(python3 "$ROOT/install.py" "$C/fresh" --agent=codex --dry-run 2>&1)"; expect_has "--agent=codex works too" "(codex)" "$out"
 
-echo "flow-status.sh, json"
+echo "flow-status.py, json"
 set_status() { awk -v s="$2" 'FNR<=20 && !d && /^Status:/ {print "Status: " s; d=1; next} {print}' "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
 cd "$TMP" || exit 1
 mkdir -p js/plans/f/tasks
 cd js || exit 1
-S="$ROOT/scripts/flow-status.sh"
+S="$ROOT/scripts/flow-status.py"
 ticket plans/f/tasks/01-a.md 'Say "hi" \ and <b>caf'$'\xc3\xa9''</b>' resolved "—"
 ticket plans/f/tasks/02-b.md B open "01"
 ticket plans/f/tasks/03-c.md C open "01, 02"
-out="$(bash "$S" f --json)"
+out="$(python3 "$S" f --json)"
 printf '%s' "$out" | jq -e . > /dev/null 2>&1; expect_rc "--json prints valid JSON" 0 $?
 [ "$(printf '%s' "$out" | jq -r '.tickets[0].title')" = 'Say "hi" \ and <b>caf'$'\xc3\xa9''</b>' ] && ok "quotes, backslashes, tags and accents survive" || bad "quotes, backslashes, tags and accents survive"
 expect_has "counts are included" '"total":3' "$out"
@@ -436,36 +395,26 @@ expect_has "counts are included" '"total":3' "$out"
 [ "$(printf '%s' "$out" | jq -r '.tickets[2].blocked_by | join(",")')" = "01,02" ] && ok "blockers are listed" || bad "blockers are listed"
 [ "$(printf '%s' "$out" | jq -r '.tickets[0].type')" = "task" ] && ok "a missing Type defaults to task" || bad "a missing Type defaults to task"
 
-echo "flow-status.py, parity with flow-status.sh"
-# every fixture the flow-status.sh checks above use, in every mode: same stdout, same stderr, same exit code
-PY_S="$ROOT/scripts/flow-status.py"
-parity_n=0
-parity_diff=""
-status_parity() { # dir feature [env assignments...]
-  local dir="$1" feature="$2" mode a b
-  shift 2
-  for mode in "" --next --counts --check --mermaid "--mermaid plain" --json --bogus; do
-    # shellcheck disable=SC2086
-    a="$(cd "$dir" && env "$@" bash "$ROOT/scripts/flow-status.sh" "$feature" $mode 2> "$TMP/parity.err"; echo "rc=$?"; cat "$TMP/parity.err")"
-    # shellcheck disable=SC2086
-    b="$(cd "$dir" && env "$@" python3 "$PY_S" "$feature" $mode 2> "$TMP/parity.err"; echo "rc=$?"; cat "$TMP/parity.err")"
-    parity_n=$((parity_n + 1))
-    [ "$a" = "$b" ] || parity_diff="$parity_diff $feature${mode:+ $mode}"
-  done
-}
+echo "flow-status.py, odd plans"
+# a duplicate number, a CRLF Status line and an empty ticket file: the table and the checks still work
 mkdir -p "$TMP/status/plans/dup/tasks"
 ticket "$TMP/status/plans/dup/tasks/01-a.md" A open "—"; ticket "$TMP/status/plans/dup/tasks/01-b.md" B resolved "02"
 printf '# C\r\n\r\nStatus: open\r\nBlocked by: 01\r\n\r\nSee ticket 01 and 03.\r\n' > "$TMP/status/plans/dup/tasks/02-c.md"
 : > "$TMP/status/plans/dup/tasks/03-empty.md"
-for feature in f stuck done aws bad nope dup; do status_parity "$TMP/status" "$feature"; done
-status_parity "$TMP/status" "" 
-status_parity "$TMP/status" x FLOW_DIR=.scratch FLOW_TICKETS=issues
-for feature in g h; do status_parity "$TMP/ord" "$feature"; done
-status_parity "$TMP/js" f
-if [ -z "$parity_diff" ]; then ok "flow-status.py matches flow-status.sh on $parity_n fixture runs"; else bad "flow-status.py matches flow-status.sh" "differs on:$parity_diff"; fi
+cd "$TMP/status" || exit 1
+S="$ROOT/scripts/flow-status.py"
+out="$(python3 "$S" dup --check 2>&1)"; rc=$?
+expect_rc "a duplicate number fails --check" 1 $rc
+expect_has "and the check names it" "01: two tickets share this number" "$out"
+expect_has "a CRLF Status line reads like any other" "02  open" "$(python3 "$S" dup)"
+expect_has "an empty ticket file is skipped" "total=2 " "$(python3 "$S" dup --counts)"
+python3 "$S" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
+expect_has "and the usage line names the Python command" "usage: python3 scripts/flow-status.py <feature>" "$(python3 "$S" 2>&1)"
+out="$(python3 "$S" dup --json)"
+printf '%s' "$out" | jq -e . > /dev/null 2>&1; expect_rc "--json is valid JSON on a plan with a duplicate number" 0 $?
 
-echo "flow-view.sh"
-V="$ROOT/scripts/flow-view.sh"
+echo "flow-view.py"
+V="$ROOT/scripts/flow-view.py"
 mkdir -p "$TMP/view/plans/f/tasks"
 cd "$TMP/view" || exit 1
 git init -q
@@ -483,7 +432,7 @@ git add -A; GIT_AUTHOR_DATE="1790002000 +0000" GIT_COMMITTER_DATE="1790002000 +0
 set_status plans/f/tasks/01-a.md resolved
 git add -A; GIT_AUTHOR_DATE="1790003000 +0000" GIT_COMMITTER_DATE="1790003000 +0000" git commit -qm resolve-again
 
-bash "$V" f --no-open --out "$TMP/view.html" > /dev/null 2>&1; expect_rc "the page is written" 0 $?
+python3 "$V" f --no-open --out "$TMP/view.html" > /dev/null 2>&1; expect_rc "the page is written" 0 $?
 page="$(cat "$TMP/view.html")"
 data="$(grep -F '<script id="flow-data"' "$TMP/view.html" | sed 's/^<script id="flow-data" type="application\/json">//; s/<\/script>$//')"
 printf '%s' "$data" | jq -e . > /dev/null 2>&1; expect_rc "the embedded data is valid JSON" 0 $?
@@ -505,15 +454,15 @@ urls="$(grep -oE 'https?://[^" <>)]+' "$TMP/view.html" | grep -vF 'http://www.w3
 if [ -z "$urls" ]; then ok "the page is self contained, no external addresses"; else bad "the page is self contained, no external addresses" "$urls"; fi
 expect_lacks "an ordinary page does not auto refresh" 'http-equiv="refresh"' "$page"
 
-out="$(bash "$V" f --no-open 2>&1)"
+out="$(python3 "$V" f --no-open 2>&1)"
 expect_has "the default location is inside .git" ".git/flow-f.html" "$out"
 if [ -z "$(git status --porcelain)" ]; then ok "writing the page never dirties the tree"; else bad "writing the page never dirties the tree"; fi
-bash "$V" nosuchfeature --no-open > /dev/null 2>&1; expect_rc "a missing feature exits 2" 2 $?
-bash "$V" f --bogus > /dev/null 2>&1; expect_rc "an unknown option exits 2" 2 $?
-bash "$V" > /dev/null 2>&1; expect_rc "no feature exits 2" 2 $?
+python3 "$V" nosuchfeature --no-open > /dev/null 2>&1; expect_rc "a missing feature exits 2" 2 $?
+python3 "$V" f --bogus > /dev/null 2>&1; expect_rc "an unknown option exits 2" 2 $?
+python3 "$V" > /dev/null 2>&1; expect_rc "no feature exits 2" 2 $?
 
 mkdir -p "$TMP/nogit/plans/f/tasks" "$TMP/nogit_out"
-(cd "$TMP/nogit" && ticket plans/f/tasks/01-a.md A open "—" && TMPDIR="$TMP/nogit_out" bash "$V" f --no-open > /dev/null 2>&1)
+(cd "$TMP/nogit" && ticket plans/f/tasks/01-a.md A open "—" && TMPDIR="$TMP/nogit_out" python3 "$V" f --no-open > /dev/null 2>&1)
 if [ -f "$TMP/nogit_out/flow-f.html" ]; then ok "outside a git repo the page goes to the temp folder"; else bad "outside a git repo the page goes to the temp folder"; fi
 data2="$(grep -F '<script id="flow-data"' "$TMP/nogit_out/flow-f.html" | sed 's/^<script id="flow-data" type="application\/json">//; s/<\/script>$//')"
 [ "$(printf '%s' "$data2" | jq -r '.details["01"].history | length')" = "0" ] && ok "and it simply has no history" || bad "and it simply has no history"
@@ -521,15 +470,63 @@ data2="$(grep -F '<script id="flow-data"' "$TMP/nogit_out/flow-f.html" | sed 's/
 cd "$TMP/view" || exit 1
 set_status plans/f/tasks/02-b.md resolved
 git add -A; git commit -qm both
-out="$(FLOW_WATCH_SECONDS=0.1 bash "$V" f --watch --no-open --out "$TMP/watch_done.html" 2>&1)"
+out="$(FLOW_WATCH_SECONDS=0.1 python3 "$V" f --watch --no-open --out "$TMP/watch_done.html" 2>&1)"
 expect_has "watching a finished feature ends at once" "feature complete" "$out"
 expect_lacks "and leaves a page that does not refresh" 'http-equiv="refresh"' "$(cat "$TMP/watch_done.html")"
 set_status plans/f/tasks/02-b.md open
 git add -A; git commit -qm reopen-02
-( FLOW_WATCH_SECONDS=0.2 bash "$V" f --watch --no-open --out "$TMP/watch_live.html" > /dev/null 2>&1 & echo $! > "$TMP/watch.pid" )
+( FLOW_WATCH_SECONDS=0.2 python3 "$V" f --watch --no-open --out "$TMP/watch_live.html" > /dev/null 2>&1 & echo $! > "$TMP/watch.pid" )
 sleep 2
 expect_has "watching a running feature writes a page that refreshes itself" 'http-equiv="refresh"' "$(cat "$TMP/watch_live.html" 2> /dev/null)"
 kill "$(cat "$TMP/watch.pid")" 2> /dev/null || true
+
+echo "flow-view.py, edge cases"
+# capitals in headings, more than 8 Done when bullets, a bullet over 240 characters, an Answer over 700,
+# quotes, backslashes and tabs, review rounds with and without a number or a source, the template's
+# Answer placeholder, a CRLF Status line. ASCII only: tests/py/test_view.py pins the non-ASCII cuts.
+VE="$TMP/viewe"
+mkdir -p "$VE/plans/e/tasks" "$VE/plans/blank/tasks" "$VE/.scratch/x/issues"
+cd "$VE" || exit 1
+git init -q
+git config user.email t@t
+git config user.name t
+ve_long="$(printf '%0300d' 0)"
+{
+  printf '# Edge "quoted" \\ back\tslash\n\nType: task\nStatus: open\nBlocked by: -\nTest first: no\n\nbody\n\n## DONE WHEN\n\n'
+  printf -- '- %s\n' "$ve_long"
+  for i in 1 2 3 4 5 6 7 8 9 10; do printf -- '- bullet %s\n' "$i"; done
+  printf -- '\n## Answer\n\n<!-- a comment -->\nBuilt: "it" \\ and\ttab\n   indented\n\t\n<b>skipped</b>\n'
+  printf '%s%s%s\nafter the cut\n' "$ve_long" "$ve_long" "$ve_long"
+  printf '\n## Review findings (round 3, gate)\n\nx\n## Review findings\n## review findings (round 12)\n## Review Findings (round 4, a, b) (c)\n'
+} > plans/e/tasks/01-a.md
+printf '# B\n\nStatus: parked (later)\nBlocked by: 01\n\n## Done when\n\n- y\n\n## Answer\n\n<left empty until the ticket is resolved>\nleft empty until done\n' > plans/e/tasks/02-b.md
+printf '# C\r\n\r\nStatus: resolved\r\nBlocked by: 01\r\n\r\n## Done when\r\n\r\n- z\r\n' > plans/e/tasks/03-c.md
+: > plans/blank/tasks/01-zero.md
+ticket .scratch/x/issues/01-a.md A ready-for-agent "-"
+git add -A; git commit -qm edge
+ve() { FLOW_NO_OPEN=1 python3 "$V" "$@"; }
+vdata() { grep -F '<script id="flow-data"' "$1" | sed 's/^<script id="flow-data" type="application\/json">//; s/<\/script>$//'; }
+ve e --no-open --out "$TMP/ve.html" > /dev/null 2>&1; expect_rc "a plan with odd tickets writes a page" 0 $?
+ed="$(vdata "$TMP/ve.html")"
+printf '%s' "$ed" | jq -e . > /dev/null 2>&1; expect_rc "and its data is valid JSON" 0 $?
+[ "$(printf '%s' "$ed" | jq -r '.details["01"].done_when | length')" = 8 ] && ok "only the first 8 Done when bullets are kept" || bad "only the first 8 Done when bullets are kept"
+[ "$(printf '%s' "$ed" | jq -r '.details["01"].done_when[0] | length')" = 240 ] && ok "a long bullet is cut at 240 characters" || bad "a long bullet is cut at 240 characters"
+[ "$(printf '%s' "$ed" | jq -r '.details["01"].answer | length')" -le 700 ] && ok "an Answer is cut at 700 characters" || bad "an Answer is cut at 700 characters"
+expect_has "the Answer keeps quotes, backslashes and tabs" 'Built: "it" \ and	tab' "$(printf '%s' "$ed" | jq -r '.details["01"].answer')"
+expect_lacks "and drops a comment line" "a comment" "$(printf '%s' "$ed" | jq -r '.details["01"].answer')"
+[ "$(printf '%s' "$ed" | jq -r '[.details["01"].rounds[] | "\(.n):\(.source)"] | join(",")')" = "3:gate,0:,12:,4:a, b" ] && ok "review rounds are read with and without a number or a source" || bad "review rounds are read with and without a number or a source"
+[ "$(printf '%s' "$ed" | jq -r '.details["02"].answer')" = "" ] && ok "the template's Answer placeholder is no answer" || bad "the template's Answer placeholder is no answer"
+[ "$(printf '%s' "$ed" | jq -r '.details["03"].history[0].status')" = "resolved" ] && ok "a CRLF Status line reads like any other in the history" || bad "a CRLF Status line reads like any other in the history"
+[ "$(printf '%s' "$ed" | jq -r '.details["02"].history[0].status')" = "parked" ] && ok "a parked ticket has a parked history" || bad "a parked ticket has a parked history"
+FLOW_DIR=.scratch FLOW_TICKETS=issues ve x --no-open --out "$TMP/vx.html" > /dev/null 2>&1; expect_rc "FLOW_DIR and FLOW_TICKETS relocate the tickets" 0 $?
+ve blank --no-open --out "$TMP/vb.html" > /dev/null 2>&1; expect_rc "an empty ticket file does not stop the page" 0 $?
+ve f --out > /dev/null 2>&1; expect_rc "--out without a value exits 2" 2 $?
+expect_has "the usage line names the Python command" "usage: python3 scripts/flow-view.py <feature>" "$(ve 2>&1)"
+mkdir -p "$TMP/vnotpl/scripts"; cp "$ROOT/scripts/flow-view.py" "$TMP/vnotpl/scripts/"; cp -R "$ROOT/feature_flow" "$TMP/vnotpl/feature_flow"
+out="$(FLOW_NO_OPEN=1 python3 "$TMP/vnotpl/scripts/flow-view.py" e --no-open 2>&1)"; rc=$?
+expect_rc "a copy without the page template exits 2" 2 $rc
+expect_has "and says which file is missing" "flow-view.html" "$out"
+rm -rf -- "$TMP/vnotpl"
 
 echo "demo and viewer logic"
 out="$(bash "$ROOT/examples/demo.sh" "$TMP/demo" 2>&1)"; rc=$?
@@ -846,7 +843,7 @@ expect_has "and runs only when named" "disable-model-invocation: true" "$head6"
 for a in PLAN BUILD REVIEW DONE STOP HANDOFF prompt; do
   if grep -q "$a" "$CS_SKILL"; then ok "the Claude skill handles $a"; else bad "the Claude skill handles $a"; fi
 done
-expect_rc "it never runs the gate or the floor guard itself" 0 "$(grep -cE 'bash scripts/(gate|floor-guard)\.sh' "$CS_SKILL")"
+expect_rc "it never runs the gate or the floor guard itself" 0 "$(grep -cE 'python3 scripts/(gate|floor-guard)\.py' "$CS_SKILL")"
 if [ "$(grep -c 'Done when' "$CS_SKILL")" -le 2 ]; then ok "it holds no copy of the build or review protocol"; else bad "it holds no copy of the build or review protocol"; fi
 if [ "$(wc -l < "$CS_SKILL")" -lt 90 ]; then ok "it is under 90 lines"; else bad "it is under 90 lines"; fi
 CX_SKILL="$ROOT/adapters/codex/feature-flow/SKILL.md"
@@ -876,8 +873,8 @@ expect_rc "--prepare builds the project without any model installed" 0 $rc
 expect_has "it says no model was called" "no model was called" "$out"
 expect_has "and tells a codex user what to type" 'then type:  $feature-flow hello' "$out"
 if [ -f "$P/.agents/skills/feature-flow/SKILL.md" ] && [ -f "$P/.agents/flow-roles/ticket-reviewer.md" ] && [ ! -e "$P/.claude" ]; then ok "the project is installed for codex only"; else bad "the project is installed for codex only"; fi
-expect_has "the plan passes the ticket check" "OK: 2 tickets" "$(cd "$P" && bash scripts/flow-status.sh hello --check 2>&1)"
-expect_has "and the first ticket is the one that is ready" "01-greet-function.md" "$(cd "$P" && bash scripts/flow-status.sh hello --next 2>&1)"
+expect_has "the plan passes the ticket check" "OK: 2 tickets" "$(cd "$P" && python3 scripts/flow-status.py hello --check 2>&1)"
+expect_has "and the first ticket is the one that is ready" "01-greet-function.md" "$(cd "$P" && python3 scripts/flow-status.py hello --next 2>&1)"
 if [ -z "$(cd "$P" && git status --porcelain)" ] && [ "$(cd "$P" && git rev-list --count HEAD)" = 1 ]; then ok "it is one clean commit"; else bad "it is one clean commit"; fi
 env FLOW_AGENT=codex bash "$SM" --prepare "$P" > /dev/null 2>&1; expect_rc "a folder that is not empty is refused" 2 $?
 P2="$TMP/prep_claude"

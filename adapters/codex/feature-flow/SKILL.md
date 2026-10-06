@@ -20,7 +20,7 @@ With `show`, follow `.feature-flow/guides/show.md` for the feature and stop.
 If `plans/<feature>/` does not exist, run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start` and check that it prints `PLAN`. Then:
 
 1. Follow `.feature-flow/guides/plan.md` with the user.
-2. Run `bash scripts/flow-status.sh <feature> --check` and fix every problem.
+2. Run `python3 scripts/flow-status.py <feature> --check` and fix every problem.
 3. Stop. List the files you created and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `$feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
 
 ## Before building
@@ -28,7 +28,7 @@ If `plans/<feature>/` does not exist, run `FLOW_INVOKE='$feature-flow' python3 s
 With a plan present, check these before `start`, and stop at the first that fails:
 
 - `git status --porcelain` is empty.
-- `bash scripts/flow-status.sh <feature> --check` prints `OK`.
+- `python3 scripts/flow-status.py <feature> --check` prints `OK`.
 - `.agents/flow-roles/ticket-builder.md` and `.agents/flow-roles/ticket-reviewer.md` exist. If not, say to run `bash install.sh --agent codex` from feature-flow.
 
 Then run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'`. The conductor keeps its state in `.feature-flow/state/`, a git-ignored folder in the repo, so it never needs to write `.git`. If it prints `STOP cannot write the flow state`, tell the user this session must be allowed to write that folder.
@@ -44,7 +44,7 @@ Run `next`, act on its one line, and repeat:
 - `BUILD <ticket> <NN> <sha>`: run `prompt`. Start the builder with `spawn_agent(task_name="ticket_builder", fork_turns="none", message=...)`. The message is "Work only in <repo>." followed by the whole `prompt` output, which already starts with the builder role. Get its final reply with `wait_agent`, then run `next`.
 - `REVIEW <ticket> <NN> <sha>`: run `prompt`. Start a new reviewer the same way, with `task_name="ticket_reviewer"` and `fork_turns="none"` so it never sees the builder's context. Get its final reply with `wait_agent`. A child cannot be made read-only, so the reviewer works from its instructions; the conductor catches any edit it makes. Save the whole reply with the shell: `cat > .feature-flow/state/flow-review-<feature>.txt <<'EOF'` ... `EOF`. Then run `verdict .feature-flow/state/flow-review-<feature>.txt` and `next`. If `verdict` prints `RETRY`, just run `next`.
 - `DONE <summary>`: report it and suggest `$feature-flow <feature> show`.
-- `STOP <reason>`: report the reason, run `bash scripts/flow-status.sh <feature>`, show the table, and stop.
+- `STOP <reason>`: report the reason, run `python3 scripts/flow-status.py <feature>`, show the table, and stop.
 - `HANDOFF <line>`: stop here. Tell the user to open a new session and type exactly `<line>`. The new session resumes where this one stopped.
 
 A conductor command looks like this:

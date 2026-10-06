@@ -71,14 +71,15 @@ _DIGITS_RE = re.compile(r"[0-9]+")
 
 
 def records(path):
-    """The file's lines as awk sees them: split on \\n only, no final empty record, bytes kept."""
+    """The file's lines: split on \\n only, no final empty record, bytes kept. A trailing \\r is dropped,
+    so a ticket saved with Windows line endings reads the same as one saved with \\n."""
     text = Path(path).read_bytes().decode("utf-8", "surrogateescape")
     if text == "":
         return []
     lines = text.split("\n")
     if text.endswith("\n"):
         lines.pop()
-    return lines
+    return [line[:-1] if line.endswith("\r") else line for line in lines]
 
 
 def ticket_files(folder):

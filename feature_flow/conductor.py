@@ -167,10 +167,10 @@ class Conductor:
             self.save()
             return self.emit("DONE %s is complete: %d ticket(s) resolved in this run" % (self.feature, done))
         if nxt.code == 11:
-            raise Stop("stuck: unfinished tickets remain but none is ready. run: bash scripts/flow-status.sh %s"
+            raise Stop("stuck: unfinished tickets remain but none is ready. run: python3 scripts/flow-status.py %s"
                        % self.feature)
         if nxt.code != 0:
-            raise Stop("flow-status.sh failed with exit code %d" % nxt.code)
+            raise Stop("flow-status.py failed with exit code %d" % nxt.code)
         if self.per_session > 0 and self.num("session_done") >= self.per_session:
             return self.handoff()
         path = nxt.out.strip().splitlines()[-1]

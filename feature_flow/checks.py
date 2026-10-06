@@ -65,6 +65,7 @@ def floor_guard(scripts, feature, num, base):
 
 
 def smoke(command):
-    result = subprocess.run(["bash", "-c", command], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    args, use_shell = gate_module.shell(command)
+    result = subprocess.run(args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             universal_newlines=True)
     return Result(result.returncode, result.stdout)

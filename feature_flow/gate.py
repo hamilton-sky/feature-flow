@@ -21,6 +21,15 @@ KEYS = ("Build", "Test", "Lint")
 TAIL = 40
 
 
+def shell(cmd):
+    """How to run a command from commands.md: bash -c on Linux and macOS, the system shell (cmd.exe)
+    on Windows, where `bash` on PATH may be the Windows Subsystem for Linux stub and git-bash is not
+    a requirement. Returns (args, use_shell) for subprocess."""
+    if sys.platform == "win32":
+        return cmd, True
+    return ["bash", "-c", cmd], False
+
+
 def command(path, key):
     """The first `<key>:` line of commands.md, as the awk line in the bash gate reads it, or b""."""
     key = key.encode()
@@ -28,10 +37,10 @@ def command(path, key):
         data = Path(path).read_bytes()
     except OSError:  # awk prints its own error to stderr and the value is empty
         return b""
-    for line in data.split(b"\n"):
+    for line in data.split(b"\n"):  # a Windows checkout may end lines with \r; it is dropped below
         if line.startswith(key + b":"):
             value = re.sub(b"^" + re.escape(key) + b":[ \t]*", b"", line, count=1)
-            return value.replace(b"`", b"")
+            return value.rstrip(b"\r").replace(b"`", b"")
     return b""
 
 
@@ -48,7 +57,7 @@ def run(feature, out, err):
     """Run the gate for feature. out and err take bytes. Returns the exit code."""
     if not feature:
         # the bash gate's usage line, word for word (parity); ticket 07 switches it to gate.py
-        err(b"usage: bash scripts/gate.sh <feature>\n")
+        err(b"usage: python3 scripts/gate.py <feature>\n")
         return 2
     name = os.fsencode(feature)
     path = Path(os.environ.get("FLOW_DIR") or "plans") / feature / "commands.md"
@@ -63,7 +72,8 @@ def run(feature, out, err):
         ran += 1
         out(b"gate: " + key.encode() + b": " + cmd + b"\n")
         with tempfile.TemporaryFile() as log:
-            code = subprocess.call(["bash", "-c", os.fsdecode(cmd)], stdout=log, stderr=subprocess.STDOUT)
+            args, use_shell = shell(os.fsdecode(cmd))
+            code = subprocess.call(args, shell=use_shell, stdout=log, stderr=subprocess.STDOUT)
             if code != 0:
                 log.seek(0)
                 out(b"gate: " + key.encode() + b" failed. the last lines of its output:\n")
