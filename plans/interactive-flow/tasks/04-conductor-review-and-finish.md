@@ -12,7 +12,7 @@ Extend `scripts/flow.sh` with `bash scripts/flow.sh <feature> verdict <file>`. I
 - PASS: the ticket is done. `next` prints the next `BUILD`, or a line starting with `DONE ` when `flow-status.sh --next` exits 10. Tickets left but none ready is `STOP stuck: ...` and exit 1.
 - FAIL: append the first 120 lines of the file under `## Review findings (round N, independent review)`, reopen and commit like the gate send-back, print BUILD. The round counter is the one the gate and guard use.
 - No verdict: REVIEW again; after `FLOW_MAX_RETRIES` tries, `STOP no review verdict for 01-a after 2 attempt(s)`.
-- STOP when a tracked file changed during the review (`the reviewer changed tracked files, which a reviewer must never do`) and when builder plus reviewer runs pass `total * 2 * MAX_RETRIES * (MAX_ROUNDS + 1) + 1`.
+- STOP when the worktree or index is dirty, or when `HEAD` differs from the review sha saved when REVIEW was emitted (`the reviewer changed tracked files, which a reviewer must never do`). This catches a reviewer commit as well as an uncommitted edit. Also STOP when builder plus reviewer runs pass `total * 2 * MAX_RETRIES * (MAX_ROUNDS + 1) + 1`.
 
 ## Not in this ticket
 
@@ -24,7 +24,7 @@ Extend `scripts/flow.sh` with `bash scripts/flow.sh <feature> verdict <file>`. I
 - With a review pending, `verdict` on a file ending `REVIEW: PASS` prints `OK`; the next `next` prints `BUILD` for the next ticket, or on the last ticket a line starting `DONE ` with exit 0. The log has `VERDICT-PASS`.
 - A file ending `REVIEW: FAIL` appends `## Review findings (round 1, independent review)` with the file's text and commits; after the 4th failure `next` prints `STOP 01-a still fails the independent review after 3 round(s)` and exits 1.
 - Two files with no verdict line lead to `STOP no review verdict for 01-a after 2 attempt(s)`, exit 1.
-- The reviewer-edit and run-limit STOPs print their messages and exit 1. `verdict` with no review pending exits 2 and leaves the state file and `git status` unchanged.
+- The reviewer-edit STOP is covered twice: once for an uncommitted tracked edit and once for a reviewer-created commit that leaves the tree clean. Both print the message and exit 1. The run-limit STOP does the same. `verdict` with no review pending exits 2 and leaves the state file, `HEAD` and `git status` unchanged.
 - `bash tests/run.sh` exits 0 with a check for every bullet in the `flow.sh` section.
 
 ## Reference

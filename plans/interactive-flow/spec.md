@@ -50,8 +50,8 @@ Not in scope:
 
 ## Happy path
 
-1. `/feature-flow csv-export` with no `plans/csv-export/` → the session follows `guides/plan.md` with the user and writes the plan.
-2. `/feature-flow csv-export` again → the skill checks a clean tree, a valid plan and the installed roles, runs `bash scripts/flow.sh csv-export start`, says what will happen, and asks (skipped with `auto`).
+1. `/feature-flow csv-export` with no `plans/csv-export/` → the session follows `guides/plan.md` with the user, writes and validates the plan, then stops with the exact files and suggested commit command. It does not claim that the flow is ready while the plan is uncommitted.
+2. After the user commits the plan, `/feature-flow csv-export` again → the skill checks a clean tree, a valid plan and the installed roles, runs `bash scripts/flow.sh csv-export start`, keeps the returned session token for every conductor call, says what will happen, and asks (skipped with `auto`).
 3. `bash scripts/flow.sh csv-export next` → `BUILD plans/csv-export/tasks/01-types.md 01 <sha>` → `bash scripts/flow.sh csv-export prompt` prints the builder prompt → the session spawns a builder subagent with it → the subagent builds, proves and commits the ticket.
 4. `next` → the script sees the ticket resolved and the tree clean, runs the gate and the floor guard, prints `REVIEW …` → `prompt` prints the reviewer prompt → reviewer subagent → the session saves the reply and runs `flow.sh csv-export verdict <file>`.
 5. `REVIEW: PASS` → `next` prints the next `BUILD`, until it prints `DONE`, or `HANDOFF /feature-flow csv-export` after four tickets.
@@ -66,11 +66,12 @@ Not in scope:
 | The tree is dirty after a resolved ticket | STOP | 03 |
 | The reviewer says `REVIEW: FAIL` | findings with the source "independent review", BUILD again, same round counter | 04 |
 | The reviewer's reply has no verdict | REVIEW again, STOP after 2 attempts | 04 |
-| The reviewer changed a tracked file | STOP | 04 |
+| The reviewer dirtied the tree or committed a tracked change | STOP | 04 |
 | The run limit is passed | STOP | 04 |
 | `verdict` with no review pending | exit 2, nothing changes | 04 |
 | `FLOW_TICKETS_PER_SESSION` tickets passed since `start` | `HANDOFF <line>`, exit 0 | 06 |
-| A session dies mid-build or mid-review | the next session's `start` + `next` judges the repo and continues, the attempt counts | 06 |
+| A second session starts while one owns the feature | STOP with the owner token; it cannot reset or duplicate the phase | 06 |
+| A session dies mid-build or mid-review | a new session explicitly takes over, then `next` judges the repo and continues; the attempt counts | 06 |
 | Relay mode (`FLOW_RELAY=1`) | `HANDOFF` after every BUILD and every REVIEW, with the line for the next phase | 06 |
 | The two roles are not installed (Claude) | the skill stops and says to run the installer | 07 |
 | Codex cannot start subagents | the Codex skill runs in relay mode | 08 |
@@ -84,7 +85,8 @@ Not in scope:
           start / next /      ▼   │  PLAN | BUILD | REVIEW | DONE | STOP | HANDOFF
           prompt / verdict  [scripts/flow.sh]
                              reads plans/ + git, runs gate + floor guard,
-                             state in .git/flow-<f>.state, log in .git/flow-<f>.log
+                             state + session owner in .git/flow-<f>.state,
+                             log in .git/flow-<f>.log
                               │
         BUILD  ─► builder subagent  (prompt = role + guides/build.md + ticket) ─► commits
         REVIEW ─► reviewer subagent (prompt = role + guides/review.md + ticket + sha)
@@ -100,30 +102,32 @@ Relay mode (no subagents): the same lines, but `flow.sh` prints `HANDOFF` after 
 - **Who decides the order** — a conductor script the session has to ask (as in `plans/in-session-mode` Decision C). Why: it needs no harness feature and does not depend on the model's obedience.
 - **One skill, guides as data** — options: seven skills per runtime with renderers, or one skill and guide files the script prints. Chosen: one skill. Why: the only runtime-specific text is how to spawn a subagent and how the skill is invoked, so two hand-written skills replace `skill.awk`, the renderers and the parity checker.
 - **Handoff trigger** — options: context percentage, ticket count. Chosen: ticket count (`FLOW_TICKETS_PER_SESSION`, default 4), at a ticket boundary. Why: the script can count; neither runtime is known to tell a session its context usage. Ticket 02 checks; the skill may add an early handoff if it can.
-- **State** — `.git/flow-<feature>.state` and `.git/flow-<feature>.log`. Why: survives a closed session, never dirties the tree, and is what makes resume and relay possible.
-- **Review independence** — a fresh subagent, or a fresh session in relay mode, with no Edit or Write tools where the runtime allows it. The script STOPs if a tracked file changed during a review either way.
+- **State** — `.git/flow-<feature>.state` and `.git/flow-<feature>.log`. The state includes a session-owner token and the `HEAD` at which review began. Why: it survives a closed session, never dirties the tree, makes resume and relay possible, prevents two sessions from driving the same feature, and detects reviewer commits as well as dirty files.
+- **Session ownership** — `start` creates an owner token. Every later command must present it. A second session stops unless the user explicitly authorizes takeover; `HANDOFF` releases the owner. Why: automatically treating every outstanding phase as a crashed session can start duplicate builders while the first session is still alive.
+- **Review independence** — a fresh subagent, or a fresh session in relay mode, with no Edit or Write tools where the runtime allows it. The script STOPs if the tree is dirty or `HEAD` differs from the saved review-start SHA.
 
 ## Interfaces
 
 `bash scripts/flow.sh <feature> <command>`; every command prints one line on stdout.
 
-- `start` — marks a new session (resets the per-session ticket count), prints `OK` or `PLAN` when the plan folder is missing.
+- `start` — marks a new session (resets the per-session ticket count), prints `OK <session-token>` or `PLAN` when the plan folder is missing. With an existing owner it prints `STOP`; `FLOW_TAKEOVER=1` explicitly replaces that owner after a crashed or closed session.
 - `next` — `BUILD <ticket> <NN> <base-sha>`, `REVIEW <ticket> <NN> <base-sha>`, `DONE <summary>`, `HANDOFF <line to type>` (exit 0), or `STOP <reason>` (exit 1).
 - `prompt` — the full prompt for the phase `next` last printed: role text, guide, ticket path, sha. Multi-line, plain text, runtime neutral.
 - `verdict <file>` — records the reviewer's reply; `OK` or `RETRY no review verdict`; exit 2 when no review is pending.
 
-Environment: `FLOW_DIR`, `FLOW_TICKETS`, `FLOW_MAX_RETRIES` (2), `FLOW_MAX_REVIEW_ROUNDS` (3), `FLOW_GATE`, `FLOW_SMOKE`, `FLOW_TICKETS_PER_SESSION` (4), `FLOW_RELAY` (0), `FLOW_INVOKE` (the line printed in `HANDOFF`, set by the skill: `/feature-flow` or `$feature-flow`).
+Environment: `FLOW_DIR`, `FLOW_TICKETS`, `FLOW_MAX_RETRIES` (2), `FLOW_MAX_REVIEW_ROUNDS` (3), `FLOW_GATE`, `FLOW_SMOKE`, `FLOW_TICKETS_PER_SESSION` (4), `FLOW_RELAY` (0), `FLOW_INVOKE` (the line printed in `HANDOFF`, set by the skill: `/feature-flow` or `$feature-flow`), `FLOW_SESSION` (the token returned by `start`), and `FLOW_TAKEOVER` (0; set to 1 only after explicit user confirmation).
 
 ## Migration and compatibility
 
 This plan replaces `plans/in-session-mode` and `plans/portable-runtime-skills`. Their useful parts move here: the subagent probe and the conductor from in-session-mode; nothing from the Codex hardening tickets, which only exist for the headless loop. Retiring those two folders is a separate change, not a ticket here.
 
-`install.sh` keeps its options. It stops installing `plan-feature`, `next-phase`, `review-ticket`, `run-flow` and `show-flow` and installs `feature-flow`; existing copies in a user's repo are reported, never deleted. `scripts/auto-flow.sh` is removed only after the acceptance run passes.
+`install.sh` keeps its options. It stops installing `plan-feature`, `next-phase`, `review-ticket`, `run-flow` and `show-flow` and installs `feature-flow`; existing copies in a user's repo are reported, never deleted. `scripts/auto-flow.sh` is removed only after both the Claude acceptance run and a successful Codex hand run pass.
 
 ## Risks
 
 - A subagent cannot do what the protocol assumes — tickets 01 and 02 settle it before anything depends on it.
 - Codex has no subagents and relay mode is tedious (two sessions per ticket) — acceptable as a fallback; the Codex check in ticket 13 measures it.
+- A user opens the feature in two sessions — the session-owner token stops the second driver; takeover is explicit so crash recovery cannot silently duplicate live work.
 - The review verdict is relayed by the session — a session could write `REVIEW: PASS` itself. The script verifies everything else from the repo; the README says so plainly.
 - Users who relied on `/run-flow` lose it — the README says what replaced it and that a cloud session runs unattended.
 - One skill triggers less precisely than seven — the skill is explicit-invocation only, so it runs when named.

@@ -10,17 +10,17 @@ Prepare the demo with `FLOW_AGENT=codex bash tests/smoke-real.sh --prepare DIR` 
 Record in the Answer: how many sessions it took, whether both tickets resolved with `REVIEW: PASS`, the last 20 lines of `.git/flow-hello.log`, anything the skill said that confused the user, and the cost or tokens if Codex shows them. Put these lines in the Answer exactly:
 
 ```
-Codex run finished: yes|no
+Codex run finished: yes
 Sessions used: <number>
 ```
 
 ## Not in this ticket
 
-- Fixing what the run finds: a new ticket per problem.
+- Fixing what the run finds: a new ticket per problem. If the run does not finish, leave this ticket open, add an Attempt note and make each required fix a blocker of this ticket; do not record a resolved `no` result.
 
 ## Done when
 
-- `grep -cE '^Codex run finished: (yes|no)$' plans/interactive-flow/tasks/13-codex-hand-run.md` prints `1` and `grep -cE '^Sessions used: [0-9]+$' plans/interactive-flow/tasks/13-codex-hand-run.md` prints `1`.
+- `grep -c '^Codex run finished: yes$' plans/interactive-flow/tasks/13-codex-hand-run.md` prints `1` and `grep -cE '^Sessions used: [0-9]+$' plans/interactive-flow/tasks/13-codex-hand-run.md` prints `1`.
 - The Answer contains the log lines between two lines of three backticks.
 
 ## Reference

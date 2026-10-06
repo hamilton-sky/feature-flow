@@ -8,6 +8,7 @@ Test first: no
 Add `adapters/codex/feature-flow/SKILL.md` and `adapters/codex/feature-flow/agents/openai.yaml` (with `allow_implicit_invocation: false`), written by hand, not generated. The Codex user types `$feature-flow <feature> [show] [auto]`. Frontmatter: only `name` and a quoted `description`. It follows the Claude skill step for step, with three differences:
 
 - It calls the script with `FLOW_INVOKE='$feature-flow'`, and says `<arguments>` (what the user typed after the skill name) where Claude says `$ARGUMENTS`.
+- It preserves the Claude skill's plan-commit boundary, session token on every conductor call and explicit-only takeover rule.
 - If ticket 02 found `Codex mode: subagents`, BUILD and REVIEW spawn subagents with the wording it recorded, putting the role text from `prompt` first. If it found `relay`, the skill sets `FLOW_RELAY=1`: on BUILD the session does the build itself from `prompt`; on REVIEW it does the review itself, without editing anything, saves its reply and runs `verdict`; on `HANDOFF` it tells the user to start a new session with the printed line, and for a review to start it read-only with the command ticket 02 recorded.
 - It reads `AGENTS.md` where the Claude skill reads `CLAUDE.md`.
 

@@ -7,9 +7,11 @@ Test first: no
 
 The Codex skill has two possible shapes: drive subagents like Claude Code, or relay mode, where every phase is its own session. Decide which by trying it in an interactive Codex session, locally and, if available, in Codex cloud. The user and the worker do this together.
 
+Known starting evidence (2026-10-06): the Codex desktop session used to revise this plan exposes a subagent API that starts an agent with a separate context and returns its final reply to the parent. Do not generalize that observation to every installed or cloud Codex surface; use the probe below to verify the exact environment the skill will run in.
+
 Prepare a throwaway project with `FLOW_AGENT=codex bash tests/smoke-real.sh --prepare DIR` and open Codex in DIR:
 
-1. **Subagents.** Can the session start a separate agent with its own instructions and a fresh context, and get its final reply back as text? Try the builder role (`.agents/flow-roles/ticket-builder.md` plus the `next-phase` skill text, for `hello auto`) and then the reviewer role. Check independence the same way as the Claude probe: a made-up word the parent knows and the child must not.
+1. **Subagents.** Can the session start a separate agent with its own instructions and a fresh context, and get its final reply back as text? Record the tool or API used, not only that it exists. Try the builder role (`.agents/flow-roles/ticket-builder.md` plus the `next-phase` skill text, for `hello auto`) and then the reviewer role. Check independence the same way as the Claude probe: a made-up word the parent knows and the child must not.
 2. **Read-only review.** If subagents work, can the child be limited to reading (no file edits)? If not, how does a fresh session get started read-only (for example `codex --sandbox read-only`)?
 3. **Context usage.** Can a session in Codex, and in Claude Code, read how full its own context is (a command, a status value, a tool)? Record how, or `no`.
 
