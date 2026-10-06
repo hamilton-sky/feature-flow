@@ -1,5 +1,6 @@
 """Reading and changing ticket files the way scripts/auto-flow.sh did."""
 
+import os
 import re
 from pathlib import Path
 
@@ -53,3 +54,114 @@ def commands_value(path, key):
             value = re.sub(r"^%s:[ \t]*" % re.escape(key), "", line).replace("`", "")
             return "" if value.startswith("<") else value
     return ""
+
+
+# The ticket graph, read the way the bash flow-status script's awk program reads it.
+
+STATUS_WORDS = {
+    "resolved": "resolved", "done": "resolved", "closed": "resolved",
+    "claimed": "claimed", "in-progress": "claimed",
+    "parked": "parked", "wontfix": "parked",
+    "needs-triage": "waiting", "needs-info": "waiting", "ready-for-human": "waiting", "waiting": "waiting",
+    "open": "open", "ready-for-agent": "open",
+}
+_FILE_RE = re.compile(r"^[0-9][0-9].*-.*\.md$")
+_MENTION_RE = re.compile(r"[Tt]ickets? +[0-9]+( *(,|and|&) *[0-9]+)*")
+_DIGITS_RE = re.compile(r"[0-9]+")
+
+
+def records(path):
+    """The file's lines as awk sees them: split on \\n only, no final empty record, bytes kept."""
+    text = Path(path).read_bytes().decode("utf-8", "surrogateescape")
+    if text == "":
+        return []
+    lines = text.split("\n")
+    if text.endswith("\n"):
+        lines.pop()
+    return lines
+
+
+def ticket_files(folder):
+    """What the glob [0-9][0-9]*-*.md finds in the folder, as folder/name, in name order."""
+    folder = str(folder)
+    try:
+        names = sorted(n for n in os.listdir(folder) if _FILE_RE.match(n))
+    except OSError:
+        return []
+    return ["%s/%s" % (folder, n) for n in names]
+
+
+def norm_status(value):
+    s = value.lower()
+    s = re.sub(r"^[ \t]+", "", s)
+    s = re.sub(r"[ \t(].*$", "", s, flags=re.S)
+    return STATUS_WORDS.get(s, "unknown")
+
+
+class Graph:
+    """Every ticket in a folder, keyed by number. The fields follow the awk arrays one to one."""
+
+    def __init__(self, paths):
+        self.seen = set()
+        self.dup = set()
+        self.path, self.lab, self.stat, self.title = {}, {}, {}, {}
+        self.hasstatus, self.hasdone, self.blk = {}, {}, {}
+        self.hasblk, self.hastype, self.hastf, self.hastitle = set(), set(), set(), set()
+        self.typ, self.tf = {}, {}
+        self.mentions = {}
+        for p in paths:
+            self._read(p)
+        self.order = sorted(self.seen)
+
+    def _read(self, filename):
+        lines = records(filename)
+        if not lines:
+            return  # awk never starts an empty file
+        base = filename.rsplit("/", 1)[-1]
+        label = re.match(r"^[0-9]+", base).group(0)
+        cur = int(label)
+        if cur in self.path:
+            self.dup.add(cur)
+        self.path[cur] = filename
+        self.lab[cur] = label
+        self.stat[cur] = "unknown"
+        self.hasstatus[cur] = False
+        self.hasdone[cur] = False
+        self.blk[cur] = []
+        self.title[cur] = base
+        self.seen.add(cur)
+        skipm = False
+        ment = self.mentions.setdefault(cur, [])
+        for fnr, line in enumerate(lines, 1):
+            head = fnr <= 20
+            if head and line.startswith("Status:") and not self.hasstatus[cur]:
+                self.stat[cur] = norm_status(line[len("Status:"):])
+                self.hasstatus[cur] = True
+            if head and line.startswith("Blocked by:") and cur not in self.hasblk:
+                self.hasblk.add(cur)
+                self.blk[cur].extend(int(m) for m in _DIGITS_RE.findall(line[len("Blocked by:"):]))
+            if head and line.startswith("Type:") and cur not in self.hastype:
+                self.hastype.add(cur)
+                self.typ[cur] = _first_word(line.lower(), "type:")
+            if head and line.startswith("Test first:") and cur not in self.hastf:
+                self.hastf.add(cur)
+                self.tf[cur] = _first_word(line.lower(), "test first:")
+            if line.startswith("# ") and cur not in self.hastitle:
+                self.hastitle.add(cur)
+                self.title[cur] = line[2:]
+            if line.startswith("## Done when"):
+                self.hasdone[cur] = True
+            if line.startswith("## "):
+                skipm = re.match(r"^(not in this ticket|answer|review findings)", line[3:].lower()) is not None
+                continue
+            if not skipm and fnr > 1:
+                for seg in _MENTION_RE.finditer(line):
+                    for num in _DIGITS_RE.findall(seg.group(0)):
+                        m = int(num)
+                        if m < 1000 and m not in ment:
+                            ment.append(m)
+
+
+def _first_word(lowered, key):
+    v = re.sub(r"^%s[ \t]*" % re.escape(key), "", lowered)
+    return re.sub(r"[ \t].*$", "", v, flags=re.S)

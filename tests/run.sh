@@ -249,6 +249,23 @@ mkdir -p .scratch/x/issues; ticket .scratch/x/issues/01-a.md A ready-for-agent "
 FLOW_DIR=.scratch FLOW_TICKETS=issues bash "$S" x --next > /dev/null; expect_rc "FLOW_DIR and FLOW_TICKETS relocate the tickets" 0 $?
 
 echo "floor-guard.sh"
+PARITY_LOG="$TMP/floor-guard-parity.log"
+: > "$PARITY_LOG"
+guard_both() { # floor-guard.sh-path args... -> runs it like bash would, and also runs floor-guard.py on the same args
+  local sh="$1" rc prc
+  shift
+  bash "$sh" "$@" > "$TMP/fg.sh.out" 2> "$TMP/fg.sh.err"; rc=$?
+  python3 "$ROOT/scripts/floor-guard.py" "$@" > "$TMP/fg.py.out" 2> "$TMP/fg.py.err"; prc=$?
+  if [ "$rc" = "$prc" ] && cmp -s "$TMP/fg.sh.out" "$TMP/fg.py.out" && cmp -s "$TMP/fg.sh.err" "$TMP/fg.py.err"; then
+    echo "same $*" >> "$PARITY_LOG"
+  else
+    echo "DIFF in $(pwd): $* (exit $rc vs $prc)" >> "$PARITY_LOG"
+    diff "$TMP/fg.sh.out" "$TMP/fg.py.out" >> "$PARITY_LOG"
+    diff "$TMP/fg.sh.err" "$TMP/fg.py.err" >> "$PARITY_LOG"
+  fi
+  cat "$TMP/fg.sh.out"; cat "$TMP/fg.sh.err" >&2
+  return "$rc"
+}
 D="$(newrepo guard)"
 cd "$D" || exit 1
 G="$D/scripts/floor-guard.sh"
@@ -258,14 +275,14 @@ printf 'fail_under = 80\n' > setup.cfg; printf '{}\n' > .eslintrc.json; printf '
 ticket plans/f/tasks/02-b.md B open "01" "Floor: allow skip, suppress, empty-catch, threshold, config, test-delete"
 git add -A; git commit -qm base; B0="$(git rev-parse HEAD)"
 printf 'x = 2\ny = 3\n' > src/app.py; git add -A; git commit -qm clean
-bash "$G" f 01 "$B0" > /dev/null; expect_rc "a clean diff passes" 0 $?
+guard_both "$G" f 01 "$B0" > /dev/null; expect_rc "a clean diff passes" 0 $?
 B1="$(git rev-parse HEAD)"
 printf '@pytest.mark.skip\ndef test_a():\n    assert 1 == 1\n' > tests/test_a.py
 printf 'x = 2  # noqa\ntry:\n    y = 1\nexcept Exception: pass\n' > src/app.py
 printf 'fail_under = 10\n' > setup.cfg; printf '{"rules": {}}\n' > .eslintrc.json
 git add -A; git commit -qm weaken
 git rm -q tests/test_gone.py; git commit -qm delete
-out="$(bash "$G" f 01 "$B1" 2>&1)"; rc=$?
+out="$(guard_both "$G" f 01 "$B1" 2>&1)"; rc=$?
 expect_rc "a weakening diff fails" 1 $rc
 expect_has "finds a skipped test" "skip: tests/test_a.py" "$out"
 expect_has "finds a silenced check" "suppress: src/app.py" "$out"
@@ -274,13 +291,35 @@ expect_has "finds a lowered threshold" "threshold: setup.cfg" "$out"
 expect_has "finds edited lint config" "config: .eslintrc.json" "$out"
 expect_has "finds a deleted test" "test-delete: tests/test_gone.py" "$out"
 expect_has "warns about fewer assertions" "assertion line(s) removed" "$out"
-bash "$G" f 02 "$B1" > /dev/null 2>&1; expect_rc "Floor: allow in the ticket at base lets the diff through" 0 $?
+guard_both "$G" f 02 "$B1" > /dev/null 2>&1; expect_rc "Floor: allow in the ticket at base lets the diff through" 0 $?
 ticket plans/f/tasks/01-a.md A open "—" "Floor: allow skip, suppress, empty-catch, threshold, config, test-delete, ticket-edit"
 git add -A; git commit -qm selfallow
-out="$(bash "$G" f 01 "$B1" 2>&1)"; rc=$?
+out="$(guard_both "$G" f 01 "$B1" 2>&1)"; rc=$?
 expect_rc "a worker cannot excuse itself by adding Floor: allow" 1 $rc
 expect_has "and the edit to its own header is reported" "ticket-edit: plans/f/tasks/01-a.md" "$out"
-bash "$G" f 99 "$B1" > /dev/null 2>&1; expect_rc "a missing ticket exits 2" 2 $?
+guard_both "$G" f 99 "$B1" > /dev/null 2>&1; expect_rc "a missing ticket exits 2" 2 $?
+# more fixtures, compared for parity only (the parity section below counts them). ASCII only: mawk cuts
+# a finding at 100 bytes and gawk at 100 characters, so a non-ASCII line has no single bash answer;
+# tests/py/test_floorguard.py pins the port's byte cut, which follows mawk.
+ticket plans/f/tasks/04-d.md D open "02, 03" "Floor: skip, Config"
+git add -A; git commit -qm extras-base; B2="$(git rev-parse HEAD)"
+long="$(printf 'x%.0s' $(seq 1 120))"
+printf 'it.skip("a", () => {})\nxit("b")\ntest.todo("c")\ndescribe.skip(x)\nmy_it.skip(y)\ntry { x() } catch (e) {}\ntry { y() } catch {   }\n// eslint-disable-next-line\n// @ts-ignore\nexpect(1).toBe(1)\n\t  // nolint %s\n# noqa %s cut at the hundredth character\n' "$long" "${long:0:92}" > src/web.test.js
+printf '[pytest]\naddopts = --cov-fail-under=10\n' > pytest.ini
+printf '#[ignore]\n#[allow(dead_code)]\nt.Skip("no")\n@Disabled\n' > src/lib.rs
+mkdir -p .github/workflows; printf 'on: push\n' > .github/workflows/ci.yml
+printf 'def test_b():\n    assert 2 == 2\n' > tests/test_assert_names.py
+git add -A; git commit -qm extras
+git rm -q tests/test_a.py; git commit -qm "drop test_a"
+guard_both "$G" f 03 "$B2" > /dev/null 2>&1
+guard_both "$G" f 04 "$B2" > /dev/null 2>&1
+guard_both "$G" f 03 > /dev/null 2>&1
+guard_both "$G" f 03 "" > /dev/null 2>&1
+guard_both "$G" f 03 no-such-commit > /dev/null 2>&1
+guard_both "$G" f > /dev/null 2>&1
+guard_both "$G" > /dev/null 2>&1
+FLOW_DIR=elsewhere guard_both "$G" f 03 "$B2" > /dev/null 2>&1
+FLOW_TICKETS=issues guard_both "$G" f 03 "$B2" > /dev/null 2>&1
 
 echo "floor-guard.sh, protecting the plan"
 addfloor() { awk -v l="$2" '{ print } /^Test first:/ { print l }' "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
@@ -294,7 +333,7 @@ tamper() { # name expected(clean|flag) mutation [prelude]
     base="$(git rev-parse HEAD)"
     eval "$3"
     git add -A; git commit -qm change
-    bash scripts/floor-guard.sh f 01 "$base" > .guard.out 2>&1
+    guard_both scripts/floor-guard.sh f 01 "$base" > .guard.out 2>&1
     echo $? > .guard.rc
   )
   rc="$(cat "$d/.guard.rc")"; out="$(cat "$d/.guard.out")"
@@ -323,6 +362,17 @@ tamper "commands.md may change when the ticket allows it" clean "printf 'Test: \
   "addfloor $T/01-a.md 'Floor: allow commands-edit'"
 tamper "a ticket may allow ticket-edit" clean "printf 'more\n' >> plans/f/spec.md" \
   "addfloor $T/01-a.md 'Floor: allow ticket-edit'"
+
+echo "floor-guard.sh and floor-guard.py, parity"
+PARITY_N="$(grep -c '^same ' "$PARITY_LOG")"
+PARITY_DIFF="$(grep -c '^DIFF ' "$PARITY_LOG")"
+echo "  compared floor-guard.sh and floor-guard.py on $((PARITY_N + PARITY_DIFF)) fixtures"
+if [ "$PARITY_DIFF" = 0 ] && [ "$PARITY_N" -gt 0 ]; then
+  ok "floor-guard.py prints the same and exits the same as floor-guard.sh on all $PARITY_N fixtures"
+else
+  bad "floor-guard.py prints the same and exits the same as floor-guard.sh" "$PARITY_DIFF of $((PARITY_N + PARITY_DIFF)) differ"
+  sed 's/^/        /' "$PARITY_LOG"
+fi
 
 echo "flow-status.sh, ordering hints"
 cd "$TMP" || exit 1
@@ -467,6 +517,38 @@ expect_has "and it says nothing ran" "no commands defined" "$out"
 out="$(bash "$G" nofeature 2>&1)"; rc=$?
 expect_rc "a feature without commands.md is not an error" 0 $rc
 bash "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
+
+echo "gate.sh and gate.py parity"
+# every commands.md and argument set the gate.sh checks above use, plus a few edge cases (a
+# carriage return, a whitespace-only value, output longer than 40 lines without a final newline).
+# deleted with scripts/gate.sh.
+PY_G="$D/scripts/gate.py"
+cp "$ROOT/scripts/gate.py" "$PY_G"
+mkdir -p "$D/feature_flow"
+cp "$ROOT"/feature_flow/*.py "$D/feature_flow/"
+gate_fixtures=(
+  '# Commands: f\n\nBuild: `echo building`\nTest: `echo testing`\nLint: `echo linting`\n'
+  '# Commands: f\n\nBuild: `echo building`\nTest: `echo it broke; exit 3`\nLint: `echo linting`\n'
+  '# Commands: f\n\nBuild: `<command>`\nTest:\nSmoke: `<x>`\n'
+  'Build:\t `echo crlf`\r\nTest: `   `\nLint: `echo to stderr >&2`\n'
+  'Test: `seq 60; printf no-newline; exit 4`\n'
+)
+compared=0
+diffs=""
+for fx in "${gate_fixtures[@]}"; do
+  printf "$fx" > plans/f/commands.md
+  for args in f nofeature ""; do
+    bash "$G" $args > "$TMP/gate-sh.out" 2> "$TMP/gate-sh.err"; sh_rc=$?
+    python3 "$PY_G" $args > "$TMP/gate-py.out" 2> "$TMP/gate-py.err"; py_rc=$?
+    compared=$((compared + 1))
+    if [ "$sh_rc" != "$py_rc" ] || ! cmp -s "$TMP/gate-sh.out" "$TMP/gate-py.out" || ! cmp -s "$TMP/gate-sh.err" "$TMP/gate-py.err"; then
+      diffs="$diffs [fixture $compared, args '$args': exit $sh_rc vs $py_rc]"
+    fi
+  done
+done
+rm -rf -- "$D/feature_flow" "$PY_G" "$TMP"/gate-*.out "$TMP"/gate-*.err
+echo "  compared gate.sh and gate.py on $compared fixture runs (${#gate_fixtures[@]} commands.md files x 3 argument sets)"
+if [ -z "$diffs" ]; then ok "gate.py prints and exits exactly like gate.sh"; else bad "gate.py prints and exits exactly like gate.sh" "$diffs"; fi
 
 echo "auto-flow.sh, gate and agents"
 D="$(newrepo gate_loop)"
@@ -812,6 +894,34 @@ expect_has "counts are included" '"total":3' "$out"
 [ "$(printf '%s' "$out" | jq -r '[.tickets[] | select(.ready) | .label] | join(",")')" = "02" ] && ok "readiness matches the table" || bad "readiness matches the table"
 [ "$(printf '%s' "$out" | jq -r '.tickets[2].blocked_by | join(",")')" = "01,02" ] && ok "blockers are listed" || bad "blockers are listed"
 [ "$(printf '%s' "$out" | jq -r '.tickets[0].type')" = "task" ] && ok "a missing Type defaults to task" || bad "a missing Type defaults to task"
+
+echo "flow-status.py, parity with flow-status.sh"
+# every fixture the flow-status.sh checks above use, in every mode: same stdout, same stderr, same exit code
+PY_S="$ROOT/scripts/flow-status.py"
+parity_n=0
+parity_diff=""
+status_parity() { # dir feature [env assignments...]
+  local dir="$1" feature="$2" mode a b
+  shift 2
+  for mode in "" --next --counts --check --mermaid "--mermaid plain" --json --bogus; do
+    # shellcheck disable=SC2086
+    a="$(cd "$dir" && env "$@" bash "$ROOT/scripts/flow-status.sh" "$feature" $mode 2> "$TMP/parity.err"; echo "rc=$?"; cat "$TMP/parity.err")"
+    # shellcheck disable=SC2086
+    b="$(cd "$dir" && env "$@" python3 "$PY_S" "$feature" $mode 2> "$TMP/parity.err"; echo "rc=$?"; cat "$TMP/parity.err")"
+    parity_n=$((parity_n + 1))
+    [ "$a" = "$b" ] || parity_diff="$parity_diff $feature${mode:+ $mode}"
+  done
+}
+mkdir -p "$TMP/status/plans/dup/tasks"
+ticket "$TMP/status/plans/dup/tasks/01-a.md" A open "—"; ticket "$TMP/status/plans/dup/tasks/01-b.md" B resolved "02"
+printf '# C\r\n\r\nStatus: open\r\nBlocked by: 01\r\n\r\nSee ticket 01 and 03.\r\n' > "$TMP/status/plans/dup/tasks/02-c.md"
+: > "$TMP/status/plans/dup/tasks/03-empty.md"
+for feature in f stuck done aws bad nope dup; do status_parity "$TMP/status" "$feature"; done
+status_parity "$TMP/status" "" 
+status_parity "$TMP/status" x FLOW_DIR=.scratch FLOW_TICKETS=issues
+for feature in g h; do status_parity "$TMP/ord" "$feature"; done
+status_parity "$TMP/js" f
+if [ -z "$parity_diff" ]; then ok "flow-status.py matches flow-status.sh on $parity_n fixture runs"; else bad "flow-status.py matches flow-status.sh" "differs on:$parity_diff"; fi
 
 echo "flow-view.sh"
 V="$ROOT/scripts/flow-view.sh"

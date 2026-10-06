@@ -15,11 +15,14 @@ All of feature-flow runs as Python in the `feature_flow` package (standard libra
 - See the graph: `bash scripts/flow-status.sh interactive-flow-python --mermaid` (coloured by status, drawn on demand).
 - Commands live in `commands.md` (frozen). Lessons live in `learnings.md` (append only).
 - Status lives only in the ticket files. This map never repeats it.
-- Start only after `plans/interactive-flow` ticket 10 is resolved; ticket 01 checks that.
+- Start only after `plans/interactive-flow` ticket 03 (the Python conductor) is resolved; ticket 01 checks that. Tickets 05 and 06 also wait for interactive-flow ticket 10.
 
 ## Decisions so far
 
-<One line per resolved ticket.>
+01 - prerequisites met (conductor on main); runners have Python 3.12 to 3.14 and Windows has git; the floor stays 3.9.
+02 - flow-status ported to feature_flow/status.py, ticket parsing in tickets.Graph; the conductor calls it in process.
+03 - gate ported to feature_flow/gate.py (byte-level, bash -c kept); checks.gate runs it in process; parity 15/15 in tests/run.sh
+04 - floor guard ported to feature_flow/floorguard.py (bytes, mawk semantics), conductor calls it in-process; parity on 28 fixtures, bash bugs kept and listed in the ticket.
 
 ## Open questions
 
