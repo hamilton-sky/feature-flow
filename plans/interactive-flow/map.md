@@ -20,6 +20,7 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 ## Decisions so far
 
 01 - subagents work in Claude Code: name the skill file in the prompt (`Follow .claude/skills/<skill>/SKILL.md for: <args>`), agents run in the background and the final reply arrives as a notification, the parent saves it under `.git` with Bash, and three `review-ticket` defects (Answer leak, fenced template, moving range) are fixed in `skills/review-ticket/SKILL.md`.
+02 - Codex mode is subagents: `spawn_agent` with `fork_turns="none"` gives a builder and a reviewer separate contexts and `wait_agent` returns their replies, but a child cannot be made read-only (no sandbox or tool-list argument), so the reviewer relies on its instructions plus the conductor's dirty-tree and HEAD checks, or a fresh `codex exec --sandbox read-only` session; both runtimes show context usage in their own UI.
 03 - conductor is `feature_flow/` + `scripts/flow.py`; state in `.git/flow-<f>.state`; bash checks wrapped in `checks.py`; `next` does BUILD, gate, guard, REVIEW.
 04 - `verdict <file>` records PASS/FAIL/none; `next` checks reviewer edits by tracked diff + HEAD vs review sha, then sends back, re-reviews or moves on; DONE on completion.
 06 - `start` issues an owner token required as FLOW_SESSION; HANDOFF after FLOW_TICKETS_PER_SESSION passes (never on the last ticket) or after every phase with FLOW_RELAY=1; takeover only with FLOW_TAKEOVER=1.
