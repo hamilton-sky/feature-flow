@@ -9,7 +9,7 @@ Plan or build the feature in `<arguments>`.
 
 The first word is the **feature**. `show` means draw the graph. `auto` means ask nothing and go. If no feature was given, list `plans/*/` and ask which one.
 
-The conductor is `python3 scripts/flow.py <feature> <command>`. It decides the order, runs the gate and the floor guard, and keeps its state under `.git`. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
+The conductor is `python3 scripts/flow.py <feature> <command>`. It decides the order, runs the gate and the floor guard, and keeps its state in `.feature-flow/state/`, a folder git ignores. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
 
 ## Show
 
