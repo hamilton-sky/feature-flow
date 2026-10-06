@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: 12, 13
+Blocked by: 12
 Test first: no
 Floor: allow test-delete, ticket-edit
 
@@ -30,7 +30,7 @@ Delete:
 - `grep -rlnE 'auto-flow|run-flow|next-phase|review-ticket|codex exec|flow-cost|FLOW_(AGENTS|ALLOWED_TOOLS|CLAUDE_ARGS|CODEX_ARGS|COST|MAX_TOTAL_USD|MAX_TURNS|MODEL|REVIEW|REVIEW_MODEL|SLEEP)\b|claude -p' --exclude-dir=.git --exclude-dir=interactive-flow --exclude-dir=interactive-flow-python --exclude=README.md --exclude=smoke-real.sh .` prints nothing.
 - `grep -cE 'auto-flow|run-flow' tests/smoke-real.sh` prints `0`, and `env RUN_REAL=0 bash tests/smoke-real.sh --interactive; echo $?` prints `2`.
 - `bash examples/demo.sh` still builds the demo page, and `bash tests/run.sh` exits 0.
-- Ticket 12's Answer has no `FAIL`, and ticket 13's Answer contains `Codex run finished: yes`; if either runtime did not finish successfully, this ticket stays blocked and the headless loop remains.
+- Ticket 12's Answer has no `FAIL`; if the Claude run did not finish successfully, this ticket stays blocked and the headless loop remains. (The Codex hand run was skipped by the user and the Codex runtime stays unverified by hand.)
 
 ## Reference
 
