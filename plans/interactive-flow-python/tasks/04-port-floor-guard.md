@@ -1,7 +1,7 @@
 # Port the floor guard to Python
 
 Type: convert
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 
@@ -28,3 +28,15 @@ Add a parity test to `tests/run.sh`: for every fixture the existing `floor-guard
 - spec.md § Decisions (parity first)
 
 ## Answer
+
+`feature_flow/floorguard.py` is the port (stdlib only, 3.9 syntax, git through `subprocess`), `scripts/floor-guard.py` is a shim shaped like `scripts/flow.py`, and `floor_guard()` in `feature_flow/checks.py` now calls `floorguard.run()` in-process (same signature, same `Result`: exit code and stdout plus stderr in the order written). `grep -n 'floor-guard.sh' feature_flow/*.py` prints only the usage line (see Shortcuts taken); nothing shells out to it. `scripts/floor-guard.sh` is untouched.
+
+The diff is handled as bytes, like mawk (the awk on Ubuntu and in this container): bytes regexes, `substr(text, 1, 100)` cuts at 100 bytes, `tolower` is ASCII only, and the escapes `awk -v allow=...` interprets (`\t`, `\\`, octal, `\x`) are applied as mawk does. Text is decoded with `surrogateescape`, so the shim writes back exactly the bytes git gave.
+
+Parity: `tests/run.sh` now runs every existing floor-guard call (the guard repo cases and all 14 `tamper` cases) through `guard_both`, which runs `bash scripts/floor-guard.sh` and `python3 scripts/floor-guard.py` with the same arguments and compares stdout, stderr and exit code. Nine parity-only fixtures cover what the old checks did not reach: JS, Rust and Go skips and suppressions, both `catch {}` forms, a `--cov-fail-under` threshold, a workflow config file, a line cut inside a two byte character, `Floor:` without `allow`, the default and the empty base, a bad base (git's exit 128), missing arguments, and `FLOW_DIR` / `FLOW_TICKETS`. Result: `compared floor-guard.sh and floor-guard.py on 28 fixtures`, no difference. `bash tests/run.sh`: 512 passed, 0 failed. `python3 -m unittest discover -s tests/py`: 36 tests OK, 22 of them new in `tests/py/test_floorguard.py`.
+
+Shortcuts taken:
+- Bugs kept from the bash version: a `Floor:` line without `allow` still allows its words (`Floor: skip` allows skip); an added line starting `++ ` shows as `+++ ` in the diff and is read as a file header; a removed map.md or learnings.md line starting `--` is skipped as a `---` header; the assertion count also counts `--- a/...` and `+++ b/...` header lines whose path contains `assert`. Each wants its own ticket after the switch-over.
+- The usage line still says `usage: bash scripts/floor-guard.sh ...` for parity, so the Done-when grep prints that one line. The switch-over ticket (07) changes it to `.py`.
+- Platform details not reproduced: bash's glob order follows the locale collation, the port sorts by code point (the same for ASCII names); bash drops NUL bytes from `$(...)`; GNU grep's `.` may not match invalid UTF-8 in a UTF-8 locale; gawk (character based `substr`, unicode `tolower`) would differ from mawk on non-ASCII lines, and the port follows mawk.
+- In-process, `checks.floor_guard` decodes undecodable bytes with replacement characters, where the old subprocess call would have raised on them.

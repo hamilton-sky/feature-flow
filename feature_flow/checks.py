@@ -9,6 +9,7 @@ from pathlib import Path
 
 from feature_flow import status
 from feature_flow import gate as gate_module
+from feature_flow import floorguard
 
 
 class Result:
@@ -56,7 +57,11 @@ def gate(scripts, feature):
 
 
 def floor_guard(scripts, feature, num, base):
-    return _bash(Path(scripts) / "floor-guard.sh", feature, num, base)
+    """feature_flow.floorguard in-process; stdout and stderr are folded together in order."""
+    chunks = []
+    code = floorguard.run([str(feature), str(num), str(base)], chunks.append, chunks.append)
+    out = "".join(chunks).encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+    return Result(code, out)
 
 
 def smoke(command):
