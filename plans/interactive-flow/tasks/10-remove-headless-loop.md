@@ -1,7 +1,7 @@
 # Remove the headless loop
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 12
 Test first: no
 Floor: allow test-delete, ticket-edit
@@ -38,3 +38,40 @@ Delete:
 - spec.md § Migration and compatibility
 
 ## Answer
+
+feature-flow is interactive only. Ticket 12's Answer records the real Claude run passing
+(16 `ok`, no `FAIL`, exit 0). Ticket 13 was skipped by the user, so Codex stays unverified by hand.
+
+Deleted:
+- `scripts/auto-flow.sh`.
+- `skills/run-flow/`, `skills/next-phase/`, `skills/review-ticket/`, `skills/plan-feature/`
+  and `skills/show-flow/`.
+- `plans/in-session-mode/` and `plans/portable-runtime-skills/`.
+- The cost log: `ticket_cost` and `COST_LOG` in `scripts/flow-view.sh`, the cost chip, node
+  label and detail box in `scripts/flow-view.html`, and the fake cost log in `examples/demo.sh`.
+- In `tests/run.sh`: the fake `claude` and fake `codex` (nothing else used them), the `flow`
+  helper that drove `auto-flow.sh`, and the sections "auto-flow.sh", "auto-flow.sh, cost,
+  limits and smoke", "auto-flow.sh, protecting the plan", "auto-flow.sh, gate and agents" and
+  "auto-flow.sh, codex".
+- In `tests/smoke-real.sh`: the real-run branches that started `auto-flow.sh`. With no option,
+  or an unknown one, it prints the usage and exits 2. `--prepare` and `--interactive` are kept.
+
+Changed so that no old name remains:
+- The roles `agents/ticket-builder.md` and `ticket-reviewer.md` follow "the build guide" or
+  "the review guide in your prompt", not a skill.
+- `prompts.py` introduces the guides without naming a skill.
+- The docstrings in `conductor.py` and `tickets.py` no longer name `auto-flow.sh`.
+- `install.sh` no longer names the old skills or reports them. A test now checks that only the
+  three skills are installed, and that a skill the installer does not own is left alone.
+- The Codex skill drops the optional `codex exec --sandbox read-only` reviewer.
+- The guides check looks for `/feature-flow`/`$feature-flow` instead of the old skill names.
+
+Proof:
+- The deletion `test ! -e ...` chain from Done when succeeds.
+- The Done when `grep -rlnE ...` prints nothing (exit 1).
+- `grep -cE 'auto-flow|run-flow' tests/smoke-real.sh` prints `0`.
+- `env RUN_REAL=0 bash tests/smoke-real.sh --interactive; echo $?` prints the refusal, then `2`.
+- `bash examples/demo.sh` writes `.git/flow-demo.html`.
+- `bash tests/run.sh`: 359 passed, 0 failed. The count is down from 520 because the
+  headless checks went with the loop.
+- `python3 -m unittest discover -s tests/py`: OK.

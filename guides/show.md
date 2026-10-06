@@ -24,7 +24,7 @@ Run `bash scripts/flow-status.sh <feature>` and `--counts`, then write a few lin
 
 - **Replay** plays the run back from git history: tickets turn green in the order they resolved, and a ticket sent back flashes red.
 - Dashes flow along the edges into tickets that are ready to start. Ready tickets pulse, and a ticket being worked spins.
-- Hover or click a ticket for its blockers, Done when, Answer, rounds sent back and cost.
+- Hover or click a ticket for its blockers, Done when, Answer, and the rounds it was sent back.
 - **Now** returns to the current state. The Theme button switches light and dark. Space plays or pauses, the arrow keys step, `t` switches theme.
 
-The page needs no server and no network. It is generated from the ticket files, the git history and the cost log, so it is always read only.
+The page needs no server and no network. It is generated from the ticket files and the git history, so it is always read only.

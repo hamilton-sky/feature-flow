@@ -9,7 +9,7 @@ Plan or build the feature in `<arguments>`.
 
 The first word is the **feature**. `show` means draw the graph. `auto` means ask nothing and go. If no feature was given, list `plans/*/` and ask which one.
 
-The conductor is `python3 scripts/flow.py <feature> <command>`. It decides the order, runs the gate and the floor guard, and keeps its state under `.git`. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
+The conductor is `python3 scripts/flow.py <feature> <command>`. It decides the order, runs the gate and the floor guard, and keeps its state in `.feature-flow/state/`, a folder git ignores. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
 
 ## Show
 
@@ -50,10 +50,6 @@ Run `next`, act on its one line, and repeat:
 A conductor command looks like this:
 
     FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> next
-
-If the user wants a reviewer that cannot write at all, run the review as a fresh read-only Codex session instead of a subagent, then run `verdict` on its reply as above:
-
-    FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> prompt | codex exec --sandbox read-only -o .feature-flow/state/flow-review-<feature>.txt -
 
 ## Rules while building
 

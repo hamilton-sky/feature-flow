@@ -1,4 +1,4 @@
-"""Reading and changing ticket files the way scripts/auto-flow.sh did."""
+"""Reading and changing ticket files."""
 
 import os
 import re

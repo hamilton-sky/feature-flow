@@ -1,7 +1,7 @@
 #!/bin/bash
 # usage: bash scripts/flow-view.sh <feature> [--watch] [--no-open] [--out FILE]
 # writes one self contained HTML page that shows the ticket graph, animated, and opens it.
-# the page can replay the run from git history and shows the cost per ticket from the cost log.
+# the page can replay the run from git history.
 # --watch rewrites the page every few seconds until the feature is complete.
 # env: FLOW_DIR, FLOW_TICKETS (ticket location), FLOW_NO_OPEN=1 (never open a browser),
 #      FLOW_WATCH_SECONDS (default 3)
@@ -45,7 +45,6 @@ GITDIR="$(git rev-parse --absolute-git-dir 2> /dev/null || true)"
 if [ -z "$OUT" ]; then
   if [ -n "$GITDIR" ]; then OUT="$GITDIR/flow-$FEATURE.html"; else OUT="${TMPDIR:-/tmp}/flow-$FEATURE.html"; fi
 fi
-COST_LOG="$GITDIR/flow-cost-$FEATURE.log"
 
 JSTR='function jstr(s,   n, i, c, o) {
   o = "\""
@@ -113,14 +112,6 @@ ticket_history() {
   printf '[%s]' "$out"
 }
 
-ticket_cost() {
-  if [ -f "$COST_LOG" ]; then
-    awk -F, -v name="$1" '$2 == name { c[$3] += $5; n++ } END { printf "{\"build\":%.4f,\"review\":%.4f,\"sessions\":%d}", c["build"] + 0, c["review"] + 0, n + 0 }' "$COST_LOG"
-  else
-    printf '{"build":0,"review":0,"sessions":0}'
-  fi
-}
-
 build_json() {
   local core file name label details=""
   core="$(bash "$STATUS" "$FEATURE" --json)"
@@ -128,7 +119,7 @@ build_json() {
     [ -e "$file" ] || continue
     name="$(basename "$file" .md)"
     label="${name%%-*}"
-    details="$details${details:+,}\"$label\":$(ticket_extras "$file"),\"history\":$(ticket_history "$file"),\"cost\":$(ticket_cost "$name")}"
+    details="$details${details:+,}\"$label\":$(ticket_extras "$file"),\"history\":$(ticket_history "$file")}"
   done
   printf '%s,"generated":"%s","details":{%s}}' "${core%\}}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$details"
 }

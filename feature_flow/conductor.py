@@ -1,7 +1,6 @@
 """The state machine that tells an interactive session what to do next.
 
-It copies the policy of the old headless loop (scripts/auto-flow.sh): the same limits,
-retries, review rounds and messages. It judges every phase from the repo, never from the
+It sets the limits, retries and review rounds. It judges every phase from the repo, never from the
 caller, and prints exactly one line per command.
 """
 
