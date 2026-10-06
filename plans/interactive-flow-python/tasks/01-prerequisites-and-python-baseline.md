@@ -7,7 +7,7 @@ Test first: no
 
 This plan ports the remaining bash scripts and must not start before `plans/interactive-flow` has written the Python conductor. Confirm that, and record which Python the places feature-flow runs in actually have, so the ports target a version that exists everywhere.
 
-The user chose on 2026-10-06 to start the ports before the headless loop is removed. Only two ports touch what `plans/interactive-flow` is still changing: ticket 05 waits for its ticket 10 (the cost log leaves `flow-view.sh`) and ticket 06 for its ticket 14 (`install.sh` changes). Each of those tickets says so.
+The user chose on 2026-10-06 to start the ports before the headless loop is removed. Only two ports touch what `plans/interactive-flow` ticket 10 deletes: ticket 05 (the cost log leaves `flow-view.sh`) and ticket 06 (`install.sh` stops installing the headless parts). Both wait for it and say so.
 
 1. Run `bash scripts/flow-status.sh interactive-flow`. Ticket 03 there must be resolved and `feature_flow/conductor.py` must exist.
 2. Record `python3 --version` (or `python --version`) in a Claude Code cloud session, a Codex cloud task, the GitHub macOS and Windows runners, and the maintainer's own machine. Record whether `git` is on the PATH on the Windows runner.
@@ -47,7 +47,7 @@ Python floor: 3.9
 Windows runner has git: yes
 ```
 
-Prerequisites, checked on main at 011bfde: interactive-flow ticket 03 is resolved and `feature_flow/conductor.py` exists. Ticket 10 is still open, which the user accepted on 2026-10-06; tickets 05 and 06 here wait for interactive-flow tickets 10 and 14.
+Prerequisites, checked on main at 011bfde: interactive-flow ticket 03 is resolved and `feature_flow/conductor.py` exists. Ticket 10 is still open, which the user accepted on 2026-10-06; tickets 05 and 06 here wait for interactive-flow ticket 10.
 
 Python found, per place:
 - Claude Code cloud session: Python 3.13.16.
