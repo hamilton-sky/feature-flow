@@ -55,7 +55,9 @@ If the user wants a reviewer that cannot write at all, run the review as a fresh
 
     FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> prompt | codex exec --sandbox read-only -o .git/flow-review-<feature>.txt -
 
-## Rules
+## Rules while building
+
+These apply from `start` on, once a plan exists. Planning (above) writes the plan files itself.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
 - Never edit a ticket, the plan or the code, and never commit. The builder does that.

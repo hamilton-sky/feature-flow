@@ -1179,6 +1179,12 @@ D="$(flowrepo pyflow_prompt_root)"; cd "$D" || exit 1
 cp -R "$ROOT/guides" "$ROOT/agents" .; git add -A; git commit -qm "guides beside scripts"
 pyflow f next; pyflow f prompt
 expect_has "guides and agents beside scripts/ are found too" "You are the builder." "$OUT"
+D="$(flowrepo pyflow_prompt_other)"; cd "$D" || exit 1
+mkdir -p guides agents .feature-flow; echo "the user's own notes" > guides/notes.md; echo "x" > agents/mine.md
+cp -R "$ROOT/guides" "$ROOT/agents" .feature-flow/; git add -A; git commit -qm "own guides/ and agents/ folders"
+pyflow f next; pyflow f prompt
+expect_rc "an unrelated guides/ or agents/ folder does not hide .feature-flow/" 0 "$RC"
+expect_has "and the installed role is used" "You are the builder." "$OUT"
 cd "$ROOT" || exit 1
 
 echo "feature-flow skills"

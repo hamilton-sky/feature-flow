@@ -29,7 +29,7 @@ With a plan present, check these before `start`, and stop at the first that fail
 
 - `git status --porcelain` is empty.
 - `bash scripts/flow-status.sh <feature> --check` prints `OK`.
-- `ticket-builder.md` and `ticket-reviewer.md` are in `.claude/agents/` or `~/.claude/agents/`. If not, say to run `bash install.sh` from feature-flow.
+- `ticket-builder.md` and `ticket-reviewer.md` are in `.claude/agents/`, `~/.claude/agents/`, or `$CLAUDE_HOME/agents/` when `CLAUDE_HOME` is set. If not, say to run `bash install.sh` from feature-flow.
 
 Then run `FLOW_INVOKE=/feature-flow python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE=/feature-flow`.
 
@@ -51,7 +51,9 @@ A conductor command looks like this:
 
     FLOW_SESSION=<token> FLOW_INVOKE=/feature-flow python3 scripts/flow.py <feature> next
 
-## Rules
+## Rules while building
+
+These apply from `start` on, once a plan exists. Planning (above) writes the plan files itself.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
 - Never edit a ticket, the plan or the code, and never commit. The builder does that.
