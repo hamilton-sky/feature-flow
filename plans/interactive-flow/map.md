@@ -1,0 +1,29 @@
+# Map: interactive-flow
+
+## Destination
+
+A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feature>` (Codex: `$feature-flow <feature>`) and the feature gets planned or built in that session. `scripts/flow.sh` owns the order of phases, the limits and the handoff, and prints the prompt for each phase from runtime-neutral guides. The session hands each build and each review to a fresh subagent, or, where a runtime has none, to a fresh session through the handoff. The installer installs one skill per runtime instead of seven, `adapters/codex/skill.awk` is gone, and the headless loop (`auto-flow.sh`, `/run-flow`) is removed once the acceptance run passes. This plan replaces `plans/in-session-mode` and `plans/portable-runtime-skills`.
+
+**The bar.** `RUN_REAL=1 FLOW_TICKETS_PER_SESSION=1 bash tests/smoke-real.sh --interactive` runs two `claude -p "/feature-flow hello auto"` sessions on the demo project: the first ends on `HANDOFF` after ticket 01, the second finishes ticket 02. Both tickets resolved, a clean tree, gate and floor guard run after each ticket, a reviewer subagent's `REVIEW: PASS` for each: a list of `ok` checks, no `FAIL`, exit 0. Ticket 12 runs it.
+
+## How to work this
+
+- See what is ready: `bash scripts/flow-status.sh interactive-flow`. Take the lowest numbered READY ticket.
+- Claim: set `Status: claimed` in the ticket and save before starting.
+- Resolve: write the result under `## Answer`, set `Status: resolved`, then add one line to
+  Decisions so far below.
+- See the graph: `bash scripts/flow-status.sh interactive-flow --mermaid` (coloured by status, drawn on demand).
+- Commands live in `commands.md` (frozen). Lessons live in `learnings.md` (append only).
+- Status lives only in the ticket files. This map never repeats it.
+- Work this plan with `/next-phase`, not the unattended loop. Tickets 01, 02, 12 and 13 are probes or paid runs that need a person in an interactive session, and ticket 10 deletes the loop itself.
+
+## Decisions so far
+
+<One line per resolved ticket.>
+
+## Open questions
+
+- Whether Codex can start a subagent from a session (ticket 02). If not, Codex runs in relay mode.
+- Whether either runtime tells a session how full its context is (ticket 02). If so, the skill may hand off early, at a ticket boundary.
+- Distribution after this plan: fetch a pinned feature-flow tag at run time, or a PyPI package (`uvx feature-flow@X`). A later plan, once `flow.sh`'s commands are stable.
+- Whether `architect-review` and `automation-design` become guides behind the one skill. Left as standalone skills here.
