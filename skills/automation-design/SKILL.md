@@ -1,6 +1,6 @@
 ---
 name: automation-design
-description: Design an enterprise-grade automation pipeline or workflow system. Takes a plain-language description of what needs to be automated and produces a full technical blueprint: pipeline stages, fault-tolerance model, state machine, data contracts, observability plan, and a phased implementation plan that /plan-feature can turn into tickets.
+description: Design an enterprise-grade automation pipeline or workflow system. Takes a plain-language description of what needs to be automated and produces a full technical blueprint: pipeline stages, fault-tolerance model, state machine, data contracts, observability plan, and a phased implementation plan that the feature-flow skill can turn into tickets.
 argument-hint: "[plain-language description of the automation, e.g., 'auto-retry failed jobs with backoff', 'nightly batch import pipeline', 'resume interrupted uploads']"
 ---
 
@@ -235,7 +235,7 @@ Produce a phased plan. Each phase should be small enough to become one ticket:
 
 Ask the user: "Should I turn this design into a plan at `plans/[automation-name]/` (a spec, a map and a graph of tickets)?"
 
-If yes → run `/plan-feature [automation-name]` using this blueprint as the specification.
+If yes → plan it with the feature-flow skill (`/feature-flow [automation-name]` in Claude Code, `$feature-flow [automation-name]` in Codex), using this blueprint as the specification.
 
 ---
 
