@@ -1210,6 +1210,48 @@ expect_has "relay: the third session gets the next ticket" "BUILD plans/f/tasks/
 unset FLOW_SESSION FLOW_RELAY
 cd "$ROOT" || exit 1
 
+echo "flow.py, guides and prompt"
+for g in build review plan show; do
+  if [ -f "$ROOT/guides/$g.md" ]; then ok "guides/$g.md exists"; else bad "guides/$g.md exists"; fi
+  n="$(grep -cE '\$ARGUMENTS|/next-phase|/review-ticket|\$next-phase' "$ROOT/guides/$g.md")"
+  expect_rc "guides/$g.md names no runtime's skill invocation" 0 "$n"
+done
+if [ -f "$ROOT/guides/templates/ticket.md" ]; then ok "guides/templates/ticket.md exists"; else bad "guides/templates/ticket.md exists"; fi
+D="$(flowrepo pyflow_prompt)"
+cd "$D" || exit 1
+mkdir -p .feature-flow
+cp -R "$ROOT/guides" "$ROOT/agents" .feature-flow/
+git add -A; git commit -qm "install guides"
+pyflow f prompt
+expect_rc "prompt with nothing pending exits 2" 2 "$RC"
+SHA="$(git rev-parse HEAD)"
+pyflow f next
+pyflow f prompt
+expect_rc "prompt after BUILD exits 0" 0 "$RC"
+expect_has "the build prompt has the builder role" "You are the builder. You build one ticket, then stop." "$OUT"
+expect_has "and the build guide" "Lazy about the solution, never about reading." "$OUT"
+expect_has "and the ticket" "plans/f/tasks/01-a.md" "$OUT"
+expect_lacks "and no frontmatter" "name: ticket-builder" "$OUT"
+for ph in '<ticket>' '<NN>' '<sha>' '<feature>'; do expect_lacks "no $ph placeholder is left" "$ph" "$OUT"; done
+resolve plans/f/tasks/01-a.md
+pyflow f next
+pyflow f prompt
+expect_has "the review prompt has the reviewer role" "You are the reviewer, not the author." "$OUT"
+expect_has "and the review guide" "Verdict 1: does it meet the ticket?" "$OUT"
+expect_has "and the base sha" "$SHA" "$OUT"
+for ph in '<ticket>' '<NN>' '<sha>'; do expect_lacks "no $ph placeholder is left in the review prompt" "$ph" "$OUT"; done
+printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
+for t in 02-b 03-c 04-d; do pyflow f next; resolve "plans/f/tasks/$t.md"; pyflow f next; pyflow f verdict .git/reply.txt; done
+pyflow f next
+expect_has "the run finishes" "DONE" "$OUT"
+pyflow f prompt
+expect_rc "prompt after DONE exits 2" 2 "$RC"
+D="$(flowrepo pyflow_prompt_root)"; cd "$D" || exit 1
+cp -R "$ROOT/guides" "$ROOT/agents" .; git add -A; git commit -qm "guides beside scripts"
+pyflow f next; pyflow f prompt
+expect_has "guides and agents beside scripts/ are found too" "You are the builder." "$OUT"
+cd "$ROOT" || exit 1
+
 echo "smoke-real.sh, prepare only"
 SM="$ROOT/tests/smoke-real.sh"
 mkdir -p "$TMP/nobin"

@@ -10,7 +10,7 @@ import re
 import secrets
 from pathlib import Path
 
-from feature_flow import checks, git, state, tickets
+from feature_flow import checks, git, prompts, state, tickets
 
 
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
@@ -20,8 +20,8 @@ class Stop(Exception):
     """A problem the session must report. Printed as `STOP <reason>`, exit 1."""
 
 
-class NoReview(Exception):
-    """`verdict` with no review pending: nothing changes, exit 2."""
+class NoPhase(Exception):
+    """`prompt` or `verdict` with nothing for it pending: nothing changes, exit 2."""
 
 
 def _env_int(name, default):
@@ -259,11 +259,22 @@ class Conductor:
             raise Stop("no review verdict for %s after %d attempt(s)" % (self.ticket_name(), self.max_retries))
         return self.hand_out_review()
 
+    def prompt(self):
+        """The full prompt for the BUILD or REVIEW that `next` handed out. Exit 2 (NoPhase) when none is."""
+        self.check_owner()
+        phase = self.get("phase")
+        if phase not in ("build", "review"):
+            raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
+        try:
+            return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"))
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+
     def verdict(self, reply):
-        """Record the reviewer's reply. Exit 2 (NoReview) unless a review is pending."""
+        """Record the reviewer's reply. Exit 2 (NoPhase) unless a review is pending."""
         self.check_owner()
         if self.get("phase") != "review":
-            raise NoReview("no review is pending for %s" % self.feature)
+            raise NoPhase("no review is pending for %s" % self.feature)
         try:
             text = Path(reply).read_text(encoding="utf-8", errors="replace")
         except OSError as err:

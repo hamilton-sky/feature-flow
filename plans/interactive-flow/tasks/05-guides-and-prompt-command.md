@@ -1,7 +1,7 @@
 # Turn the protocols into guides and add the prompt command
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01, 04
 Test first: yes
 
@@ -30,3 +30,24 @@ Find `guides/` and `agents/` next to the script first (`$(dirname "$0")/../guide
 - agents/*.md
 
 ## Answer
+
+Built: `guides/build.md`, `guides/review.md`, `guides/plan.md` and `guides/show.md`, copied from the `next-phase`, `review-ticket` (with the three probe fixes from ticket 01), `plan-feature` and `show-flow` skills. `guides/templates/` is copied from `skills/plan-feature/templates/`. Each guide drops its frontmatter and gets a heading. Every rule is kept. Only runtime wording changed:
+- `$ARGUMENTS` is now "you are given ...".
+- The `claude -p "/review-ticket ..."` commands are now "hand it to a fresh reviewer (a subagent, or a new session) with the ticket-reviewer role and the review guide".
+- `CLAUDE.md` is now "the project's agent instructions file, CLAUDE.md or AGENTS.md".
+- The `/next-phase` and `auto-flow.sh` "what next" lines now point at the feature-flow skill.
+- "The unattended loop" is now "the flow" (also in `guides/templates/commands.md`).
+
+The old skills are untouched. I also added `python3 scripts/flow.py <feature> prompt` (`feature_flow/prompts.py`, `Conductor.prompt`).
+
+Proven: `bash tests/run.sh` 522 passed, 0 failed, with a `flow.py, guides and prompt` section covering each bullet. All five `ls` paths exist. The grep prints 0 for each guide. The build prompt contains the builder role, a guide line and `plans/f/tasks/01-a.md`, with no `<ticket>`, `<NN>`, `<sha>` or `<feature>` left. The review prompt contains the reviewer role and the base sha. `prompt` exits 2 before the first `next` and after DONE. `git status --porcelain` was empty afterwards.
+
+Decisions: the prompt pastes the role and the guide rather than naming files. Ticket 01 found both work and naming is cheaper. Pasting needs no path that a subagent might resolve differently (`guides/` beside `scripts/`, or `.feature-flow/guides/`), and it is what this ticket's Done when checks. If cost matters later, switching to a file-named prompt is a change inside `prompts.build`. The guide's generic placeholders `<feature>`, `<NN>`, `<base>`, `<base-commit>` and `<start-commit>` are filled with the real values.
+
+Shortcuts taken: none.
+
+For later tickets:
+- Prompt layout: role body, `---`, one line saying the guide is the skill the role names, the guide, `---`, then the task. The task gives the ticket path, number, base sha and the `auto` arguments, and tells the agent to run `git log`/`git status` itself (ticket 01's stale-snapshot finding). The review task ends with "Your final reply must end with exactly `REVIEW: PASS` or `REVIEW: FAIL`", which is ticket 02's wording.
+- `prompt` honours `FLOW_SESSION` like `next` and `verdict`. It exits 2 when no BUILD or REVIEW is pending, and STOPs when `agents/` or `guides/` can't be found.
+- The skills (07, 08) must still tell the session three things: an Agent call returns before the reply (wait for the notification, or `wait_agent` in Codex), save the reply with Bash to `.git/flow-review-<feature>.txt`, then run `verdict` on that file.
+- Ticket 09 must install `guides/` and `agents/` (or the role files) into `.feature-flow/`, along with `feature_flow/`.
