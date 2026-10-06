@@ -135,8 +135,9 @@ codex_header() {
     fm && /^name:/ { print; next }
     fm && /^description:/ {
       d = substr($0, 13); sub(/^[ \t]+/, "", d); sub(/[ \t]+$/, "", d)
-      gsub(/\\/, "\\\\", d); gsub(/"/, "\\\"", d)
-      print "description: \"" d "\""; next
+      e = ""
+      for (i = 1; i <= length(d); i++) { c = substr(d, i, 1); if (c == "\\" || c == "\"") e = e "\\"; e = e c }
+      print "description: \"" e "\""; next
     }
     fm { next }
     { print }
