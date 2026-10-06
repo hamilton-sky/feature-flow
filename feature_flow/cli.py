@@ -3,10 +3,10 @@
 import sys
 from pathlib import Path
 
-from feature_flow.conductor import Conductor, Stop
+from feature_flow.conductor import Conductor, NoReview, Stop
 
-USAGE = "usage: python3 scripts/flow.py <feature> next"
-COMMANDS = ("next",)
+USAGE = "usage: python3 scripts/flow.py <feature> next | verdict <file>"
+COMMANDS = ("next", "verdict")
 
 
 def main(argv=None, scripts=None):
@@ -15,16 +15,21 @@ def main(argv=None, scripts=None):
         print(USAGE, file=sys.stderr)
         return 2
     feature, command = args[0], args[1]
+    if (command == "verdict") != (len(args) == 3) or len(args) > 3:
+        print(USAGE, file=sys.stderr)
+        return 2
     scripts = Path(scripts) if scripts else Path.cwd() / "scripts"
+    conductor = None
     try:
         conductor = Conductor(feature, scripts)
-        line = conductor.next()
+        line = conductor.verdict(args[2]) if command == "verdict" else conductor.next()
+    except NoReview as err:
+        print(err, file=sys.stderr)
+        return 2
     except Stop as stop:
         line = "STOP %s" % stop
-        try:
+        if conductor is not None:
             conductor.log("STOP")
-        except Exception:
-            pass
         print(line)
         return 1
     print(line)

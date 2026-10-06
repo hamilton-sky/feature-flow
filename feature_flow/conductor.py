@@ -6,13 +6,21 @@ caller, and prints exactly one line per command.
 """
 
 import os
+import re
 from pathlib import Path
 
 from feature_flow import checks, git, state, tickets
 
 
+VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
+
+
 class Stop(Exception):
     """A problem the session must report. Printed as `STOP <reason>`, exit 1."""
+
+
+class NoReview(Exception):
+    """`verdict` with no review pending: nothing changes, exit 2."""
 
 
 def _env_int(name, default):
@@ -38,6 +46,7 @@ class Conductor:
             raise Stop("not inside a git repository")
         self.state_file = state.state_path(gdir, feature)
         self.log_file = state.log_path(gdir, feature)
+        self.findings_file = Path(gdir) / ("flow-%s.findings" % feature)
         self.st = state.load(self.state_file)
 
     # ---- small helpers -------------------------------------------------
@@ -192,5 +201,38 @@ class Conductor:
         return self.pick_ticket()
 
     def judge_review(self):
-        # the verdict arrives in ticket 04; until then a pending review is handed out again
-        return self.emit("REVIEW %s %s %s" % (self.ticket(), self.get("num"), self.get("base")))
+        if not git.tracked_clean() or git.head() != self.get("review_sha"):
+            raise Stop("the reviewer changed tracked files, which a reviewer must never do")
+        verdict = self.get("verdict")
+        self.st["verdict"] = ""
+        if verdict == "pass":
+            self.st["phase"] = ""
+            self.st["done"] = self.num("done") + 1
+            self.save()
+            return self.pick_ticket()
+        if verdict == "fail":
+            findings = self.findings_file.read_text(encoding="utf-8") if self.findings_file.is_file() else ""
+            return self.send_back("independent review", findings)
+        if self.num("review_attempt") >= self.max_retries:
+            raise Stop("no review verdict for %s after %d attempt(s)" % (self.ticket_name(), self.max_retries))
+        return self.hand_out_review()
+
+    def verdict(self, reply):
+        """Record the reviewer's reply. Exit 2 (NoReview) unless a review is pending."""
+        if self.get("phase") != "review":
+            raise NoReview("no review is pending for %s" % self.feature)
+        try:
+            text = Path(reply).read_text(encoding="utf-8", errors="replace")
+        except OSError as err:
+            raise Stop("cannot read the review reply %s: %s" % (reply, err.strerror))
+        found = ""
+        for line in text.splitlines():
+            match = VERDICT.match(line)
+            if match:
+                found = match.group(1).lower()
+        if found == "fail":
+            self.findings_file.write_text("\n".join(text.splitlines()[:120]) + "\n", encoding="utf-8")
+        self.st["verdict"] = found or "none"
+        self.save()
+        self.log("VERDICT-%s" % (found or "none").upper())
+        return "OK" if found else "RETRY no review verdict"

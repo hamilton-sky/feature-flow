@@ -1043,6 +1043,90 @@ pyflow f next
 expect_has "a resolved ticket with a dirty tree stops" "STOP working tree is dirty after 01-a, it should have been committed" "$OUT"
 cd "$ROOT" || exit 1
 
+echo "flow.py, review verdict and finish"
+reply() { printf 'SPEC\n- checked\n%s\n' "$1" > .git/reply.txt; }
+D="$(flowrepo pyflow_review)"
+cd "$D" || exit 1
+pyflow f verdict .git/reply.txt
+expect_rc "verdict with no review pending exits 2" 2 "$RC"
+pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
+before="$(cat .git/flow-f.state; git rev-parse HEAD; git status --porcelain)"
+reply "REVIEW: PASS"
+pyflow f verdict .git/reply.txt
+expect_has "a PASS reply is recorded" "OK" "$OUT"
+expect_has "and logged" "VERDICT-PASS" "$(cat .git/flow-f.log)"
+pyflow f next
+expect_has "after PASS next hands out the next ticket" "BUILD plans/f/tasks/02-b.md 02" "$OUT"
+pyflow f verdict .git/reply.txt
+expect_rc "verdict after the review was judged exits 2" 2 "$RC"
+for t in 02-b 03-c 04-d; do
+  resolve "plans/f/tasks/$t.md"; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next
+done
+expect_rc "on the last ticket next exits 0" 0 "$RC"
+expect_has "and prints DONE" "DONE f is complete" "$OUT"
+
+D="$(flowrepo pyflow_reviewfail)"
+cd "$D" || exit 1
+pyflow f next
+for r in 1 2 3 4; do
+  resolve plans/f/tasks/01-a.md; pyflow f next
+  reply "1. major x.py: a bug round $r
+REVIEW: FAIL"
+  pyflow f verdict .git/reply.txt; pyflow f next
+  if [ "$r" = 1 ]; then
+    expect_has "a FAIL reply builds the ticket again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
+    expect_has "with the reply under its findings heading" "## Review findings (round 1, independent review)" "$(cat plans/f/tasks/01-a.md)"
+    expect_has "and the reviewer's text" "major x.py: a bug round 1" "$(cat plans/f/tasks/01-a.md)"
+    expect_has "committed" "chore(f): 01 review findings, round 1" "$(git log -1 --format=%s)"
+    expect_has "and logged" "VERDICT-FAIL" "$(cat .git/flow-f.log)"
+  fi
+done
+expect_rc "the 4th review failure exits 1" 1 "$RC"
+expect_has "and stops after 3 rounds" "STOP 01-a still fails the independent review after 3 round(s)" "$OUT"
+
+D="$(flowrepo pyflow_noverdict)"
+cd "$D" || exit 1
+pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
+reply "I am not sure"
+pyflow f verdict .git/reply.txt
+expect_has "a reply with no verdict asks for another" "RETRY no review verdict" "$OUT"
+expect_has "and is logged" "VERDICT-NONE" "$(cat .git/flow-f.log)"
+pyflow f next
+expect_has "the review is handed out again" "REVIEW plans/f/tasks/01-a.md 01" "$OUT"
+pyflow f verdict .git/reply.txt; pyflow f next
+expect_rc "a second reply with no verdict exits 1" 1 "$RC"
+expect_has "and stops" "STOP no review verdict for 01-a after 2 attempt(s)" "$OUT"
+
+D="$(flowrepo pyflow_reviewedit)"
+cd "$D" || exit 1
+pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
+echo tampered >> README.md; reply "REVIEW: PASS"; pyflow f verdict .git/reply.txt; pyflow f next
+expect_rc "a reviewer's uncommitted edit exits 1" 1 "$RC"
+expect_has "and stops" "STOP the reviewer changed tracked files, which a reviewer must never do" "$OUT"
+D="$(flowrepo pyflow_reviewcommit)"
+cd "$D" || exit 1
+pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
+echo tampered >> README.md; git commit -qam "reviewer commit"; pyflow f verdict .git/reply.txt; pyflow f next
+expect_rc "a reviewer's commit with a clean tree exits 1" 1 "$RC"
+expect_has "and stops" "STOP the reviewer changed tracked files, which a reviewer must never do" "$OUT"
+
+D="$(flowrepo pyflow_runlimit)"
+cd "$D" || exit 1
+pyflow f next; resolve plans/f/tasks/01-a.md
+sed 's/^runs=.*/runs=65/' .git/flow-f.state > .git/flow-f.state.new && mv .git/flow-f.state.new .git/flow-f.state
+pyflow f next
+expect_rc "passing the run limit exits 1" 1 "$RC"
+expect_has "and stops" "STOP run limit of 65 sessions reached, stopping" "$OUT"
+
+D="$(flowrepo pyflow_noreview)"
+cd "$D" || exit 1
+pyflow f next; reply "REVIEW: PASS"
+before="$(cat .git/flow-f.state; git rev-parse HEAD; git status --porcelain)"
+pyflow f verdict .git/reply.txt
+expect_rc "verdict while a build is pending exits 2" 2 "$RC"
+if [ "$before" = "$(cat .git/flow-f.state; git rev-parse HEAD; git status --porcelain)" ]; then ok "and changes nothing"; else bad "and changes nothing"; fi
+cd "$ROOT" || exit 1
+
 echo "smoke-real.sh, prepare only"
 SM="$ROOT/tests/smoke-real.sh"
 mkdir -p "$TMP/nobin"
