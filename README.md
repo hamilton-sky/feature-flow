@@ -6,22 +6,24 @@
 
 Plan a feature as a graph of small tickets, then build them in the session you are already in. One command, `/feature-flow`, does both. Every ticket is built by one fresh subagent and checked by another that never saw the builder's reasoning. A script, not the agent, decides the order of the steps, runs the build and tests, and watches for work that weakens the checks, and the whole run has limits.
 
-One skill, 2 agent roles, a Python conductor, 4 scripts, an installer for both agents, a demo and a test suite. MIT licensed.
+One skill, 2 agent roles, a Python conductor, 4 Python scripts, an installer for both agents, a demo and a test suite. All of it is Python (standard library only), so it runs on Linux, macOS and Windows. MIT licensed.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets)
 - [See the graph](#see-the-graph) · [Long features and handoff](#long-features-and-handoff) · [What is tested](#what-is-tested) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
 
-You need `bash`, `git`, `awk` and `python3` (3.9 or later, standard library only), and Claude Code or Codex.
+You need `git` and `python3` (3.9 or later, standard library only), and Claude Code or Codex. No `bash` or `awk` is needed to run feature-flow: every script is Python. On Windows use `python` where this page says `python3`.
 
 ```bash
 git clone https://github.com/hamilton-sky/feature-flow.git
 cd feature-flow
 
-bash install.sh /path/to/your/repo                  # for Claude Code
-bash install.sh /path/to/your/repo --agent codex    # for Codex
-bash install.sh /path/to/your/repo --agent all      # both, side by side
+python3 install.py /path/to/your/repo                  # for Claude Code
+python3 install.py /path/to/your/repo --agent codex    # for Codex
+python3 install.py /path/to/your/repo --agent all      # both, side by side
+
+# `bash install.sh ...` still works on Linux and macOS: it only runs install.py
 ```
 
 Then, in your repo, in the agent:
@@ -190,7 +192,7 @@ python3 scripts/gate.py <feature>                         run Build, Test and Li
 python3 scripts/floor-guard.py <feature> <NN> [base]      check a ticket's diff, run from the repo root
 ```
 
-`scripts/flow-status.py`, `gate.py` and `floor-guard.py` are Python ports of the bash scripts of the same name and print the same output. The bash versions go once the port is finished.
+The commands in `commands.md` run through `bash -c` on Linux and macOS and through the system shell (`cmd.exe`) on Windows, so write them for the platform your team uses, or call `python` as in the examples.
 
 `flow-status.py` also understands the `.scratch/<feature>/issues/` layout and the statuses `done`, `ready-for-agent`, `ready-for-human` and `closed`: `FLOW_DIR=.scratch FLOW_TICKETS=issues`.
 
@@ -234,7 +236,7 @@ bash tests/run.sh
 python3 -m unittest discover -s tests/py
 ```
 
-Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS.
+Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
 
 `RUN_REAL=1 bash tests/smoke-real.sh --interactive` is the acceptance run with Claude Code. It runs real sessions on the demo project and spends money, which is why it asks for `RUN_REAL=1`.
 

@@ -26,6 +26,7 @@ All of feature-flow runs as Python in the `feature_flow` package (standard libra
 05 - flow-view ported to feature_flow/view.py (template and data as bytes, status read in process); parity on 22 fixture runs; the cost log was already gone with interactive-flow ticket 10; bash bugs kept and listed in the ticket.
 06 - installer ported to feature_flow/install.py (root shim install.py), install.sh is a 4-line exec wrapper; parity 17/17 scenarios against tests/install-bash-reference.sh, deleted in 07.
 07 - every caller (guides, both skills, README, demo, smoke-real, conductor messages, usage lines) switched to `python3 scripts/<name>.py`; the four bash scripts, the installer reference and every parity section deleted; the remaining tests/run.sh checks run the Python commands; the installer ships the `.py` shims and no `.sh`.
+08 - Windows job added (unit tests plus a fixture drive to REVIEW); CI green on four jobs; fixed CRLF tickets, the WSL bash stub and UTF-8 in tests on the way.
 
 ## Open questions
 
