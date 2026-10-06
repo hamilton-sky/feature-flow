@@ -1,21 +1,60 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "feature-flow"
+name = "feature-flow-cli"
 dynamic = ["version"]
-description = "A ticket-graph workflow for coding agents"
+description = "A ticket-graph workflow for coding agents: installs the feature-flow skill into a repo"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 dependencies = []
+keywords = ["claude-code", "codex", "agents", "workflow", "tickets"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development",
+]
+
+[project.urls]
+Homepage = "https://github.com/hamilton-sky/feature-flow"
+Source = "https://github.com/hamilton-sky/feature-flow"
 
 [project.scripts]
-feature-flow = "feature_flow.cli:main"
+feature-flow = "feature_flow.command:main"
+feature-flow-cli = "feature_flow.command:main"
 
+# the skills, roles, guides and scripts ship inside the package, in feature_flow/_bundle/,
+# so `feature-flow install` works without a checkout
 [tool.setuptools]
-packages = ["feature_flow"]
+packages = [
+    "feature_flow",
+    "feature_flow._bundle.skills",
+    "feature_flow._bundle.agents",
+    "feature_flow._bundle.guides",
+    "feature_flow._bundle.adapters",
+    "feature_flow._bundle.scripts",
+]
+include-package-data = false
+
+[tool.setuptools.package-dir]
+"feature_flow._bundle.skills" = "skills"
+"feature_flow._bundle.agents" = "agents"
+"feature_flow._bundle.guides" = "guides"
+"feature_flow._bundle.adapters" = "adapters"
+"feature_flow._bundle.scripts" = "scripts"
+
+[tool.setuptools.package-data]
+"feature_flow._bundle.skills" = ["**/*"]
+"feature_flow._bundle.agents" = ["*.md"]
+"feature_flow._bundle.guides" = ["**/*"]
+"feature_flow._bundle.adapters" = ["codex/**/*"]
+"feature_flow._bundle.scripts" = ["*.py", "*.html"]
 
 [tool.setuptools.dynamic]
 version = { attr = "feature_flow.__version__" }

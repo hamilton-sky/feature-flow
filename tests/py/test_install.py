@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -95,3 +96,47 @@ class RunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PackageTests(unittest.TestCase):
+    """The installed package: the assets sit in feature_flow/_bundle/, which is never installed into a repo."""
+
+    def test_the_source_root_of_a_checkout_is_the_checkout(self):
+        self.assertEqual(Path(install.source_root()), helpers.ROOT)
+
+    def test_an_installed_package_installs_from_its_bundle_and_leaves_the_bundle_out(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / "site" / "feature_flow"
+            shutil.copytree(str(helpers.ROOT / "feature_flow"), str(package),
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            bundle = package / install.BUNDLE
+            for name in ("skills", "agents", "guides", "scripts"):
+                shutil.copytree(str(helpers.ROOT / name), str(bundle / name))
+            shutil.copytree(str(helpers.ROOT / "adapters"), str(bundle / "adapters"))
+            target = Path(tmp) / "repo"
+            target.mkdir()
+            out = []
+            installer = install.Installer(str(bundle), str(target), "all", False, False, False, out.append)
+            installer.package = str(package)
+            self.assertEqual(installer.run(), 0)
+            self.assertTrue((target / ".feature-flow" / "feature_flow" / "conductor.py").is_file())
+            self.assertTrue((target / ".claude" / "skills" / "feature-flow" / "SKILL.md").is_file())
+            self.assertTrue((target / ".agents" / "skills" / "feature-flow" / "SKILL.md").is_file())
+            self.assertFalse((target / ".feature-flow" / "feature_flow" / install.BUNDLE).exists())
+
+
+class CommandTests(unittest.TestCase):
+    def test_version_and_usage(self):
+        from feature_flow import __version__, command
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(command.main(["--version"]), 0)
+        self.assertEqual(out.getvalue().strip(), "feature-flow " + __version__)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(command.main(["nonsense"]), 2)
+            self.assertEqual(command.main([]), 2)
+        self.assertIn("unknown command: nonsense", err.getvalue())
+        self.assertIn("usage: feature-flow install", err.getvalue())

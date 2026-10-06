@@ -1,0 +1,7 @@
+# the sdist carries what the wheel bundles, so a wheel built from it is the same
+graft skills
+graft agents
+graft guides
+graft adapters/codex
+include scripts/*.py scripts/*.html
+include LICENSE README.md install.py install.sh
