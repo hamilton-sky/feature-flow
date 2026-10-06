@@ -8,14 +8,14 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 
 ## How to work this
 
-- See what is ready: `bash scripts/flow-status.sh interactive-flow`. Take the lowest numbered READY ticket.
+- See what is ready: `python3 scripts/flow-status.py interactive-flow`. Take the lowest numbered READY ticket.
 - Claim: set `Status: claimed` in the ticket and save before starting.
 - Resolve: write the result under `## Answer`, set `Status: resolved`, then add one line to
   Decisions so far below.
-- See the graph: `bash scripts/flow-status.sh interactive-flow --mermaid` (coloured by status, drawn on demand).
+- See the graph: `python3 scripts/flow-status.py interactive-flow --mermaid` (coloured by status, drawn on demand).
 - Commands live in `commands.md` (frozen). Lessons live in `learnings.md` (append only).
 - Status lives only in the ticket files. This map never repeats it.
-- Work this plan with `/next-phase`, not the unattended loop. Tickets 01, 02, 12 and 13 are probes or paid runs that need a person in an interactive session, and ticket 10 deletes the loop itself.
+- Work this plan with `/feature-flow interactive-flow` (Codex: `$feature-flow interactive-flow`). Tickets 01, 02, 12 and 13 are probes or paid runs that need a person in an interactive session.
 
 ## Decisions so far
 
@@ -38,6 +38,6 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 
 - Codex desktop in the environment used to write this revision exposes subagents with separate contexts and returns their replies to the parent. Ticket 02 still probes the exact installed/local and cloud surfaces, read-only review restrictions and prompt shape before choosing subagents or relay mode.
 - Whether either runtime tells a session how full its context is (ticket 02). If so, the skill may hand off early, at a ticket boundary.
-- Python: the conductor is written in Python here; `plans/interactive-flow-python` ports the remaining bash scripts after ticket 10 of this plan.
+- Python: settled. The conductor was written in Python here, and `plans/interactive-flow-python` has since ported the remaining bash scripts (`scripts/*.sh` are gone; `install.sh` wraps `install.py`).
 - Distribution after this plan: fetch a pinned feature-flow tag at run time, or a PyPI package (`uvx feature-flow@X`). A later plan, once `flow.py`'s commands are stable.
 - Whether `architect-review` and `automation-design` become guides behind the one skill. Left as standalone skills here.
