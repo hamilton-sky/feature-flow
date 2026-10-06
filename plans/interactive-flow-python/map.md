@@ -19,7 +19,7 @@ All of feature-flow runs as Python in the `feature_flow` package (standard libra
 
 ## Decisions so far
 
-<One line per resolved ticket.>
+01 - prerequisites met (conductor on main); runners have Python 3.12 to 3.14 and Windows has git; the floor stays 3.9.
 
 ## Open questions
 
