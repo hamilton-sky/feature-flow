@@ -671,117 +671,64 @@ cd "$TMP" || exit 1
 I="$TMP/inst"; mkdir -p "$I/repo" "$I/fresh"
 out="$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"; rc=$?
 expect_rc "installs into a repo" 0 $rc
-for f in .claude/skills/next-phase/SKILL.md .claude/skills/review-ticket/SKILL.md .claude/skills/plan-feature/templates/ticket.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/gate.sh scripts/auto-flow.sh scripts/floor-guard.sh scripts/flow-status.sh; do
+for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/flow.py scripts/gate.sh scripts/floor-guard.sh scripts/flow-status.sh scripts/flow-view.sh scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
   if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
 done
+left=""
+for s in plan-feature next-phase review-ticket run-flow show-flow; do [ ! -e "$I/repo/.claude/skills/$s" ] || left="$left $s"; done
+if [ -z "$left" ]; then ok "the old flow skills are not installed"; else bad "the old flow skills are not installed" "$left"; fi
+n="$(find "$I/repo/.feature-flow" \( -name __pycache__ -o -name '*.pyc' \) | wc -l | tr -d ' ')"; expect_rc "no __pycache__ is installed" 0 "$n"
+expect_has "it points at the one skill" "next: /feature-flow <feature-name> in Claude Code" "$out"
+out="$(cd "$I/repo" && git init -q && python3 scripts/flow.py f start 2>&1)"
+expect_has "the installed scripts/flow.py runs" "PLAN" "$out"
+mkdir -p "$I/repo/plans/f/tasks"
+out="$(cd "$I/repo" && python3 scripts/flow.py f start 2>&1)"
+expect_has "and starts a session on a plan" "OK " "$out"
+rm -rf "$I/repo/.git" "$I/repo/plans"
 out="$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"
 expect_has "a second run adds nothing" "added 0, updated 0" "$out"
-echo "my own edit" >> "$I/repo/.claude/skills/run-flow/SKILL.md"
+echo "my own edit" >> "$I/repo/.claude/skills/feature-flow/SKILL.md"
 out="$(bash "$ROOT/install.sh" "$I/repo" 2>&1)"
 expect_has "a changed file is kept and reported" "kept" "$out"
-expect_has "and it still has the user's edit" "my own edit" "$(cat "$I/repo/.claude/skills/run-flow/SKILL.md")"
+expect_has "and it still has the user's edit" "my own edit" "$(cat "$I/repo/.claude/skills/feature-flow/SKILL.md")"
 out="$(bash "$ROOT/install.sh" "$I/repo" --force 2>&1)"
 expect_has "--force replaces it" "update" "$out"
-expect_lacks "and the edit is gone" "my own edit" "$(cat "$I/repo/.claude/skills/run-flow/SKILL.md")"
+expect_lacks "and the edit is gone" "my own edit" "$(cat "$I/repo/.claude/skills/feature-flow/SKILL.md")"
 bash "$ROOT/install.sh" "$I/fresh" --dry-run > /dev/null 2>&1
 if [ -z "$(ls -A "$I/fresh")" ]; then ok "--dry-run writes nothing"; else bad "--dry-run writes nothing"; fi
+mkdir -p "$I/old/.claude/skills/next-phase" "$I/old/.claude/skills/run-flow"
+echo "mine" > "$I/old/.claude/skills/next-phase/SKILL.md"
+out="$(bash "$ROOT/install.sh" "$I/old" 2>&1)"
+expect_has "old flow skills are named as no longer part of feature-flow" "no longer part of feature-flow, left in place: next-phase run-flow" "$out"
+[ "$(cat "$I/old/.claude/skills/next-phase/SKILL.md")" = "mine" ] && ok "and left alone" || bad "and left alone"
 mkdir -p "$I/repo2"
 CLAUDE_HOME="$I/home/.claude" bash "$ROOT/install.sh" "$I/repo2" --user > /dev/null 2>&1
-if [ -f "$I/home/.claude/skills/next-phase/SKILL.md" ] && [ -f "$I/home/.claude/agents/ticket-reviewer.md" ]; then ok "--user puts skills and agents in the user folder"; else bad "--user puts skills and agents in the user folder"; fi
-if [ -f "$I/repo2/scripts/gate.sh" ] && [ ! -e "$I/repo2/.claude" ]; then ok "--user still puts scripts in the repo and no .claude"; else bad "--user still puts scripts in the repo and no .claude"; fi
+if [ -f "$I/home/.claude/skills/feature-flow/SKILL.md" ] && [ -f "$I/home/.claude/agents/ticket-reviewer.md" ]; then ok "--user puts skills and agents in the user folder"; else bad "--user puts skills and agents in the user folder"; fi
+if [ -f "$I/repo2/scripts/flow.py" ] && [ -f "$I/repo2/.feature-flow/guides/build.md" ] && [ ! -e "$I/repo2/.claude" ]; then ok "--user still puts scripts and .feature-flow in the repo and no .claude"; else bad "--user still puts scripts and .feature-flow in the repo and no .claude"; fi
 bash "$ROOT/install.sh" --nonsense > /dev/null 2>&1; expect_rc "an unknown option is a usage error" 2 $?
-for f in .claude/skills/show-flow/SKILL.md scripts/flow-view.sh scripts/flow-view.html; do
-  if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
-done
-
-echo "adapters/codex/skill.awk, one rule at a time"
-XF="$ROOT/adapters/codex/skill.awk"
-SKILLS="next-phase review-ticket plan-feature"
-xf() { awk -v emit="$1" -v skills="$SKILLS" -f "$XF" "$2"; }
-U="$TMP/xf"; mkdir -p "$U"
-printf -- '---\nname: demo\ndescription: Does a thing: with a colon and "quotes". Second sentence.\nargument-hint: "[a] [b]"\nargument-extra: x\n  continued line\ndisable-model-invocation: true\n---\n\nWork on `$ARGUMENTS` in plans/$ARGUMENTS/ now.\n' > "$U/a.md"
-out="$(xf skill "$U/a.md")"
-expect_has "frontmatter keeps the name" "name: demo" "$out"
-expect_has "the description is quoted and its inner quotes are escaped" 'description: "Does a thing: with a colon and \"quotes\". Second sentence."' "$out"
-expect_lacks "argument-hint is dropped" "argument-hint" "$out"
-expect_lacks "disable-model-invocation is dropped" "disable-model-invocation" "$out"
-expect_has "an unknown key is kept" "argument-extra: x" "$out"
-expect_has "and its continuation line too" "  continued line" "$out"
-expect_has '$ARGUMENTS becomes <arguments>, also inside a path' 'Work on `<arguments>` in plans/<arguments>/ now.' "$out"
-expect_has "a skill that uses arguments says what they are" 'stands for the text the user typed after `$demo`' "$out"
-expect_lacks 'and no $ARGUMENTS is left' 'ARGUMENTS' "$out"
-printf -- '---\nname: plain\ndescription: No arguments here.\n---\n\nJust text.\n' > "$U/b.md"
-out="$(xf skill "$U/b.md")"
-expect_lacks "a skill without arguments gets no note" "stands for" "$out"
-expect_has "and keeps its body" "Just text." "$out"
-printf -- '---\nname: m\ndescription: d\n---\n\nrun /next-phase now\nin skills/next-phase/SKILL.md\nnot /next-phase-extra\n(/review-ticket) and `/plan-feature`\nhttps://x.example/plan-feature\nContinue with /clear then /next-phase f\n' > "$U/c.md"
-out="$(xf skill "$U/c.md")"
-expect_has "a slash mention becomes a dollar mention" 'run $next-phase now' "$out"
-expect_has "a path is left alone" "in skills/next-phase/SKILL.md" "$out"
-expect_has "a longer word is left alone" "not /next-phase-extra" "$out"
-expect_has "a mention in brackets and in code is changed" '($review-ticket) and `$plan-feature`' "$out"
-expect_has "a url is left alone" "https://x.example/plan-feature" "$out"
-expect_has "/clear becomes a plain phrase" 'Continue with a fresh session then $next-phase f' "$out"
-printf -- '---\nname: m\ndescription: d\n---\n\nFollow the conventions (CLAUDE.md, `.claude/rules/`).\nRead CLAUDE.md and also AGENTS.md here.\nAny attribution rule in CLAUDE.md.\n' > "$U/d.md"
-out="$(xf skill "$U/d.md")"
-expect_has "CLAUDE.md with .claude/rules becomes AGENTS.md" "conventions (AGENTS.md)." "$out"
-expect_has "a line that already names AGENTS.md is left alone" "Read CLAUDE.md and also AGENTS.md here." "$out"
-expect_has "any other CLAUDE.md becomes AGENTS.md" "attribution rule in AGENTS.md." "$out"
-printf -- '---\nname: m\ndescription: d\n---\n\n```\n  claude -p "/review-ticket <feature> NN <base>" --agent ticket-reviewer --allowedTools "Read" < /dev/null\n```\n\n(Leave out `--agent ticket-reviewer` if the agent file is not installed.)\n\nUse the commit you noted in Step 5. Leave out `--agent ticket-reviewer` if not installed.\n- **Auto**: commit the code, the ticket and the map together. Never push.\n' > "$U/e.md"
-out="$(xf skill "$U/e.md")"
-expect_has "the review command is rewritten and keeps its indent and arguments" "  { cat .agents/flow-roles/ticket-reviewer.md; echo; echo '\$review-ticket <feature> NN <base>'; } | codex exec --sandbox read-only -" "$out"
-expect_lacks "no claude command is left" "claude -p" "$out"
-expect_lacks "the leave-out sentences are gone" "Leave out" "$out"
-expect_has "the sandbox warning follows the commit sentence" "Use the commit you noted in Step 5. This starts a new Codex session" "$out"
-expect_has "the auto commit line says what to do when git is refused" "leave the changes uncommitted and say so: the loop commits them for you." "$out"
-n="$(printf '%s\n' "$out" | awk '/^$/ { b++; if (b > 1) c++ } !/^$/ { b = 0 } END { print c + 0 }')"; expect_rc "dropping the parenthesis line leaves no double blank line" 0 "$n"
-printf -- '---\nname: y\ndescription: Short one. Then more words that follow.\nargument-hint: "[feature] [auto]"\ndisable-model-invocation: true\n---\n\nbody\n' > "$U/f.md"
-out="$(xf yaml "$U/f.md")"
-expect_has "yaml: display name" 'display_name: "y"' "$out"
-expect_has "yaml: short description is the first sentence" 'short_description: "Short one"' "$out"
-expect_has "yaml: default prompt carries the argument hint" 'default_prompt: "Use $y [feature] [auto]"' "$out"
-expect_has "yaml: explicit only when the skill disables model invocation" "allow_implicit_invocation: false" "$out"
-printf -- '---\nname: z\ndescription: %s\n---\n\nbody\n' "$(printf 'word %.0s' $(seq 1 60))" > "$U/g.md"
-out="$(xf yaml "$U/g.md")"
-n="$(printf '%s\n' "$out" | grep 'short_description' | awk -F'"' '{print length($2)}')"
-if [ "$n" -le 120 ] && [ "$n" -gt 100 ]; then ok "yaml: a long description is cut at a word within 120 characters"; else bad "yaml: a long description is cut at a word within 120 characters" "length $n"; fi
-printf -- '---\nname: m\ndescription: d\n---\n\nRun it: `bash scripts/auto-flow.sh <feature>` or bash scripts/auto-flow.sh f\nRun the script with the Bash tool in the background so it is not cut off.\n' > "$U/loop.md"
-out="$(xf skill "$U/loop.md")"
-expect_has "the loop is started with codex as its agent" 'Run it: `FLOW_AGENT=codex bash scripts/auto-flow.sh <feature>` or FLOW_AGENT=codex bash scripts/auto-flow.sh f' "$out"
-expect_has "and the sandbox warning follows the run instruction" "so it is not cut off. It starts new Codex sessions, which need the network" "$out"
-expect_lacks "a mention of the loop without the run instruction gets no warning" "outside the sandbox" "$(xf skill "$U/c.md")"
-expect_lacks "yaml: no policy block without disable-model-invocation" "policy" "$(xf yaml "$U/b.md")"
-printf -- '---\nname: v\ndescription: d\ndisable-model-invocation: false\n---\n\nbody\n' > "$U/v.md"
-expect_lacks "yaml: no policy block when disable-model-invocation is false" "policy" "$(xf yaml "$U/v.md")"
-printf -- '---\nname: r\ndescription: d\ntools:\n- Read\n- Bash\nmodel: inherit\n---\n\nYou are the reviewer.\n\nFollow the `review-ticket` skill.\n' > "$U/h.md"
-out="$(xf role "$U/h.md")"
-expect_has "role: the body is kept" "You are the reviewer." "$out"
-expect_lacks "role: the frontmatter is gone" "tools:" "$out"
-expect_lacks "role: nothing before the first line" "---" "$out"
-[ "$(printf '%s\n' "$out" | head -1)" = "You are the reviewer." ] && ok "role: starts with the first sentence, no blank line" || bad "role: starts with the first sentence, no blank line"
+if [ ! -e "$ROOT/adapters/codex/skill.awk" ]; then ok "adapters/codex/skill.awk is gone"; else bad "adapters/codex/skill.awk is gone"; fi
 
 echo "install.sh, codex"
 C="$TMP/codex"; mkdir -p "$C/repo" "$C/fresh" "$C/home"
-SKILLS_BEFORE="$(cat "$ROOT"/skills/*/SKILL.md "$ROOT"/agents/*.md | cksum)"
+SKILLS_BEFORE="$(cat "$ROOT"/skills/*/SKILL.md "$ROOT"/agents/*.md "$ROOT"/adapters/codex/feature-flow/SKILL.md | cksum)"
 printf 'my own instructions\n' > "$C/repo/AGENTS.md"
 out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"; rc=$?
 expect_rc "--agent codex installs" 0 $rc
 expect_has "it says which agent" "(codex)" "$out"
-expect_has "it points at the Codex invocation" 'next: $plan-feature' "$out"
-expect_lacks "and not at the Claude one" "/plan-feature <feature-name> in Claude Code" "$out"
-missing=""
-for s in architect-review automation-design next-phase plan-feature review-ticket run-flow show-flow; do
-  for f in SKILL.md agents/openai.yaml; do [ -f "$C/repo/.agents/skills/$s/$f" ] || missing="$missing $s/$f"; done
+expect_has "it points at the Codex invocation" 'next: $feature-flow <feature-name> in Codex' "$out"
+expect_lacks "and not at the Claude one" "in Claude Code" "$out"
+for f in SKILL.md agents/openai.yaml; do
+  if cmp -s "$ROOT/adapters/codex/feature-flow/$f" "$C/repo/.agents/skills/feature-flow/$f"; then ok "the Codex skill's $f is installed as it is"; else bad "the Codex skill's $f is installed as it is"; fi
 done
-if [ -z "$missing" ]; then ok "every skill gets a SKILL.md and an agents/openai.yaml"; else bad "every skill gets a SKILL.md and an agents/openai.yaml" "$missing"; fi
-if cmp -s "$ROOT/skills/plan-feature/templates/ticket.md" "$C/repo/.agents/skills/plan-feature/templates/ticket.md"; then ok "other skill files are copied as they are"; else bad "other skill files are copied as they are"; fi
-for f in .agents/flow-roles/ticket-builder.md .agents/flow-roles/ticket-reviewer.md scripts/gate.sh scripts/auto-flow.sh; do
+for f in .agents/flow-roles/ticket-builder.md .agents/flow-roles/ticket-reviewer.md scripts/flow.py .feature-flow/feature_flow/cli.py .feature-flow/guides/review.md; do
   if [ -f "$C/repo/$f" ]; then ok "codex installed $f"; else bad "codex installed $f"; fi
 done
+left=""
+for s in plan-feature next-phase review-ticket run-flow show-flow; do [ ! -e "$C/repo/.agents/skills/$s" ] || left="$left $s"; done
+if [ -z "$left" ]; then ok "codex: the old flow skills are not installed"; else bad "codex: the old flow skills are not installed" "$left"; fi
 if [ ! -e "$C/repo/.claude" ]; then ok "--agent codex writes no .claude"; else bad "--agent codex writes no .claude"; fi
 [ "$(cat "$C/repo/AGENTS.md")" = "my own instructions" ] && ok "an existing AGENTS.md is never touched" || bad "an existing AGENTS.md is never touched"
-[ "$(cat "$ROOT"/skills/*/SKILL.md "$ROOT"/agents/*.md | cksum)" = "$SKILLS_BEFORE" ] && ok "installing never changes the sources" || bad "installing never changes the sources"
-
+[ "$(cat "$ROOT"/skills/*/SKILL.md "$ROOT"/agents/*.md "$ROOT"/adapters/codex/feature-flow/SKILL.md | cksum)" = "$SKILLS_BEFORE" ] && ok "installing never changes the sources" || bad "installing never changes the sources"
 CS="$C/repo/.agents/skills"
 n="$(grep -rlE '^(argument-hint|disable-model-invocation):' "$CS" | wc -l | tr -d ' ')"; expect_rc "no installed skill keeps a Claude only frontmatter key" 0 "$n"
 bad_names=""
@@ -791,9 +738,11 @@ for s in "$CS"/*/; do
   sed -n 3p "$CS/$s/SKILL.md" | grep -q '^description: "' || bad_names="$bad_names $s"
 done
 if [ -z "$bad_names" ]; then ok "frontmatter is the name, then a quoted description, in every skill"; else bad "frontmatter is the name, then a quoted description, in every skill" "$bad_names"; fi
-explicit="$(grep -l 'allow_implicit_invocation: false' "$CS"/*/agents/openai.yaml | awk -F/ '{print $(NF-2)}' | tr '\n' ' ')"
-expect_rc "exactly the four explicit only skills are marked so" "next-phase review-ticket run-flow show-flow " "$explicit"
-n="$(grep -L 'display_name:' "$CS"/*/agents/openai.yaml | wc -l | tr -d ' ')"; expect_rc "every openai.yaml names an interface" 0 "$n"
+if [ "$(sed '1,/^---$/d' "$ROOT/skills/architect-review/SKILL.md" | sed '1,/^---$/d')" = "$(sed '1,/^---$/d' "$CS/architect-review/SKILL.md" | sed '1,/^---$/d')" ]; then ok "the other skills keep their body word for word"; else bad "the other skills keep their body word for word"; fi
+printf -- '---\nname: q\ndescription: Says "hi" \\ there: ok\nargument-hint: "[a]"\n---\n\nbody\n' > "$C/q.md"
+out="$(cd "$ROOT" && bash -c 'source <(sed -n "/^codex_header()/,/^}/p" install.sh); codex_header "$1"' _ "$C/q.md")"
+expect_has "a description with quotes and a backslash is escaped" 'description: "Says \"hi\" \\ there: ok"' "$out"
+expect_lacks "and the other header keys are dropped" "argument-hint" "$out"
 if command -v python3 > /dev/null 2>&1 && python3 -c 'import yaml' > /dev/null 2>&1; then
   python3 - "$CS" > "$C/yaml.out" 2>&1 << 'PY'
 import glob, sys, yaml
@@ -806,63 +755,42 @@ for f in sorted(glob.glob(root + "/*/agents/openai.yaml")):
     d = yaml.safe_load(open(f, encoding="utf-8"))
     assert set(d["interface"]) == {"display_name", "short_description", "default_prompt"}, f
 PY
-  expect_rc "a strict YAML parser reads every generated header and openai.yaml" 0 $?
+  expect_rc "a strict YAML parser reads every installed header and openai.yaml" 0 $?
 else
-  echo "  skip  python3 with PyYAML is not installed, so the generated YAML was not parsed"
+  echo "  skip  python3 with PyYAML is not installed, so the YAML was not parsed"
 fi
-left="$(grep -rnE 'ARGUMENTS|claude -p|--agent|\.claude/|allowedTools|Leave out|/clear' "$CS" "$C/repo/.agents/flow-roles" || true)"
-if [ -z "$left" ]; then ok "no Claude only text is left in the installed skills and roles"; else bad "no Claude only text is left in the installed skills and roles" "$(printf '%s' "$left" | head -3)"; fi
-left="$(grep -rnE '(^|[^A-Za-z0-9_./~-])/(next-phase|review-ticket|plan-feature|run-flow|show-flow|architect-review|automation-design)([^A-Za-z0-9_/-]|$)' "$CS" || true)"
-if [ -z "$left" ]; then ok "no slash command mention is left"; else bad "no slash command mention is left" "$(printf '%s' "$left" | head -3)"; fi
-left="$(grep -rn 'CLAUDE.md' "$CS" | grep -v 'AGENTS.md' || true)"
-if [ -z "$left" ]; then ok "CLAUDE.md is only ever named next to AGENTS.md"; else bad "CLAUDE.md is only ever named next to AGENTS.md" "$(printf '%s' "$left" | head -3)"; fi
-NP="$(cat "$CS/next-phase/SKILL.md")"
-expect_has "next-phase says what its arguments are" 'stands for the text the user typed after `$next-phase`' "$NP"
-expect_has "next-phase shows the Codex invocation" 'Example: `$next-phase csv-export auto`' "$NP"
-expect_has "next-phase asks for the loop to commit when git is refused" "the loop commits them for you" "$NP"
-expect_has "next-phase warns the manual review needs the user's terminal" "give the command to the user to run in their own terminal" "$NP"
-for s in next-phase review-ticket; do
-  cmd="$(grep 'codex exec --sandbox read-only -' "$CS/$s/SKILL.md" | head -1)"
-  expect_has "$s starts the review through codex in a read only sandbox" "| codex exec --sandbox read-only -" "$cmd"
-  role="$(printf '%s' "$cmd" | grep -oE '\.agents/flow-roles/[a-z-]+\.md' | head -1)"
-  if [ -n "$role" ] && [ -f "$C/repo/$role" ]; then ok "$s points at a role file that was installed"; else bad "$s points at a role file that was installed" "$role"; fi
-done
-left="$(grep -rn 'bash scripts/auto-flow.sh' "$CS" | grep -v 'FLOW_AGENT=codex bash scripts/auto-flow.sh' || true)"
-if [ -z "$left" ]; then ok "every installed Codex skill starts the loop with codex"; else bad "every installed Codex skill starts the loop with codex" "$(printf '%s' "$left" | head -3)"; fi
-expect_has "run-flow warns that the loop needs the user's terminal or an approval" "ask for approval to run it outside the sandbox" "$(cat "$CS/run-flow/SKILL.md")"
-expect_has "run-flow tells Codex users which caps do not apply" "do not apply and only" "$(cat "$CS/run-flow/SKILL.md")"
-expect_has "run-flow names the Codex mention for the builder prompt" 'prompt `$next-phase <feature> auto`' "$(cat "$CS/run-flow/SKILL.md")"
 RB="$(cat "$C/repo/.agents/flow-roles/ticket-builder.md")"; RR="$(cat "$C/repo/.agents/flow-roles/ticket-reviewer.md")"
 expect_has "the builder role keeps its rules" "You are the builder." "$RB"
 expect_has "the reviewer role keeps its rules" "You are the reviewer, not the author." "$RR"
 expect_lacks "a role file has no frontmatter" "tools:" "$RR"
-
+[ "$(head -1 "$C/repo/.agents/flow-roles/ticket-reviewer.md")" = "You are the reviewer, not the author. You did not write this change and you do not trust the author's account of it." ] && ok "a role file starts with its first sentence" || bad "a role file starts with its first sentence"
 out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
 expect_has "a second codex run adds nothing" "added 0, updated 0" "$out"
-echo "my own edit" >> "$CS/run-flow/SKILL.md"
+mkdir -p "$CS/next-phase"
 out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
-expect_has "an edited generated file is kept and reported" "kept" "$out"
-expect_has "and keeps the user's edit" "my own edit" "$(cat "$CS/run-flow/SKILL.md")"
+expect_has "codex: an old flow skill is named and left alone" "no longer part of feature-flow, left in place: next-phase" "$out"
+echo "my own edit" >> "$CS/architect-review/SKILL.md"
+out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex 2>&1)"
+expect_has "an edited Codex skill is kept and reported" "kept" "$out"
+expect_has "and keeps the user's edit" "my own edit" "$(cat "$CS/architect-review/SKILL.md")"
 out="$(bash "$ROOT/install.sh" "$C/repo" --agent codex --force 2>&1)"
-expect_has "--force regenerates it" "update" "$out"
-expect_lacks "and the edit is gone" "my own edit" "$(cat "$CS/run-flow/SKILL.md")"
+expect_has "--force rewrites it" "update" "$out"
+expect_lacks "and the edit is gone" "my own edit" "$(cat "$CS/architect-review/SKILL.md")"
 bash "$ROOT/install.sh" "$C/fresh" --agent codex --dry-run > /dev/null 2>&1
 if [ -z "$(ls -A "$C/fresh")" ]; then ok "--agent codex --dry-run writes nothing"; else bad "--agent codex --dry-run writes nothing"; fi
 out="$(bash "$ROOT/install.sh" "$C/fresh" --agent codex --dry-run 2>&1)"
-expect_has "and still reports what it would add" "would add 29" "$out"
-
+expect_has "and still reports what it would add" "would add" "$out"
 mkdir -p "$C/repo2"
 AGENTS_HOME="$C/home/.agents" bash "$ROOT/install.sh" "$C/repo2" --agent codex --user > /dev/null 2>&1
-if [ -f "$C/home/.agents/skills/next-phase/SKILL.md" ] && [ -f "$C/home/.agents/skills/next-phase/agents/openai.yaml" ]; then ok "--user puts the Codex skills in the user folder"; else bad "--user puts the Codex skills in the user folder"; fi
-if [ -f "$C/repo2/.agents/flow-roles/ticket-reviewer.md" ] && [ -f "$C/repo2/scripts/gate.sh" ] && [ ! -e "$C/repo2/.agents/skills" ]; then ok "--user keeps roles and scripts in the repo"; else bad "--user keeps roles and scripts in the repo"; fi
-
+if [ -f "$C/home/.agents/skills/feature-flow/SKILL.md" ] && [ -f "$C/home/.agents/skills/feature-flow/agents/openai.yaml" ]; then ok "--user puts the Codex skills in the user folder"; else bad "--user puts the Codex skills in the user folder"; fi
+if [ -f "$C/repo2/.agents/flow-roles/ticket-reviewer.md" ] && [ -f "$C/repo2/scripts/flow.py" ] && [ ! -e "$C/repo2/.agents/skills" ]; then ok "--user keeps roles and scripts in the repo"; else bad "--user keeps roles and scripts in the repo"; fi
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
-if cmp -s "$ROOT/skills/next-phase/SKILL.md" "$I/repo/.claude/skills/next-phase/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
+if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"
 out="$(bash "$ROOT/install.sh" "$C/both" --agent all 2>&1)"
-if [ -f "$C/both/.claude/skills/next-phase/SKILL.md" ] && [ -f "$C/both/.agents/skills/next-phase/SKILL.md" ] && [ -f "$C/both/.claude/agents/ticket-builder.md" ] && [ -f "$C/both/.agents/flow-roles/ticket-builder.md" ]; then ok "--agent all installs both"; else bad "--agent all installs both"; fi
-expect_has "and points at both" 'next: $plan-feature' "$out"
-expect_has "and at Claude Code" "/plan-feature <feature-name> in Claude Code" "$out"
+if [ -f "$C/both/.claude/skills/feature-flow/SKILL.md" ] && [ -f "$C/both/.agents/skills/feature-flow/SKILL.md" ] && [ -f "$C/both/.claude/agents/ticket-builder.md" ] && [ -f "$C/both/.agents/flow-roles/ticket-builder.md" ]; then ok "--agent all installs both"; else bad "--agent all installs both"; fi
+expect_has "and points at both" 'next: $feature-flow' "$out"
+expect_has "and at Claude Code" "/feature-flow <feature-name> in Claude Code" "$out"
 bash "$ROOT/install.sh" "$C/fresh" --agent nonsense > /dev/null 2>&1; expect_rc "an unknown agent is a usage error" 2 $?
 bash "$ROOT/install.sh" --agent > /dev/null 2>&1; expect_rc "--agent without a value is a usage error" 2 $?
 out="$(bash "$ROOT/install.sh" "$C/fresh" --agent=codex --dry-run 2>&1)"; expect_has "--agent=codex works too" "(codex)" "$out"
@@ -1252,6 +1180,31 @@ pyflow f next; pyflow f prompt
 expect_has "guides and agents beside scripts/ are found too" "You are the builder." "$OUT"
 cd "$ROOT" || exit 1
 
+echo "feature-flow skills"
+CS_SKILL="$ROOT/skills/feature-flow/SKILL.md"
+head6="$(sed -n 1,6p "$CS_SKILL")"
+expect_has "the Claude skill is named feature-flow" "name: feature-flow" "$head6"
+expect_has "it has an argument hint" "argument-hint:" "$head6"
+expect_has "and runs only when named" "disable-model-invocation: true" "$head6"
+for a in PLAN BUILD REVIEW DONE STOP HANDOFF prompt; do
+  if grep -q "$a" "$CS_SKILL"; then ok "the Claude skill handles $a"; else bad "the Claude skill handles $a"; fi
+done
+expect_rc "it never runs the gate or the floor guard itself" 0 "$(grep -cE 'bash scripts/(gate|floor-guard)\.sh' "$CS_SKILL")"
+if [ "$(grep -c 'Done when' "$CS_SKILL")" -le 2 ]; then ok "it holds no copy of the build or review protocol"; else bad "it holds no copy of the build or review protocol"; fi
+if [ "$(wc -l < "$CS_SKILL")" -lt 90 ]; then ok "it is under 90 lines"; else bad "it is under 90 lines"; fi
+CX_SKILL="$ROOT/adapters/codex/feature-flow/SKILL.md"
+head4="$(sed -n 1,4p "$CX_SKILL")"
+expect_has "the Codex skill is named feature-flow" "name: feature-flow" "$head4"
+expect_has "with a quoted description" 'description: "' "$head4"
+expect_lacks "and no Claude-only header" "disable-model-invocation" "$head4"
+expect_lacks "and no argument hint" "argument-hint" "$head4"
+expect_rc "its openai.yaml makes it explicit only" 1 "$(grep -c 'allow_implicit_invocation: false' "$ROOT/adapters/codex/feature-flow/agents/openai.yaml")"
+if grep -q "FLOW_INVOKE='\$feature-flow'" "$CX_SKILL"; then ok "it hands off with \$feature-flow"; else bad "it hands off with \$feature-flow"; fi
+expect_rc "it never says /feature-flow or \$ARGUMENTS" 0 "$(grep -cE '(^|[^$])/feature-flow|\$ARGUMENTS' "$CX_SKILL")"
+mode="$(grep -E '^Codex mode: (subagents|relay)$' "$ROOT/plans/interactive-flow/tasks/02-probe-codex-sessions.md" | sed 's/^Codex mode: //')"
+relay="$(grep -c 'FLOW_RELAY=1' "$CX_SKILL")"
+if { [ "$mode" = subagents ] && [ "$relay" = 0 ]; } || { [ "$mode" = relay ] && [ "$relay" -ge 1 ]; }; then ok "its mode matches ticket 02 ($mode)"; else bad "its mode matches ticket 02 ($mode)"; fi
+
 echo "smoke-real.sh, prepare only"
 SM="$ROOT/tests/smoke-real.sh"
 mkdir -p "$TMP/nobin"
@@ -1259,8 +1212,8 @@ P="$TMP/prep_codex"
 out="$(env PATH="$TMP/nobin:/usr/bin:/bin" FLOW_AGENT=codex bash "$SM" --prepare "$P" 2>&1)"; rc=$?
 expect_rc "--prepare builds the project without any model installed" 0 $rc
 expect_has "it says no model was called" "no model was called" "$out"
-expect_has "and tells a codex user what to type" 'then type:  $next-phase hello' "$out"
-if [ -f "$P/.agents/skills/next-phase/SKILL.md" ] && [ -f "$P/.agents/flow-roles/ticket-reviewer.md" ] && [ ! -e "$P/.claude" ]; then ok "the project is installed for codex only"; else bad "the project is installed for codex only"; fi
+expect_has "and tells a codex user what to type" 'then type:  $feature-flow hello' "$out"
+if [ -f "$P/.agents/skills/feature-flow/SKILL.md" ] && [ -f "$P/.agents/flow-roles/ticket-reviewer.md" ] && [ ! -e "$P/.claude" ]; then ok "the project is installed for codex only"; else bad "the project is installed for codex only"; fi
 expect_has "the plan passes the ticket check" "OK: 2 tickets" "$(cd "$P" && bash scripts/flow-status.sh hello --check 2>&1)"
 expect_has "and the first ticket is the one that is ready" "01-greet-function.md" "$(cd "$P" && bash scripts/flow-status.sh hello --next 2>&1)"
 if [ -z "$(cd "$P" && git status --porcelain)" ] && [ "$(cd "$P" && git rev-list --count HEAD)" = 1 ]; then ok "it is one clean commit"; else bad "it is one clean commit"; fi
@@ -1268,8 +1221,8 @@ env FLOW_AGENT=codex bash "$SM" --prepare "$P" > /dev/null 2>&1; expect_rc "a fo
 P2="$TMP/prep_claude"
 out="$(env PATH="$TMP/nobin:/usr/bin:/bin" bash "$SM" --prepare "$P2" 2>&1)"; rc=$?
 expect_rc "--prepare defaults to claude" 0 $rc
-expect_has "and tells a claude user what to type" "then type:  /next-phase hello" "$out"
-if [ -f "$P2/.claude/skills/next-phase/SKILL.md" ] && [ ! -e "$P2/.agents" ]; then ok "the project is installed for claude only"; else bad "the project is installed for claude only"; fi
+expect_has "and tells a claude user what to type" "then type:  /feature-flow hello" "$out"
+if [ -f "$P2/.claude/skills/feature-flow/SKILL.md" ] && [ ! -e "$P2/.agents" ]; then ok "the project is installed for claude only"; else bad "the project is installed for claude only"; fi
 env RUN_REAL=0 bash "$SM" > /dev/null 2>&1; expect_rc "without RUN_REAL or --prepare nothing runs" 2 $?
 out="$(env FLOW_AGENT=bogus bash "$SM" --prepare "$TMP/prep_bogus" 2>&1)"; rc=$?
 expect_rc "an unknown FLOW_AGENT is refused" 2 $rc

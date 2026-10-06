@@ -146,9 +146,9 @@ git commit -qm init
 if [ -n "$PREPARE" ]; then
   echo "prepared $TMP for $AGENT. no model was called."
   if [ "$AGENT" = codex ]; then
-    echo "try it by hand:  cd $TMP && codex    then type:  \$next-phase hello"
+    echo "try it by hand:  cd $TMP && codex    then type:  \$feature-flow hello"
   else
-    echo "try it by hand:  cd $TMP && claude   then type:  /next-phase hello"
+    echo "try it by hand:  cd $TMP && claude   then type:  /feature-flow hello"
   fi
   exit 0
 fi
