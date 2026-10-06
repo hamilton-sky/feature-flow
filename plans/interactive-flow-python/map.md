@@ -20,6 +20,7 @@ All of feature-flow runs as Python in the `feature_flow` package (standard libra
 ## Decisions so far
 
 01 - prerequisites met (conductor on main); runners have Python 3.12 to 3.14 and Windows has git; the floor stays 3.9.
+02 - flow-status ported to feature_flow/status.py, ticket parsing in tickets.Graph; the conductor calls it in process.
 
 ## Open questions
 

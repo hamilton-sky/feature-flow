@@ -7,6 +7,8 @@ in-process call without touching the conductor.
 import subprocess
 from pathlib import Path
 
+from feature_flow import status
+
 
 class Result:
     def __init__(self, code, out):
@@ -18,6 +20,19 @@ class Result:
         return self.code == 0
 
 
+class _Collect:
+    """stdout and stderr of an in-process port, folded together in the order they were written."""
+
+    def __init__(self):
+        self.parts = []
+
+    def write(self, text):
+        self.parts.append(text)
+
+    def text(self):
+        return "".join(self.parts)
+
+
 def _bash(script, *args):
     result = subprocess.run(["bash", str(script)] + [str(a) for a in args],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
@@ -25,8 +40,10 @@ def _bash(script, *args):
 
 
 def flow_status(scripts, feature, mode):
-    """flow-status.sh with --next, --counts or --check. stderr is folded into the output."""
-    return _bash(Path(scripts) / "flow-status.sh", feature, mode)
+    """The ticket graph reader with --next, --counts or --check, in process. stderr is folded into the output."""
+    out = _Collect()
+    code = status.run([feature, mode], out, out)
+    return Result(code, out.text())
 
 
 def gate(scripts, feature):

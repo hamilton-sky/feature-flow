@@ -813,6 +813,34 @@ expect_has "counts are included" '"total":3' "$out"
 [ "$(printf '%s' "$out" | jq -r '.tickets[2].blocked_by | join(",")')" = "01,02" ] && ok "blockers are listed" || bad "blockers are listed"
 [ "$(printf '%s' "$out" | jq -r '.tickets[0].type')" = "task" ] && ok "a missing Type defaults to task" || bad "a missing Type defaults to task"
 
+echo "flow-status.py, parity with flow-status.sh"
+# every fixture the flow-status.sh checks above use, in every mode: same stdout, same stderr, same exit code
+PY_S="$ROOT/scripts/flow-status.py"
+parity_n=0
+parity_diff=""
+status_parity() { # dir feature [env assignments...]
+  local dir="$1" feature="$2" mode a b
+  shift 2
+  for mode in "" --next --counts --check --mermaid "--mermaid plain" --json --bogus; do
+    # shellcheck disable=SC2086
+    a="$(cd "$dir" && env "$@" bash "$ROOT/scripts/flow-status.sh" "$feature" $mode 2> "$TMP/parity.err"; echo "rc=$?"; cat "$TMP/parity.err")"
+    # shellcheck disable=SC2086
+    b="$(cd "$dir" && env "$@" python3 "$PY_S" "$feature" $mode 2> "$TMP/parity.err"; echo "rc=$?"; cat "$TMP/parity.err")"
+    parity_n=$((parity_n + 1))
+    [ "$a" = "$b" ] || parity_diff="$parity_diff $feature${mode:+ $mode}"
+  done
+}
+mkdir -p "$TMP/status/plans/dup/tasks"
+ticket "$TMP/status/plans/dup/tasks/01-a.md" A open "—"; ticket "$TMP/status/plans/dup/tasks/01-b.md" B resolved "02"
+printf '# C\r\n\r\nStatus: open\r\nBlocked by: 01\r\n\r\nSee ticket 01 and 03.\r\n' > "$TMP/status/plans/dup/tasks/02-c.md"
+: > "$TMP/status/plans/dup/tasks/03-empty.md"
+for feature in f stuck done aws bad nope dup; do status_parity "$TMP/status" "$feature"; done
+status_parity "$TMP/status" "" 
+status_parity "$TMP/status" x FLOW_DIR=.scratch FLOW_TICKETS=issues
+for feature in g h; do status_parity "$TMP/ord" "$feature"; done
+status_parity "$TMP/js" f
+if [ -z "$parity_diff" ]; then ok "flow-status.py matches flow-status.sh on $parity_n fixture runs"; else bad "flow-status.py matches flow-status.sh" "differs on:$parity_diff"; fi
+
 echo "flow-view.sh"
 V="$ROOT/scripts/flow-view.sh"
 mkdir -p "$TMP/view/plans/f/tasks"
