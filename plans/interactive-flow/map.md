@@ -26,6 +26,7 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 06 - `start` issues an owner token required as FLOW_SESSION; HANDOFF after FLOW_TICKETS_PER_SESSION passes (never on the last ticket) or after every phase with FLOW_RELAY=1; takeover only with FLOW_TAKEOVER=1.
 05 - runtime-neutral `guides/` (build, review, plan, show, templates) copied from the skills; `flow.py <f> prompt` pastes role + guide + filled task, finding guides beside `scripts/` or in `.feature-flow/`.
 07 - one Claude skill `skills/feature-flow/SKILL.md` (60 lines) drives `flow.py`: start/token, BUILD and REVIEW subagents from `prompt`, reply saved with Bash under `.git`, never checks or reviews itself.
+08 - hand-written Codex skill in `adapters/codex/feature-flow/` (explicit only): same steps with `$feature-flow`, subagents via `spawn_agent` + `wait_agent`, optional hard read-only review through `codex exec --sandbox read-only`.
 
 ## Open questions
 
