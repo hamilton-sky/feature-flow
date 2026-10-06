@@ -1,7 +1,7 @@
 # Add sessions, the handoff and relay mode to the conductor
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 04
 Test first: yes
 
@@ -33,3 +33,12 @@ With `FLOW_RELAY=1`, print `HANDOFF` after every BUILD and every REVIEW is hande
 - tests/run.sh (the `flow.py` section)
 
 ## Answer
+
+Built: `start` and the session owner, the count-based HANDOFF and relay mode, in `feature_flow/conductor.py` (`start`, `check_owner`, `handoff`) and `cli.py`. `start` prints `PLAN` when there's no plan folder. Otherwise it stores a `secrets.token_hex(8)` owner, resets only `session_done`, and logs `START` (or `TAKEOVER` under `FLOW_TAKEOVER=1`). `next` and `verdict` check `FLOW_SESSION` against the owner before they change anything. HANDOFF and DONE clear the owner; STOP keeps it.
+
+Proven: `bash tests/run.sh` 494 passed, 0 failed. Its `flow.py, sessions, handoff and relay` section checks each Done when, including two sessions trying to drive the same feature, the old token losing control after a takeover, and the relay log sequence BUILD, HANDOFF, REVIEW, HANDOFF. The earlier `flow.py` sections, which never call `start`, still pass unchanged. `git status --porcelain` was empty afterwards.
+
+For later tickets:
+- The HANDOFF count is checked when `next` is about to hand out a new ticket: after a PASS, and only when `flow-status.sh --next` finds a ready ticket. So the last ticket ends in DONE, never HANDOFF. `session_done` is reset only by `start`, so a session that never calls `start` also gets HANDOFF after `FLOW_TICKETS_PER_SESSION` tickets. The skill always calls `start`.
+- Relay: `FLOW_RELAY=1` at the moment BUILD or REVIEW is handed out sets `relay_handoff=1`, and the next `next` prints HANDOFF before judging anything. The new session's `start` then `next` does the judging. In relay mode the session that receives BUILD or REVIEW does that phase itself, then calls `next`.
+- The STOP for a wrong or missing token reads `STOP <f> is owned by another session (<token>). ...`. A second `start` reads `STOP <f> is owned by session <token>. if that session is closed or dead, run start with FLOW_TAKEOVER=1`.

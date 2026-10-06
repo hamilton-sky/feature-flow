@@ -5,8 +5,8 @@ from pathlib import Path
 
 from feature_flow.conductor import Conductor, NoReview, Stop
 
-USAGE = "usage: python3 scripts/flow.py <feature> next | verdict <file>"
-COMMANDS = ("next", "verdict")
+USAGE = "usage: python3 scripts/flow.py <feature> start | next | verdict <file>"
+COMMANDS = ("start", "next", "verdict")
 
 
 def main(argv=None, scripts=None):
@@ -22,7 +22,12 @@ def main(argv=None, scripts=None):
     conductor = None
     try:
         conductor = Conductor(feature, scripts)
-        line = conductor.verdict(args[2]) if command == "verdict" else conductor.next()
+        if command == "verdict":
+            line = conductor.verdict(args[2])
+        elif command == "start":
+            line = conductor.start()
+        else:
+            line = conductor.next()
     except NoReview as err:
         print(err, file=sys.stderr)
         return 2

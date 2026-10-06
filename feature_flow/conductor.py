@@ -7,6 +7,7 @@ caller, and prints exactly one line per command.
 
 import os
 import re
+import secrets
 from pathlib import Path
 
 from feature_flow import checks, git, state, tickets
@@ -41,6 +42,9 @@ class Conductor:
         self.max_retries = _env_int("FLOW_MAX_RETRIES", 2)
         self.max_rounds = _env_int("FLOW_MAX_REVIEW_ROUNDS", 3)
         self.gate_on = os.environ.get("FLOW_GATE", "on") != "off"
+        self.per_session = _env_int("FLOW_TICKETS_PER_SESSION", 4)
+        self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
+        self.invoke = os.environ.get("FLOW_INVOKE") or "/feature-flow"
         gdir = git.git_dir()
         if gdir is None:
             raise Stop("not inside a git repository")
@@ -114,6 +118,7 @@ class Conductor:
         self.count_run()
         self.st["phase"] = "build"
         self.st["attempt"] = self.num("attempt") + 1
+        self.st["relay_handoff"] = "1" if self.relay else ""
         self.save()
         return self.emit("BUILD %s %s %s" % (self.ticket(), self.get("num"), self.get("base")))
 
@@ -122,6 +127,7 @@ class Conductor:
         self.st["phase"] = "review"
         self.st["review_attempt"] = self.num("review_attempt") + 1
         self.st["review_sha"] = git.head()
+        self.st["relay_handoff"] = "1" if self.relay else ""
         self.save()
         return self.emit("REVIEW %s %s %s" % (self.ticket(), self.get("num"), self.get("base")))
 
@@ -150,6 +156,7 @@ class Conductor:
         if nxt.code == 10:
             done = self.num("done")
             self.st["phase"] = ""
+            self.st["owner"] = ""
             self.save()
             return self.emit("DONE %s is complete: %d ticket(s) resolved in this run" % (self.feature, done))
         if nxt.code == 11:
@@ -157,6 +164,8 @@ class Conductor:
                        % self.feature)
         if nxt.code != 0:
             raise Stop("flow-status.sh failed with exit code %d" % nxt.code)
+        if self.per_session > 0 and self.num("session_done") >= self.per_session:
+            return self.handoff()
         path = nxt.out.strip().splitlines()[-1]
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                         "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": ""})
@@ -186,9 +195,41 @@ class Conductor:
 
     # ---- commands ------------------------------------------------------
 
+    def handoff(self):
+        """Release the owner; the user continues in a new session with the printed line."""
+        self.st["owner"] = ""
+        self.st["relay_handoff"] = ""
+        self.save()
+        return self.emit("HANDOFF %s %s" % (self.invoke, self.feature))
+
+    def check_owner(self):
+        """While a session owns the feature, every call must carry its token. Checked before any change."""
+        owner = self.get("owner")
+        if owner and os.environ.get("FLOW_SESSION", "") != owner:
+            raise Stop("%s is owned by another session (%s). pass its token as FLOW_SESSION, or start this session "
+                       "with FLOW_TAKEOVER=1 once you are sure the other one is closed" % (self.feature, owner))
+
+    def start(self):
+        if not self.plan.is_dir():
+            return self.emit("PLAN")
+        owner = self.get("owner")
+        takeover = bool(owner)
+        if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
+            raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
+                       % (self.feature, owner))
+        token = secrets.token_hex(8)
+        self.st["owner"] = token
+        self.st["session_done"] = 0
+        self.save()
+        self.log("TAKEOVER" if takeover else "START")
+        return "OK %s" % token
+
     def next(self):
+        self.check_owner()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
+        if self.get("relay_handoff") == "1":
+            return self.handoff()
         if "limit" not in self.st:
             self.st["limit"] = self.run_limit()
             self.st.setdefault("runs", 0)
@@ -208,6 +249,7 @@ class Conductor:
         if verdict == "pass":
             self.st["phase"] = ""
             self.st["done"] = self.num("done") + 1
+            self.st["session_done"] = self.num("session_done") + 1
             self.save()
             return self.pick_ticket()
         if verdict == "fail":
@@ -219,6 +261,7 @@ class Conductor:
 
     def verdict(self, reply):
         """Record the reviewer's reply. Exit 2 (NoReview) unless a review is pending."""
+        self.check_owner()
         if self.get("phase") != "review":
             raise NoReview("no review is pending for %s" % self.feature)
         try:

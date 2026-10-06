@@ -1127,6 +1127,89 @@ expect_rc "verdict while a build is pending exits 2" 2 "$RC"
 if [ "$before" = "$(cat .git/flow-f.state; git rev-parse HEAD; git status --porcelain)" ]; then ok "and changes nothing"; else bad "and changes nothing"; fi
 cd "$ROOT" || exit 1
 
+echo "flow.py, sessions, handoff and relay"
+D="$(flowrepo pyflow_session)"
+cd "$D" || exit 1
+pyflow nope start
+expect_has "start with no plan folder prints PLAN" "PLAN" "$OUT"
+pyflow f next; setst claimed plans/f/tasks/01-a.md
+before="$(grep -E '^(ticket|round|attempt)=' .git/flow-f.state)"
+pyflow f start
+expect_rc "start exits 0" 0 "$RC"
+TOK="${OUT#OK }"
+if [ -n "$TOK" ] && [ "OK $TOK" = "$OUT" ]; then ok "start prints OK and a token"; else bad "start prints OK and a token" "$OUT"; fi
+if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .git/flow-f.state)" ]; then ok "start leaves the ticket, round and attempt alone"; else bad "start leaves the ticket, round and attempt alone"; fi
+snap="$(cat .git/flow-f.state; git status --porcelain)"
+pyflow f next
+expect_rc "next without the token exits 1" 1 "$RC"
+expect_has "and names the owner" "owned by another session ($TOK)" "$OUT"
+OUT="$(FLOW_SESSION=wrong python3 scripts/flow.py f next 2> /dev/null)"
+expect_has "next with a different token stops too" "STOP f is owned by another session" "$OUT"
+if [ "$snap" = "$(cat .git/flow-f.state; git status --porcelain)" ]; then ok "and neither changes the state or the tree"; else bad "and neither changes the state or the tree"; fi
+pyflow f start
+expect_rc "a second session's start exits 1" 1 "$RC"
+expect_has "and names the owner" "STOP f is owned by session $TOK" "$OUT"
+OUT="$(FLOW_TAKEOVER=1 python3 scripts/flow.py f start 2> /dev/null)"
+TOK2="${OUT#OK }"
+if [ -n "$TOK2" ] && [ "$TOK2" != "$TOK" ] && [ "OK $TOK2" = "$OUT" ]; then ok "FLOW_TAKEOVER=1 start returns a new token"; else bad "FLOW_TAKEOVER=1 start returns a new token" "$OUT"; fi
+if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .git/flow-f.state)" ]; then ok "and keeps the outstanding phase and counters"; else bad "and keeps the outstanding phase and counters"; fi
+OUT="$(FLOW_SESSION="$TOK" python3 scripts/flow.py f next 2> /dev/null)"
+expect_has "the old token can no longer drive the flow" "STOP f is owned by another session" "$OUT"
+OUT="$(FLOW_SESSION="$TOK2" python3 scripts/flow.py f next 2> /dev/null)"
+expect_has "after the takeover a claimed ticket is built again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
+expect_has "and reset to open" "Status: open" "$(cat plans/f/tasks/01-a.md)"
+expect_has "and the attempt counts" "attempt=2" "$(cat .git/flow-f.state)"
+
+D="$(flowrepo pyflow_handoff)"
+cd "$D" || exit 1
+git rm -q plans/f/tasks/03-c.md plans/f/tasks/04-d.md; git commit -qm "two tickets"
+export FLOW_TICKETS_PER_SESSION=1
+pyflow f start; export FLOW_SESSION="${OUT#OK }"
+pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
+printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
+pyflow f next
+expect_rc "after FLOW_TICKETS_PER_SESSION tickets next exits 0" 0 "$RC"
+expect_has "and hands off" "HANDOFF /feature-flow f" "$OUT"
+expect_has "and logs it" ",HANDOFF" "$(cat .git/flow-f.log)"
+expect_rc "the owner is cleared" 1 "$(grep -cx "owner=" .git/flow-f.state)"
+pyflow f start; export FLOW_SESSION="${OUT#OK }"
+pyflow f next
+expect_has "the next session gets the held-back BUILD" "BUILD plans/f/tasks/02-b.md 02 $(git rev-parse HEAD)" "$OUT"
+resolve plans/f/tasks/02-b.md; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next
+expect_has "on the last ticket it is DONE, not HANDOFF" "DONE f is complete" "$OUT"
+expect_rc "and DONE clears the owner" 1 "$(grep -cx "owner=" .git/flow-f.state)"
+unset FLOW_SESSION FLOW_TICKETS_PER_SESSION
+
+D="$(flowrepo pyflow_invoke)"
+cd "$D" || exit 1
+pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
+printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
+OUT="$(FLOW_TICKETS_PER_SESSION=1 FLOW_INVOKE='$feature-flow' python3 scripts/flow.py f next 2> /dev/null)"
+expect_has "FLOW_INVOKE sets the line to type" 'HANDOFF $feature-flow f' "$OUT"
+
+D="$(flowrepo pyflow_relay)"
+cd "$D" || exit 1
+export FLOW_RELAY=1
+pyflow f start; export FLOW_SESSION="${OUT#OK }"
+pyflow f next
+expect_has "relay: the first session gets BUILD" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
+resolve plans/f/tasks/01-a.md
+pyflow f next
+expect_has "relay: after the BUILD it hands off" "HANDOFF /feature-flow f" "$OUT"
+pyflow f start; export FLOW_SESSION="${OUT#OK }"
+pyflow f next
+expect_has "relay: the next session gets REVIEW" "REVIEW plans/f/tasks/01-a.md 01" "$OUT"
+printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
+pyflow f next
+expect_has "relay: after the REVIEW it hands off" "HANDOFF /feature-flow f" "$OUT"
+seq="$(cut -d, -f3 .git/flow-f.log | grep -E '^(BUILD|REVIEW|HANDOFF)$' | tr '\n' ' ')"
+expect_has "relay: the log shows BUILD, HANDOFF, REVIEW, HANDOFF" "BUILD HANDOFF REVIEW HANDOFF " "$seq"
+pyflow f start; export FLOW_SESSION="${OUT#OK }"
+pyflow f next
+expect_has "relay: the third session gets the next ticket" "BUILD plans/f/tasks/02-b.md 02" "$OUT"
+unset FLOW_SESSION FLOW_RELAY
+cd "$ROOT" || exit 1
+
 echo "smoke-real.sh, prepare only"
 SM="$ROOT/tests/smoke-real.sh"
 mkdir -p "$TMP/nobin"
