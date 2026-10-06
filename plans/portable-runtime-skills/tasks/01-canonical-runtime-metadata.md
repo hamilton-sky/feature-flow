@@ -5,7 +5,7 @@ Status: open
 Blocked by: —
 Test first: yes
 
-Before changing anything, run `bash scripts/flow-status.sh in-session-mode --next`. It must exit 10; otherwise leave this ticket open and stop, because the final set of skills and the Claude-only `drive-flow` behavior do not exist yet.
+Before changing anything, check the prerequisite: `grep -l '^Status: resolved' plans/in-session-mode/tasks/0[45]-*.md | wc -l` must print `2`, meaning the in-session plan's `drive-flow` skill and its Codex exclusion are resolved. Otherwise leave this ticket open and stop, because the Claude-only `drive-flow` skill and its exclusion do not exist yet. The rest of the in-session plan (its README and its paid run) is not needed.
 
 Add one non-executable metadata file beside every canonical `SKILL.md`. Define a minimal, AWK-readable key/value contract for the argument hint, implicit invocation and supported runtimes. Parse it as data; never `source` it. Shared skills declare both `claude` and `codex`. `drive-flow` declares only `claude`. Validate names against their directory and `SKILL.md` frontmatter, reject unknown keys, duplicate keys, empty runtime lists and unknown runtimes, and print the skill and field in every error.
 
@@ -18,7 +18,7 @@ Add reusable installer helpers that read the metadata without changing either cu
 
 ## Done when
 
-- `bash scripts/flow-status.sh in-session-mode --next >/dev/null; test $? -eq 10` succeeds before the ticket's implementation begins.
+- `grep -l '^Status: resolved' plans/in-session-mode/tasks/0[45]-*.md | wc -l` prints `2`.
 - A test loops over every `skills/*/SKILL.md`, finds exactly one adjacent runtime metadata file, and reports no missing or duplicate skill entry.
 - Tests prove that common skills include `claude` and `codex`, `drive-flow` includes `claude` but not `codex`, and no unknown runtime is accepted.
 - Tests feed malformed, duplicate-key and mismatched-name fixtures to the parser; each exits nonzero and names the bad skill and field.

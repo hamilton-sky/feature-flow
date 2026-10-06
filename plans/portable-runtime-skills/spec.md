@@ -52,7 +52,7 @@ The bar: `bash tests/run.sh` exits 0, reports no failed checks, validates both g
 In: canonical skill metadata; Claude and Codex rendering; provider-neutral common instructions; supporting references and runtime fragments; installer compatibility; Codex CLI preflight; structured review output; disposable review worktrees; commit-path validation; behavioral skill evaluations; portable plugin packaging; compatibility documentation; CI validation.
 
 Not in scope:
-- Implementing `plans/in-session-mode`; that plan is an external prerequisite and must finish first.
+- Implementing `plans/in-session-mode`. Parts of it are prerequisites: its conductor (`flow-step.sh`, its tickets 02 and 03) before the review-path work here, and its `drive-flow` skill and Codex exclusion (its tickets 04 and 05) before the skill-architecture work here. Its paid acceptance run is not a prerequisite.
 - A Codex same-session/subagent mode; it needs a separate probe and plan.
 - An MCP server, remote service, authentication or UI; this is a local skills-and-scripts package.
 - Automatic publication to the public plugin directory; credentials, identity verification and review stay a release operation.
@@ -72,15 +72,17 @@ Not in scope:
 
 | Trigger | Expected behaviour | Handled in ticket |
 |---|---|---|
-| `plans/in-session-mode` is unfinished | Workers stop before changing the skill architecture and report the prerequisite | 01 |
+| The in-session `drive-flow` skill or its Codex exclusion is missing | Workers stop before changing the skill architecture and report the prerequisite | 01 |
+| The in-session conductor is missing | Workers stop before changing the review path and report the prerequisite | 07 |
 | A skill supports Claude only | Claude installs it; Codex and the portable plugin omit it with an explicit message | 03, 04, 10 |
 | Shared instructions contain a runtime-specific command | Parity checks fail and identify the skill and text | 05 |
 | Codex lacks a required flag | The loop exits before the first model session with the missing capability | 06 |
 | Structured output is unavailable or `jq` is absent | The existing exact text verdict remains the supported fallback | 07 |
 | A review command writes caches or generated files | It succeeds inside the disposable worktree and leaves the main tree unchanged | 08 |
+| The plan folder or the installed skills and roles are git ignored or untracked | They are copied into the review worktree read only, so the reviewer finds the ticket, the skill and its role | 08 |
 | Worktree creation or cleanup fails | The run stops with the path and recovery command; it never silently reviews in the main tree | 08 |
 | A builder creates a likely secret | The commit is refused and the suspicious path is printed | 09 |
-| An optional activation evaluation has no credentials | It skips with an explicit message while offline CI remains green | 05 |
+| An optional activation evaluation has no credentials | It skips with an explicit message while offline CI remains green | 15 |
 | Plugin packaging sees an unsupported skill | The skill is omitted and the package report names it | 10 |
 
 ## Design
@@ -112,12 +114,14 @@ Not in scope:
 
 ### Decisions
 
-- **Cross-plan order** — options: run both plans concurrently, port first, or finish the interactive plan first. Chosen: finish `plans/in-session-mode` first. Why: it adds `drive-flow`, `flow-step.sh`, a Codex exclusion and tests that the portable design must preserve.
+- **Cross-plan order** — options: run both plans concurrently, port first, or finish the interactive plan first. Chosen: depend on the parts that matter, not on the whole plan. The skill-architecture tickets (01 onward) wait for the in-session `drive-flow` skill and its Codex exclusion; the review-path tickets (07, 08) wait for the in-session conductor, whose policy mirrors `review()`; the preflight (06) and commit safety (09) touch neither and start at once. Why: the in-session plan ends with a manual, paid run that nothing here needs, and the Codex safety fixes should not wait on it.
+- **Two tracks** — the Codex loop hardening (06, 07, 08, 09, 17) and the portable skills (01 to 05, 10, 11, 13 to 16) share only the acceptance ticket 12. They can be worked in parallel, and may later become two plans.
 - **Canonical content** — options: keep Claude as canonical, keep Codex as canonical, or use shared instructions plus runtime metadata and fragments. Chosen: shared instructions plus explicit runtime material. Why: neither environment becomes an accidental source of truth for the other.
 - **Migration order** — options: neutralize the Markdown first or build both renderers first. Chosen: build renderers first, then neutralize. Why: every intermediate ticket keeps current installations and tests working.
 - **Runtime support** — options: separate skip lists or one matrix beside the skills. Chosen: one non-executable, AWK-readable runtime declaration per skill. Why: installers, tests and packaging consume the same fact without sourcing code.
 - **Review contract** — options: replace the text verdict everywhere or normalize structured Codex output behind the existing contract. Chosen: normalize behind the existing contract. Why: the interactive `flow-step.sh` plan and Claude review path continue to use exact `REVIEW: PASS` or `REVIEW: FAIL` lines.
-- **Writable review isolation** — options: keep read-only, allow writes in the main tree, or use a disposable worktree. Chosen: disposable worktree. Why: tests may write files, while reviewer changes must never reach the builder checkout.
+- **Writable review isolation** — options: keep read-only, allow writes in the main tree, or use a disposable worktree. Chosen: disposable worktree, for the headless reviewer of both agents (Claude's has no sandbox at all today). Why: tests may write files, while reviewer changes must never reach the builder checkout. A worktree holds only tracked files, so the plan folder and the installed skills and roles are copied in when they are ignored or untracked.
+- **Outside facts** — the Codex help output, the official skill layout and the portable plugin layout are not in this repository. The ticket that first relies on each records it in `references.md` with its source and date, and later tickets read it from there.
 - **Plugin output** — options: expose the repository root directly or generate a filtered artifact. Chosen: generate a filtered artifact. Why: the repository contains Claude-only skills and development files that do not belong in the Codex/OpenAI package.
 - **CLI compatibility** — options: pin one version string or test capabilities. Chosen: test capabilities. Why: flags, not a version label, determine whether the loop can run.
 
@@ -135,7 +139,7 @@ The plugin packager writes to a caller-selected output directory, refuses a none
 
 ## Migration and compatibility
 
-This plan starts only after every ticket in `plans/in-session-mode` is resolved. The `drive-flow` skill remains Claude-only. Its support declaration replaces the Codex-specific skip list as the single source of truth, while preserving the installed behavior introduced by that plan.
+The skill-architecture tickets start only after the in-session `drive-flow` skill and its Codex exclusion are resolved, and the review-path tickets only after the in-session conductor is. The `drive-flow` skill remains Claude-only. Its support declaration replaces the Codex-specific skip list as the single source of truth, while preserving the installed behavior introduced by that plan.
 
 `flow-step.sh` keeps its text verdict interface. Codex JSON output is an implementation detail of the headless loop and is normalized before shared policy sees it. Changes to shared retry, verdict or safety policy require parity coverage for both `auto-flow.sh` and `flow-step.sh`.
 
@@ -146,6 +150,9 @@ The command-line interface of `install.sh` remains compatible. Existing generate
 - Neutral wording may weaken a skill's precise runtime behavior — golden installation tests and behavioral evaluations compare the rendered results.
 - Adapter changes may create a circular build dependency — renderers land while the legacy source still works, then the source conversion removes legacy assumptions.
 - Disposable Git worktrees can be left behind after interruption — cleanup uses traps and errors include a manual recovery command.
+- A worktree lacks ignored files — the plan folder, skills and roles are copied in, and a fixture with an ignored `plans/` proves it.
+- The structured-output flag may not exist in the installed Codex — the preflight finds out, and the text contract stays the fallback.
+- Commit safety covers only the Codex loop — Claude builders commit for themselves inside `next-phase` and `drive-flow`, and the README says so.
 - Secret detection can raise false positives — it targets untracked high-risk filenames, prints the reason and documents a narrow explicit override rather than silently staging.
 - The interactive and headless state machines can drift — CI covers their shared verdict and stop contracts, while runtime-specific behavior stays separate.
 - Plugin rules can change — packaging validates the generated artifact and keeps manifest generation isolated from the canonical skills.
