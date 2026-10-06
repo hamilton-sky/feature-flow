@@ -1,7 +1,7 @@
 # Make the installer install the one skill
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 07, 08
 Test first: yes
 Floor: allow test-delete
@@ -30,3 +30,28 @@ Stop installing `plan-feature`, `next-phase`, `review-ticket`, `run-flow` and `s
 - tests/run.sh (the `install.sh` and `install.sh, codex` sections)
 
 ## Answer
+
+Built: `install.sh` installs `feature-flow`, `architect-review` and `automation-design` (the `SKILLS` list) instead of every folder under `skills/`.
+- Claude gets `skills/feature-flow/`.
+- Codex gets `adapters/codex/feature-flow/` copied as it is. The other two skills get a Codex header (`codex_header`: name plus a quoted, escaped description, other keys dropped, body untouched). The roles go to `.agents/flow-roles/` without frontmatter (`role_body`).
+- Both agents get `scripts/`, plus `.feature-flow/guides/`, `.feature-flow/agents/` and `.feature-flow/feature_flow/`. `copy_tree` now skips `__pycache__` and `*.pyc`.
+- When the old flow skills are present, a target gets one line: `note: no longer part of feature-flow, left in place: <names>`. Nothing is deleted.
+- `adapters/codex/skill.awk` is gone.
+- The "next:" lines point at `/feature-flow` and `$feature-flow`. The missing-jq note is now a missing-python3 note.
+- `tests/smoke-real.sh --prepare` tells the user to type `/feature-flow hello` or `$feature-flow hello`.
+
+Proven: `bash tests/run.sh` 504 passed, 0 failed. The count dropped from 539 because the awk rule tests and the old Codex wording checks were removed, which `Floor: allow test-delete` covers. The new `install.sh` and `install.sh, codex` sections check each Done when:
+- A default install has `.claude/skills/feature-flow/SKILL.md`, both agents, `scripts/flow.py`, `.feature-flow/feature_flow/cli.py` and `.feature-flow/guides/build.md`, and no old skill.
+- `python3 scripts/flow.py f start` in the installed repo prints `PLAN`, then `OK <token>` once a plan folder exists.
+- A second run adds nothing.
+- The Codex skill and its `openai.yaml` are byte-identical to `adapters/codex/feature-flow/`.
+- An existing `.claude/skills/next-phase/` is kept and named.
+- `test ! -e adapters/codex/skill.awk` passes.
+- `--user`, `--force`, `--dry-run` and `--agent all|codex|=codex` still work.
+- PyYAML parsed every installed header and `openai.yaml`.
+
+Decisions: `architect-review` and `automation-design` get no `openai.yaml`. They were never explicit-only, and Codex reads a skill without one. Their bodies still mention `$ARGUMENTS` and `/plan-feature`, because the ticket asked for no phrase rewriting.
+
+Shortcuts taken: `scripts/` is still copied whole, so `auto-flow.sh` is still installed until ticket 10 deletes it. It now has no `next-phase` skill to start in an installed repo.
+
+For later tickets: ticket 12's `--interactive` gets the new layout from `--prepare`. Ticket 10 deletes the old skill folders, `run-flow`, `auto-flow.sh` and the auto-flow test sections.

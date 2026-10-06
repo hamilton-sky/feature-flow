@@ -1,7 +1,7 @@
 # Add the feature-flow skill for Codex
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 02, 05, 06
 Test first: no
 
@@ -30,3 +30,20 @@ Add `adapters/codex/feature-flow/SKILL.md` and `adapters/codex/feature-flow/agen
 - adapters/codex/skill.awk (read only; what the Codex rendering used to change)
 
 ## Answer
+
+Built: `adapters/codex/feature-flow/SKILL.md` (hand written, 64 lines) and `adapters/codex/feature-flow/agents/openai.yaml` (`allow_implicit_invocation: false`). The skill follows the Claude skill step for step. It uses `FLOW_INVOKE='$feature-flow'`, `<arguments>` in place of `$ARGUMENTS`, and `AGENTS.md`. It keeps the plan-commit boundary, the token on every conductor call and the explicit-only takeover rule. Ticket 02 found `Codex mode: subagents`, so BUILD and REVIEW use `spawn_agent(task_name=..., fork_turns="none", message="Work only in <repo>." + the prompt output)` with `wait_agent`. That is the wording ticket 02 recorded, and the role text comes first because `prompt` starts with it.
+
+Proven:
+- `sed -n 1,4p` shows `name: feature-flow` and a quoted `description:`, with no Claude-only key.
+- The openai.yaml grep prints `1`.
+- The `FLOW_INVOKE='$feature-flow'` grep prints `3`, and the `/feature-flow|$ARGUMENTS` grep prints `0`.
+- `FLOW_RELAY=1` occurs 0 times, which matches `subagents`.
+- `bash tests/run.sh` exits 0 at ticket 09's commit (see 07's note on why not before).
+
+Decisions:
+- A Codex child cannot be made read-only (ticket 02). The skill says so, relies on the conductor's tracked-diff and HEAD checks, and offers a hard read-only review: `prompt | codex exec --sandbox read-only -o .git/flow-review-<feature>.txt -`.
+- If the sandbox refuses writes under `.git`, the skill stops and says so, because the conductor's state lives there.
+
+Shortcuts taken: none.
+
+For later tickets: ticket 13 runs this by hand. If `spawn_agent` is missing on that surface, the fallback is relay mode, which `flow.py` already supports with `FLOW_RELAY=1`. The skill would then need a relay branch.
