@@ -1,7 +1,7 @@
 # Find out whether Codex can start subagents, and what each runtime says about its context
 
 Type: settle
-Status: open
+Status: resolved
 Blocked by: —
 Test first: no
 
@@ -45,3 +45,65 @@ Then, under For later tickets: the exact wording that started a Codex subagent (
 - tests/smoke-real.sh, the `--prepare` mode
 
 ## Answer
+
+Codex subagents work: yes
+Codex read-only child: no
+Codex context usage readable: yes
+Claude context usage readable: yes
+Codex mode: subagents
+
+The local Codex desktop/runtime exposes `spawn_agent`, `wait_agent` and the
+other collaboration calls. A child started with a fresh context returned
+`KNOWS: no` when asked whether it knew a word given only to the parent, so the
+contexts are independent. The builder child read the installed role and skill,
+resolved demo ticket 01, ran both Done-when commands and committed it as
+`963ded23022f140496a8f8ee289a64ac2a3a968d`. A second fresh reviewer child ran
+the review and returned a reply ending in `REVIEW: FAIL`, proving that the
+verdict text reaches the parent. Its complaint was about the demo change's
+scope, not a failure of the reply path, and `git status --short` remained empty.
+
+`spawn_agent` has no sandbox, permission or tool-list argument. Children share
+the tools configured for the parent request, so this surface cannot enforce a
+read-only child. Instruction-only read-only behavior is possible, and the
+conductor can still detect a dirty tree, but a hard boundary needs a fresh
+Codex session. A direct probe with `codex exec --sandbox read-only` tried
+`touch readonly-child-probe.txt` and got `Operation not permitted`.
+
+Codex CLI 0.147.0 displays `100% context left` in the interactive footer; an
+`exec` session also prints its token total when it exits. Claude Code 2.1.291
+has `/context`, described by the installed runtime as a visualization of used
+tokens, free space and their percentages. These are runtime UI values rather
+than values the model has to estimate.
+
+### For later tickets
+
+Exact child API and builder wording that worked:
+
+```
+spawn_agent(task_name="ticket_builder", fork_turns="none", message="Work only in <repo>. First read <repo>/.agents/flow-roles/ticket-builder.md and follow it. Then read <repo>/.agents/skills/next-phase/SKILL.md and follow it for `<feature> auto`, ticket <NN>. Run every Done-when command, resolve the ticket, and commit as instructed. Return a concise final report including the commit SHA.")
+```
+
+Exact reviewer wording that returned a verdict:
+
+```
+spawn_agent(task_name="ticket_reviewer", fork_turns="none", message="Work only in <repo>. Read <repo>/.agents/flow-roles/ticket-reviewer.md and follow it. Then read <repo>/.agents/skills/review-ticket/SKILL.md and follow it for feature `<feature>`, ticket `<NN>`, start commit `<sha>`. Do not edit any files or create commits. Your final reply must end with exactly `REVIEW: PASS` or `REVIEW: FAIL`.")
+```
+
+The parent gets either final reply through `wait_agent`. Keep
+`fork_turns="none"` so the reviewer does not inherit the builder's context.
+Because the child API cannot enforce read-only access, rely on the reviewer's
+instructions plus the conductor's dirty-tree/HEAD checks, or start a hard
+read-only reviewer as a fresh session:
+
+```
+{ cat .agents/flow-roles/ticket-reviewer.md; echo; echo '$review-ticket <feature> <NN> <sha>'; } | codex exec --sandbox read-only -
+```
+
+For a general interactive read-only session, a user can type:
+
+```
+codex --sandbox read-only -C <repo>
+```
+
+Read context fullness from Codex's `context left` footer. In Claude Code, run
+`/context` (or `/context all` for the expanded breakdown).
