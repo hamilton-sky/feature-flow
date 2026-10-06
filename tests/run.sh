@@ -15,8 +15,10 @@ FAILS=0
 ok() { PASS=$((PASS + 1)); echo "  ok    $1"; }
 bad() { FAILS=$((FAILS + 1)); echo "  FAIL  $1${2:+ ($2)}"; }
 expect_rc() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "exit $3, wanted $2"; fi; }
-expect_has() { if printf '%s' "$3" | grep -qF -- "$2"; then ok "$1"; else bad "$1" "missing: $2"; fi; }
-expect_lacks() { if printf '%s' "$3" | grep -qF -- "$2"; then bad "$1" "unexpected: $2"; else ok "$1"; fi; }
+# a here-string, not a pipe: grep -q stops reading at the first match, and with pipefail the
+# printf feeding a pipe then fails on a broken pipe and turns a match into a miss
+expect_has() { if grep -qF -- "$2" <<< "$3"; then ok "$1"; else bad "$1" "missing: $2"; fi; }
+expect_lacks() { if grep -qF -- "$2" <<< "$3"; then bad "$1" "unexpected: $2"; else ok "$1"; fi; }
 
 ticket() { # dir name status blocked-by [extra header line]
   printf '# %s\n\nType: task\nStatus: %s\nBlocked by: %s\nTest first: no\n%s\n\nbody\n\n## Done when\n\n- x\n\n## Answer\n' \
