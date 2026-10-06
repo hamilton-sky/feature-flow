@@ -51,5 +51,24 @@ jobs:
           git --version
           jq --version
 
+      - name: Run the Python unit tests and the fixture drive
+        run: python3 -m unittest discover -s tests/py
+
       - name: Run the tests
         run: bash tests/run.sh
+
+  windows:
+    name: windows with python
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show the tool versions
+        shell: bash
+        run: |
+          python --version
+          git --version
+
+      - name: Run the Python unit tests and the fixture drive
+        run: python -m unittest discover -s tests/py
