@@ -9,12 +9,17 @@ ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md"}
 GUIDES = {"build": "build.md", "review": "review.md"}
 
 
-def find_dir(scripts, name):
-    """guides/ or agents/ beside the scripts folder (a checkout), else .feature-flow/<name> (an install)."""
-    for folder in (Path(scripts).parent / name, Path(".feature-flow") / name):
-        if folder.is_dir():
-            return folder
-    return None
+def find_file(scripts, folder, name):
+    """folder/name beside the scripts folder (a checkout), else in .feature-flow/ (an install).
+
+    A candidate counts only when it holds the file, so an unrelated guides/ or agents/ folder
+    in the user's repo does not hide the installed one.
+    """
+    for root in (Path(scripts).parent, Path(".feature-flow")):
+        path = root / folder / name
+        if path.is_file():
+            return path
+    raise FileNotFoundError("cannot find %s/%s beside scripts/ or in .feature-flow/" % (folder, name))
 
 
 def _body(path):
@@ -27,12 +32,8 @@ def _body(path):
 
 
 def build(phase, scripts, feature, ticket, num, sha):
-    agents = find_dir(scripts, "agents")
-    guides = find_dir(scripts, "guides")
-    if agents is None or guides is None:
-        raise FileNotFoundError("cannot find agents/ and guides/ beside scripts/ or in .feature-flow/")
-    role = _body(agents / ROLES[phase])
-    guide = _body(guides / GUIDES[phase])
+    role = _body(find_file(scripts, "agents", ROLES[phase]))
+    guide = _body(find_file(scripts, "guides", GUIDES[phase]))
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
                                ("<base>", sha), ("<base-commit>", sha), ("<start-commit>", sha)):
         guide = guide.replace(placeholder, value)

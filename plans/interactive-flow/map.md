@@ -4,7 +4,7 @@
 
 A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feature>` (Codex: `$feature-flow <feature>`) and the feature gets planned or built in that session. `scripts/flow.py` owns the order of phases, the limits and the handoff, and prints the prompt for each phase from runtime-neutral guides. The session hands each build and each review to a fresh subagent, or, where a runtime has none, to a fresh session through the handoff. The installer installs one skill per runtime instead of seven, `adapters/codex/skill.awk` is gone, and the headless loop (`auto-flow.sh`, `/run-flow`) is removed only after the Claude and Codex acceptance runs pass. This plan replaces `plans/in-session-mode` and `plans/portable-runtime-skills`.
 
-**The bar.** `RUN_REAL=1 FLOW_TICKETS_PER_SESSION=1 bash tests/smoke-real.sh --interactive` runs two `claude -p "/feature-flow hello auto"` sessions on the demo project: the first ends on `HANDOFF` after ticket 01, the second finishes ticket 02. Both tickets resolved, a clean tree, gate and floor guard run after each ticket, a reviewer subagent's `REVIEW: PASS` for each: a list of `ok` checks, no `FAIL`, exit 0. Ticket 12 runs it. The old headless path is not removed until ticket 13 also records a successful Codex run.
+**The bar.** `RUN_REAL=1 FLOW_TICKETS_PER_SESSION=1 bash tests/smoke-real.sh --interactive` runs two `claude -p "/feature-flow hello auto"` sessions on the demo project: the first ends on `HANDOFF` after ticket 01, the second finishes ticket 02. Both tickets resolved, a clean tree, gate and floor guard run after each ticket, a reviewer subagent's `REVIEW: PASS` for each: a list of `ok` checks, no `FAIL`, exit 0. Ticket 12 runs it. The Codex hand run was skipped by the user (no Codex tokens), so the headless path goes once ticket 12 passes; Codex stays unverified by hand.
 
 ## How to work this
 
@@ -28,6 +28,8 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 07 - one Claude skill `skills/feature-flow/SKILL.md` (60 lines) drives `flow.py`: start/token, BUILD and REVIEW subagents from `prompt`, reply saved with Bash under `.git`, never checks or reviews itself.
 08 - hand-written Codex skill in `adapters/codex/feature-flow/` (explicit only): same steps with `$feature-flow`, subagents via `spawn_agent` + `wait_agent`, optional hard read-only review through `codex exec --sandbox read-only`.
 09 - installer installs feature-flow (+ architect-review, automation-design), roles, scripts and `.feature-flow/{guides,agents,feature_flow}`; old flow skills reported, never deleted; `skill.awk` gone.
+13 - skipped by the user (no Codex tokens): Codex runtime unverified by hand; ticket 10 waits on 12 only.
+14 - conductor state, log, findings and the saved review reply live in `.feature-flow/state/` (self-ignoring, `*`), not `.git`; a run kept under `.git` is copied over with its owner.
 
 ## Open questions
 

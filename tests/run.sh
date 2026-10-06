@@ -930,15 +930,15 @@ SHA="$(git rev-parse HEAD)"
 pyflow f next
 expect_rc "the first next exits 0" 0 "$RC"
 expect_has "and hands out the first ticket at HEAD" "BUILD plans/f/tasks/01-a.md 01 $SHA" "$OUT"
-if [ -f .git/flow-f.state ]; then ok "it creates .git/flow-f.state"; else bad "it creates .git/flow-f.state"; fi
-expect_has "it logs the BUILD" ",01,BUILD" "$(cat .git/flow-f.log)"
+if [ -f .feature-flow/state/flow-f.state ]; then ok "it creates .feature-flow/state/flow-f.state"; else bad "it creates .feature-flow/state/flow-f.state"; fi
+expect_has "it logs the BUILD" ",01,BUILD" "$(cat .feature-flow/state/flow-f.log)"
 expect_rc "and leaves the tree clean" 0 "$(git status --porcelain | wc -l | tr -d ' ')"
 resolve plans/f/tasks/01-a.md
 pyflow f next
 expect_has "a resolved ticket goes to review with the same base" "REVIEW plans/f/tasks/01-a.md 01 $SHA" "$OUT"
-expect_has "the state records HEAD as the review sha" "review_sha=$(git rev-parse HEAD)" "$(cat .git/flow-f.state)"
-expect_has "the log has the gate" "GATE-PASS" "$(cat .git/flow-f.log)"
-expect_has "and the floor guard" "GUARD-PASS" "$(cat .git/flow-f.log)"
+expect_has "the state records HEAD as the review sha" "review_sha=$(git rev-parse HEAD)" "$(cat .feature-flow/state/flow-f.state)"
+expect_has "the log has the gate" "GATE-PASS" "$(cat .feature-flow/state/flow-f.log)"
+expect_has "and the floor guard" "GUARD-PASS" "$(cat .feature-flow/state/flow-f.log)"
 
 D="$(flowrepo pyflow_retry)"
 cd "$D" || exit 1
@@ -979,11 +979,11 @@ cd "$D" || exit 1
 pyflow f verdict .git/reply.txt
 expect_rc "verdict with no review pending exits 2" 2 "$RC"
 pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
-before="$(cat .git/flow-f.state; git rev-parse HEAD; git status --porcelain)"
+before="$(cat .feature-flow/state/flow-f.state; git rev-parse HEAD; git status --porcelain)"
 reply "REVIEW: PASS"
 pyflow f verdict .git/reply.txt
 expect_has "a PASS reply is recorded" "OK" "$OUT"
-expect_has "and logged" "VERDICT-PASS" "$(cat .git/flow-f.log)"
+expect_has "and logged" "VERDICT-PASS" "$(cat .feature-flow/state/flow-f.log)"
 pyflow f next
 expect_has "after PASS next hands out the next ticket" "BUILD plans/f/tasks/02-b.md 02" "$OUT"
 pyflow f verdict .git/reply.txt
@@ -1007,7 +1007,7 @@ REVIEW: FAIL"
     expect_has "with the reply under its findings heading" "## Review findings (round 1, independent review)" "$(cat plans/f/tasks/01-a.md)"
     expect_has "and the reviewer's text" "major x.py: a bug round 1" "$(cat plans/f/tasks/01-a.md)"
     expect_has "committed" "chore(f): 01 review findings, round 1" "$(git log -1 --format=%s)"
-    expect_has "and logged" "VERDICT-FAIL" "$(cat .git/flow-f.log)"
+    expect_has "and logged" "VERDICT-FAIL" "$(cat .feature-flow/state/flow-f.log)"
   fi
 done
 expect_rc "the 4th review failure exits 1" 1 "$RC"
@@ -1019,7 +1019,7 @@ pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
 reply "I am not sure"
 pyflow f verdict .git/reply.txt
 expect_has "a reply with no verdict asks for another" "RETRY no review verdict" "$OUT"
-expect_has "and is logged" "VERDICT-NONE" "$(cat .git/flow-f.log)"
+expect_has "and is logged" "VERDICT-NONE" "$(cat .feature-flow/state/flow-f.log)"
 pyflow f next
 expect_has "the review is handed out again" "REVIEW plans/f/tasks/01-a.md 01" "$OUT"
 pyflow f verdict .git/reply.txt; pyflow f next
@@ -1042,7 +1042,7 @@ expect_has "and stops" "STOP the reviewer changed tracked files, which a reviewe
 D="$(flowrepo pyflow_runlimit)"
 cd "$D" || exit 1
 pyflow f next; resolve plans/f/tasks/01-a.md
-sed 's/^runs=.*/runs=65/' .git/flow-f.state > .git/flow-f.state.new && mv .git/flow-f.state.new .git/flow-f.state
+sed 's/^runs=.*/runs=65/' .feature-flow/state/flow-f.state > .feature-flow/state/flow-f.state.new && mv .feature-flow/state/flow-f.state.new .feature-flow/state/flow-f.state
 pyflow f next
 expect_rc "passing the run limit exits 1" 1 "$RC"
 expect_has "and stops" "STOP run limit of 65 sessions reached, stopping" "$OUT"
@@ -1050,10 +1050,10 @@ expect_has "and stops" "STOP run limit of 65 sessions reached, stopping" "$OUT"
 D="$(flowrepo pyflow_noreview)"
 cd "$D" || exit 1
 pyflow f next; reply "REVIEW: PASS"
-before="$(cat .git/flow-f.state; git rev-parse HEAD; git status --porcelain)"
+before="$(cat .feature-flow/state/flow-f.state; git rev-parse HEAD; git status --porcelain)"
 pyflow f verdict .git/reply.txt
 expect_rc "verdict while a build is pending exits 2" 2 "$RC"
-if [ "$before" = "$(cat .git/flow-f.state; git rev-parse HEAD; git status --porcelain)" ]; then ok "and changes nothing"; else bad "and changes nothing"; fi
+if [ "$before" = "$(cat .feature-flow/state/flow-f.state; git rev-parse HEAD; git status --porcelain)" ]; then ok "and changes nothing"; else bad "and changes nothing"; fi
 cd "$ROOT" || exit 1
 
 echo "flow.py, sessions, handoff and relay"
@@ -1062,32 +1062,32 @@ cd "$D" || exit 1
 pyflow nope start
 expect_has "start with no plan folder prints PLAN" "PLAN" "$OUT"
 pyflow f next; setst claimed plans/f/tasks/01-a.md
-before="$(grep -E '^(ticket|round|attempt)=' .git/flow-f.state)"
+before="$(grep -E '^(ticket|round|attempt)=' .feature-flow/state/flow-f.state)"
 pyflow f start
 expect_rc "start exits 0" 0 "$RC"
 TOK="${OUT#OK }"
 if [ -n "$TOK" ] && [ "OK $TOK" = "$OUT" ]; then ok "start prints OK and a token"; else bad "start prints OK and a token" "$OUT"; fi
-if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .git/flow-f.state)" ]; then ok "start leaves the ticket, round and attempt alone"; else bad "start leaves the ticket, round and attempt alone"; fi
-snap="$(cat .git/flow-f.state; git status --porcelain)"
+if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .feature-flow/state/flow-f.state)" ]; then ok "start leaves the ticket, round and attempt alone"; else bad "start leaves the ticket, round and attempt alone"; fi
+snap="$(cat .feature-flow/state/flow-f.state; git status --porcelain)"
 pyflow f next
 expect_rc "next without the token exits 1" 1 "$RC"
 expect_has "and names the owner" "owned by another session ($TOK)" "$OUT"
 OUT="$(FLOW_SESSION=wrong python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "next with a different token stops too" "STOP f is owned by another session" "$OUT"
-if [ "$snap" = "$(cat .git/flow-f.state; git status --porcelain)" ]; then ok "and neither changes the state or the tree"; else bad "and neither changes the state or the tree"; fi
+if [ "$snap" = "$(cat .feature-flow/state/flow-f.state; git status --porcelain)" ]; then ok "and neither changes the state or the tree"; else bad "and neither changes the state or the tree"; fi
 pyflow f start
 expect_rc "a second session's start exits 1" 1 "$RC"
 expect_has "and names the owner" "STOP f is owned by session $TOK" "$OUT"
 OUT="$(FLOW_TAKEOVER=1 python3 scripts/flow.py f start 2> /dev/null)"
 TOK2="${OUT#OK }"
 if [ -n "$TOK2" ] && [ "$TOK2" != "$TOK" ] && [ "OK $TOK2" = "$OUT" ]; then ok "FLOW_TAKEOVER=1 start returns a new token"; else bad "FLOW_TAKEOVER=1 start returns a new token" "$OUT"; fi
-if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .git/flow-f.state)" ]; then ok "and keeps the outstanding phase and counters"; else bad "and keeps the outstanding phase and counters"; fi
+if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .feature-flow/state/flow-f.state)" ]; then ok "and keeps the outstanding phase and counters"; else bad "and keeps the outstanding phase and counters"; fi
 OUT="$(FLOW_SESSION="$TOK" python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "the old token can no longer drive the flow" "STOP f is owned by another session" "$OUT"
 OUT="$(FLOW_SESSION="$TOK2" python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "after the takeover a claimed ticket is built again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
 expect_has "and reset to open" "Status: open" "$(cat plans/f/tasks/01-a.md)"
-expect_has "and the attempt counts" "attempt=2" "$(cat .git/flow-f.state)"
+expect_has "and the attempt counts" "attempt=2" "$(cat .feature-flow/state/flow-f.state)"
 
 D="$(flowrepo pyflow_handoff)"
 cd "$D" || exit 1
@@ -1099,14 +1099,14 @@ printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
 pyflow f next
 expect_rc "after FLOW_TICKETS_PER_SESSION tickets next exits 0" 0 "$RC"
 expect_has "and hands off" "HANDOFF /feature-flow f" "$OUT"
-expect_has "and logs it" ",HANDOFF" "$(cat .git/flow-f.log)"
-expect_rc "the owner is cleared" 1 "$(grep -cx "owner=" .git/flow-f.state)"
+expect_has "and logs it" ",HANDOFF" "$(cat .feature-flow/state/flow-f.log)"
+expect_rc "the owner is cleared" 1 "$(grep -cx "owner=" .feature-flow/state/flow-f.state)"
 pyflow f start; export FLOW_SESSION="${OUT#OK }"
 pyflow f next
 expect_has "the next session gets the held-back BUILD" "BUILD plans/f/tasks/02-b.md 02 $(git rev-parse HEAD)" "$OUT"
 resolve plans/f/tasks/02-b.md; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next
 expect_has "on the last ticket it is DONE, not HANDOFF" "DONE f is complete" "$OUT"
-expect_rc "and DONE clears the owner" 1 "$(grep -cx "owner=" .git/flow-f.state)"
+expect_rc "and DONE clears the owner" 1 "$(grep -cx "owner=" .feature-flow/state/flow-f.state)"
 unset FLOW_SESSION FLOW_TICKETS_PER_SESSION
 
 D="$(flowrepo pyflow_invoke)"
@@ -1131,7 +1131,7 @@ expect_has "relay: the next session gets REVIEW" "REVIEW plans/f/tasks/01-a.md 0
 printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
 pyflow f next
 expect_has "relay: after the REVIEW it hands off" "HANDOFF /feature-flow f" "$OUT"
-seq="$(cut -d, -f3 .git/flow-f.log | grep -E '^(BUILD|REVIEW|HANDOFF)$' | tr '\n' ' ')"
+seq="$(cut -d, -f3 .feature-flow/state/flow-f.log | grep -E '^(BUILD|REVIEW|HANDOFF)$' | tr '\n' ' ')"
 expect_has "relay: the log shows BUILD, HANDOFF, REVIEW, HANDOFF" "BUILD HANDOFF REVIEW HANDOFF " "$seq"
 pyflow f start; export FLOW_SESSION="${OUT#OK }"
 pyflow f next
@@ -1179,6 +1179,12 @@ D="$(flowrepo pyflow_prompt_root)"; cd "$D" || exit 1
 cp -R "$ROOT/guides" "$ROOT/agents" .; git add -A; git commit -qm "guides beside scripts"
 pyflow f next; pyflow f prompt
 expect_has "guides and agents beside scripts/ are found too" "You are the builder." "$OUT"
+D="$(flowrepo pyflow_prompt_other)"; cd "$D" || exit 1
+mkdir -p guides agents .feature-flow; echo "the user's own notes" > guides/notes.md; echo "x" > agents/mine.md
+cp -R "$ROOT/guides" "$ROOT/agents" .feature-flow/; git add -A; git commit -qm "own guides/ and agents/ folders"
+pyflow f next; pyflow f prompt
+expect_rc "an unrelated guides/ or agents/ folder does not hide .feature-flow/" 0 "$RC"
+expect_has "and the installed role is used" "You are the builder." "$OUT"
 cd "$ROOT" || exit 1
 
 echo "feature-flow skills"
@@ -1205,6 +1211,11 @@ expect_rc "it never says /feature-flow or \$ARGUMENTS" 0 "$(grep -cE '(^|[^$])/f
 mode="$(grep -E '^Codex mode: (subagents|relay)$' "$ROOT/plans/interactive-flow/tasks/02-probe-codex-sessions.md" | sed 's/^Codex mode: //')"
 relay="$(grep -c 'FLOW_RELAY=1' "$CX_SKILL")"
 if { [ "$mode" = subagents ] && [ "$relay" = 0 ]; } || { [ "$mode" = relay ] && [ "$relay" -ge 1 ]; }; then ok "its mode matches ticket 02 ($mode)"; else bad "its mode matches ticket 02 ($mode)"; fi
+for n in Claude Codex; do
+  s="$CS_SKILL"; [ "$n" = Claude ] || s="$CX_SKILL"
+  expect_rc "the $n skill writes nothing under .git" 0 "$(grep -cE '(>|-o) *\.git/' "$s")"
+  if grep -q 'verdict \.feature-flow/state/flow-review-<feature>\.txt' "$s"; then ok "the $n skill saves the review reply in .feature-flow/state/"; else bad "the $n skill saves the review reply in .feature-flow/state/"; fi
+done
 
 echo "smoke-real.sh, prepare only"
 SM="$ROOT/tests/smoke-real.sh"

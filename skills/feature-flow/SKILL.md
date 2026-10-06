@@ -29,7 +29,7 @@ With a plan present, check these before `start`, and stop at the first that fail
 
 - `git status --porcelain` is empty.
 - `bash scripts/flow-status.sh <feature> --check` prints `OK`.
-- `ticket-builder.md` and `ticket-reviewer.md` are in `.claude/agents/` or `~/.claude/agents/`. If not, say to run `bash install.sh` from feature-flow.
+- `ticket-builder.md` and `ticket-reviewer.md` are in `.claude/agents/`, `~/.claude/agents/`, or `$CLAUDE_HOME/agents/` when `CLAUDE_HOME` is set. If not, say to run `bash install.sh` from feature-flow.
 
 Then run `FLOW_INVOKE=/feature-flow python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE=/feature-flow`.
 
@@ -42,7 +42,7 @@ Say what will happen: for each ticket, a builder subagent and then a reviewer su
 Run `next`, act on its one line, and repeat:
 
 - `BUILD <ticket> <NN> <sha>`: run `prompt`. Spawn a `ticket-builder` subagent with that output as its whole prompt, and ask for a short summary back. Wait for its final reply: an Agent call can return before the subagent finishes, and the reply then arrives as a notification. Then run `next`.
-- `REVIEW <ticket> <NN> <sha>`: run `prompt` and spawn a `ticket-reviewer` subagent with it. Wait for its final reply. Save the whole reply with Bash, not the Write tool, and not under `.git`: an unattended session is refused there as a sensitive file. Use `cat > "${TMPDIR:-/tmp}/flow-review-<feature>.txt" <<'EOF'` ... `EOF`. Then, as separate commands, run `verdict "${TMPDIR:-/tmp}/flow-review-<feature>.txt"` and `next`. If `verdict` prints `RETRY`, just run `next`.
+- `REVIEW <ticket> <NN> <sha>`: run `prompt` and spawn a `ticket-reviewer` subagent with it. Wait for its final reply. Save the whole reply with Bash, not the Write tool, into the conductor's git-ignored state folder: `cat > .feature-flow/state/flow-review-<feature>.txt <<'EOF'` ... `EOF`. Never under `.git`: an unattended session is refused there as a sensitive file. Then, as separate commands, run `verdict .feature-flow/state/flow-review-<feature>.txt` and `next`. If `verdict` prints `RETRY`, just run `next`.
 - `DONE <summary>`: report it and suggest `/feature-flow <feature> show`.
 - `STOP <reason>`: report the reason, run `bash scripts/flow-status.sh <feature>`, show the table, and stop.
 - `HANDOFF <line>`: stop here. Tell the user to open a new session and type exactly `<line>`. The new session resumes where this one stopped.
@@ -51,7 +51,9 @@ A conductor command looks like this:
 
     FLOW_SESSION=<token> FLOW_INVOKE=/feature-flow python3 scripts/flow.py <feature> next
 
-## Rules
+## Rules while building
+
+These apply from `start` on, once a plan exists. Planning (above) writes the plan files itself.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
 - Never edit a ticket, the plan or the code, and never commit. The builder does that.

@@ -31,7 +31,7 @@ With a plan present, check these before `start`, and stop at the first that fail
 - `bash scripts/flow-status.sh <feature> --check` prints `OK`.
 - `.agents/flow-roles/ticket-builder.md` and `.agents/flow-roles/ticket-reviewer.md` exist. If not, say to run `bash install.sh --agent codex` from feature-flow.
 
-Then run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'`. The conductor writes its state under `.git`; if the sandbox refuses that, stop and tell the user this session needs to be allowed to write `.git`.
+Then run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'`. The conductor keeps its state in `.feature-flow/state/`, a git-ignored folder in the repo, so it never needs to write `.git`. If it prints `STOP cannot write the flow state`, tell the user this session must be allowed to write that folder.
 
 If `start` prints `STOP` naming another owner, another session may still be working this feature. Ask the user whether that session is closed. Only on a clear yes, run `start` once more with `FLOW_TAKEOVER=1`. In `auto` mode, never take over: report and stop.
 
@@ -42,7 +42,7 @@ Say what will happen: for each ticket, a builder subagent and then a reviewer su
 Run `next`, act on its one line, and repeat:
 
 - `BUILD <ticket> <NN> <sha>`: run `prompt`. Start the builder with `spawn_agent(task_name="ticket_builder", fork_turns="none", message=...)`. The message is "Work only in <repo>." followed by the whole `prompt` output, which already starts with the builder role. Get its final reply with `wait_agent`, then run `next`.
-- `REVIEW <ticket> <NN> <sha>`: run `prompt`. Start a new reviewer the same way, with `task_name="ticket_reviewer"` and `fork_turns="none"` so it never sees the builder's context. Get its final reply with `wait_agent`. A child cannot be made read-only, so the reviewer works from its instructions; the conductor catches any edit it makes. Save the whole reply with the shell: `cat > .git/flow-review-<feature>.txt <<'EOF'` ... `EOF`. Then run `verdict .git/flow-review-<feature>.txt` and `next`. If `verdict` prints `RETRY`, just run `next`.
+- `REVIEW <ticket> <NN> <sha>`: run `prompt`. Start a new reviewer the same way, with `task_name="ticket_reviewer"` and `fork_turns="none"` so it never sees the builder's context. Get its final reply with `wait_agent`. A child cannot be made read-only, so the reviewer works from its instructions; the conductor catches any edit it makes. Save the whole reply with the shell: `cat > .feature-flow/state/flow-review-<feature>.txt <<'EOF'` ... `EOF`. Then run `verdict .feature-flow/state/flow-review-<feature>.txt` and `next`. If `verdict` prints `RETRY`, just run `next`.
 - `DONE <summary>`: report it and suggest `$feature-flow <feature> show`.
 - `STOP <reason>`: report the reason, run `bash scripts/flow-status.sh <feature>`, show the table, and stop.
 - `HANDOFF <line>`: stop here. Tell the user to open a new session and type exactly `<line>`. The new session resumes where this one stopped.
@@ -53,9 +53,11 @@ A conductor command looks like this:
 
 If the user wants a reviewer that cannot write at all, run the review as a fresh read-only Codex session instead of a subagent, then run `verdict` on its reply as above:
 
-    FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> prompt | codex exec --sandbox read-only -o .git/flow-review-<feature>.txt -
+    FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> prompt | codex exec --sandbox read-only -o .feature-flow/state/flow-review-<feature>.txt -
 
-## Rules
+## Rules while building
+
+These apply from `start` on, once a plan exists. Planning (above) writes the plan files itself.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
 - Never edit a ticket, the plan or the code, and never commit. The builder does that.
