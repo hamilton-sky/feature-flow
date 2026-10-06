@@ -849,7 +849,7 @@ expect_lacks "and the edit is gone" "my own edit" "$(cat "$CS/run-flow/SKILL.md"
 bash "$ROOT/install.sh" "$C/fresh" --agent codex --dry-run > /dev/null 2>&1
 if [ -z "$(ls -A "$C/fresh")" ]; then ok "--agent codex --dry-run writes nothing"; else bad "--agent codex --dry-run writes nothing"; fi
 out="$(bash "$ROOT/install.sh" "$C/fresh" --agent codex --dry-run 2>&1)"
-expect_has "and still reports what it would add" "would add 28" "$out"
+expect_has "and still reports what it would add" "would add 29" "$out"
 
 mkdir -p "$C/repo2"
 AGENTS_HOME="$C/home/.agents" bash "$ROOT/install.sh" "$C/repo2" --agent codex --user > /dev/null 2>&1
@@ -968,6 +968,80 @@ if command -v node > /dev/null 2>&1; then
 else
   echo "  skip  node is not installed, so the layout and replay unit tests were not run"
 fi
+
+echo "flow.py, unit tests"
+out="$(cd "$ROOT" && python3 -m unittest discover -s tests/py 2>&1)"; rc=$?
+expect_rc "python3 -m unittest discover -s tests/py passes" 0 $rc
+[ "$rc" = 0 ] || printf '%s\n' "$out" | tail -20
+out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py scripts/flow.py 2>&1)"
+expect_rc "the conductor parses as Python 3.9" 0 $?
+out="$(cd "$ROOT" && grep -rlE '^(import|from) ' feature_flow | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum)\b')"
+if [ -z "$out" ]; then ok "the conductor imports only the standard library"; else bad "the conductor imports only the standard library" "$out"; fi
+
+flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and feature_flow/
+  local d
+  d="$(newrepo "$1")"
+  cp "$ROOT/scripts/flow.py" "$d/scripts/"
+  mkdir -p "$d/feature_flow"
+  cp "$ROOT"/feature_flow/*.py "$d/feature_flow/"
+  (cd "$d" && git add -A && git commit -qm "add flow.py")
+  echo "$d"
+}
+pyflow() { # args... -> sets OUT and RC, run in the current directory
+  OUT="$(python3 scripts/flow.py "$@" 2> /dev/null)"
+  RC=$?
+}
+setst() { awk -v s="$1" 'FNR<=20 && !d && /^Status:/ {print "Status: " s; d=1; next} {print}' "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
+resolve() { echo "work" > "work-$RANDOM.txt"; setst resolved "$1"; git add -A; git commit -qm "${2:-feat: work}"; }
+
+echo "flow.py, build and checks"
+D="$(flowrepo pyflow_build)"
+cd "$D" || exit 1
+SHA="$(git rev-parse HEAD)"
+pyflow f next
+expect_rc "the first next exits 0" 0 "$RC"
+expect_has "and hands out the first ticket at HEAD" "BUILD plans/f/tasks/01-a.md 01 $SHA" "$OUT"
+if [ -f .git/flow-f.state ]; then ok "it creates .git/flow-f.state"; else bad "it creates .git/flow-f.state"; fi
+expect_has "it logs the BUILD" ",01,BUILD" "$(cat .git/flow-f.log)"
+expect_rc "and leaves the tree clean" 0 "$(git status --porcelain | wc -l | tr -d ' ')"
+resolve plans/f/tasks/01-a.md
+pyflow f next
+expect_has "a resolved ticket goes to review with the same base" "REVIEW plans/f/tasks/01-a.md 01 $SHA" "$OUT"
+expect_has "the state records HEAD as the review sha" "review_sha=$(git rev-parse HEAD)" "$(cat .git/flow-f.state)"
+expect_has "the log has the gate" "GATE-PASS" "$(cat .git/flow-f.log)"
+expect_has "and the floor guard" "GUARD-PASS" "$(cat .git/flow-f.log)"
+
+D="$(flowrepo pyflow_retry)"
+cd "$D" || exit 1
+pyflow f next
+setst claimed plans/f/tasks/01-a.md
+pyflow f next
+expect_has "a ticket left claimed is built again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
+expect_has "and reset to open" "Status: open" "$(cat plans/f/tasks/01-a.md)"
+pyflow f next
+expect_rc "after FLOW_MAX_RETRIES attempts next exits 1" 1 "$RC"
+expect_has "and says the ticket is unresolved" "STOP 01-a is still unresolved after 2 attempt(s)" "$OUT"
+
+D="$(flowrepo pyflow_gate)"
+cd "$D" || exit 1
+printf 'Test: `test ! -e FAILING`\n' >> plans/f/commands.md; touch FAILING; git add -A; git commit -qm "failing test"
+pyflow f next
+resolve plans/f/tasks/01-a.md
+pyflow f next
+expect_has "a failing gate builds the ticket again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
+expect_has "with the gate's findings in the ticket" "## Review findings (round 1, gate)" "$(cat plans/f/tasks/01-a.md)"
+expect_has "committed" "chore(f): 01 review findings, round 1" "$(git log -1 --format=%s)"
+for r in 2 3 4; do resolve plans/f/tasks/01-a.md; pyflow f next; done
+expect_rc "the 4th gate failure exits 1" 1 "$RC"
+expect_has "and stops after 3 rounds" "STOP 01-a still fails the gate after 3 round(s)" "$OUT"
+
+D="$(flowrepo pyflow_dirty)"
+cd "$D" || exit 1
+pyflow f next
+setst resolved plans/f/tasks/01-a.md; git add -A; git commit -qm "feat: 01"; touch stray.txt
+pyflow f next
+expect_has "a resolved ticket with a dirty tree stops" "STOP working tree is dirty after 01-a, it should have been committed" "$OUT"
+cd "$ROOT" || exit 1
 
 echo "smoke-real.sh, prepare only"
 SM="$ROOT/tests/smoke-real.sh"

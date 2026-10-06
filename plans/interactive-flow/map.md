@@ -19,7 +19,7 @@ A Claude Code or Codex user, locally or in the cloud, types `/feature-flow <feat
 
 ## Decisions so far
 
-<One line per resolved ticket.>
+03 - conductor is `feature_flow/` + `scripts/flow.py`; state in `.git/flow-<f>.state`; bash checks wrapped in `checks.py`; `next` does BUILD, gate, guard, REVIEW.
 
 ## Open questions
 
