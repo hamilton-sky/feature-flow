@@ -15,7 +15,7 @@ All of feature-flow runs as Python in the `feature_flow` package (standard libra
 - See the graph: `bash scripts/flow-status.sh interactive-flow-python --mermaid` (coloured by status, drawn on demand).
 - Commands live in `commands.md` (frozen). Lessons live in `learnings.md` (append only).
 - Status lives only in the ticket files. This map never repeats it.
-- Start only after `plans/interactive-flow` ticket 10 is resolved; ticket 01 checks that.
+- Start only after `plans/interactive-flow` ticket 03 (the Python conductor) is resolved; ticket 01 checks that. Ticket 05 also waits for interactive-flow ticket 10, and ticket 06 for its ticket 14.
 
 ## Decisions so far
 

@@ -5,9 +5,11 @@ Status: open
 Blocked by: —
 Test first: no
 
-This plan ports the remaining bash scripts and must not start before `plans/interactive-flow` has written the Python conductor and removed the headless loop. Confirm that, and record which Python the places feature-flow runs in actually have, so the ports target a version that exists everywhere.
+This plan ports the remaining bash scripts and must not start before `plans/interactive-flow` has written the Python conductor. Confirm that, and record which Python the places feature-flow runs in actually have, so the ports target a version that exists everywhere.
 
-1. Run `bash scripts/flow-status.sh interactive-flow`. Tickets 03 and 10 there must be resolved, and `scripts/auto-flow.sh` must not exist.
+The user chose on 2026-10-06 to start the ports before the headless loop is removed. Only two ports touch what `plans/interactive-flow` is still changing: ticket 05 waits for its ticket 10 (the cost log leaves `flow-view.sh`) and ticket 06 for its ticket 14 (`install.sh` changes). Each of those tickets says so.
+
+1. Run `bash scripts/flow-status.sh interactive-flow`. Ticket 03 there must be resolved and `feature_flow/conductor.py` must exist.
 2. Record `python3 --version` (or `python --version`) in a Claude Code cloud session, a Codex cloud task, the GitHub macOS and Windows runners, and the maintainer's own machine. Record whether `git` is on the PATH on the Windows runner.
 
 Put these lines in the Answer exactly:
