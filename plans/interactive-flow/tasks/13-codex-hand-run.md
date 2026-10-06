@@ -1,7 +1,7 @@
 # Run the demo by hand in Codex and record what happened
 
 Type: settle
-Status: open
+Status: parked
 Blocked by: 02, 14
 Test first: no
 
@@ -51,3 +51,13 @@ and no `HANDOFF` line was printed, so there was no line with which to start the
 requested new session. The checkout remained clean at its initial commit.
 Ticket 14 is the required fix. The parent Codex session reported 16,953 total
 tokens (16,208 input, 108,288 cached input, 745 output, 161 reasoning) on exit.
+
+## Skipped 2026-10-06
+
+Waived by the user: no Codex tokens are left for a hand run. The Codex skill
+(`adapters/codex/feature-flow/`) stays installed, but its full run is
+**unverified by hand**. What is checked: ticket 02's probe of `spawn_agent`/`wait_agent`
+in the Codex desktop app, and ticket 14's automated test that the conductor runs
+with `.git` unwritable. Not checked: a builder's `git commit` inside a normal
+`codex -C` sandbox. The headless-removal ticket no longer waits on this one. Reopen it when
+Codex tokens are available.
