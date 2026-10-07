@@ -77,6 +77,36 @@ class RunTests(unittest.TestCase):
         files = sorted(p.relative_to(self.target).as_posix() for p in self.target.rglob("*") if p.is_file())
         self.assertEqual(sorted(listed), files)
 
+    def test_an_upgrade_replaces_files_nobody_edited_and_keeps_edited_ones(self):
+        self.run_install("--agent", "all")
+        skill = self.target / ".agents" / "skills" / "feature-flow" / "SKILL.md"
+        guide = self.target / ".feature-flow" / "guides" / "build.md"
+        role = self.target / ".claude" / "agents" / "ticket-builder.md"
+        # an earlier version wrote this skill and recorded its hash
+        skill.write_bytes(b"skill from an earlier version\n")
+        hashes = self.target / ".feature-flow" / "installed.sha256"
+        lines = [l for l in hashes.read_text(encoding="utf-8").splitlines()
+                 if not l.endswith("  .agents/skills/feature-flow/SKILL.md")]
+        lines.append("%s  .agents/skills/feature-flow/SKILL.md" % install._sha256(b"skill from an earlier version\n"))
+        hashes.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # 0.1.1 kept no record: its files are known by the released hashes
+        guide.write_bytes(b"guide from 0.1.1\n")
+        role.write_bytes(role.read_bytes() + b"my own edit\n")
+        released = install.RELEASED
+        install.RELEASED = frozenset([install._sha256(b"guide from 0.1.1\n")])
+        try:
+            code, out, _ = self.run_install("--agent", "all")
+        finally:
+            install.RELEASED = released
+        self.assertEqual(code, 0)
+        self.assertIn("  update  %s/.agents/skills/feature-flow/SKILL.md" % self.target, out)
+        self.assertNotIn(b"earlier version", skill.read_bytes())
+        self.assertNotIn(b"0.1.1", guide.read_bytes())
+        self.assertIn(b"my own edit", role.read_bytes())
+        self.assertIn("kept    %s/.claude/agents/ticket-builder.md" % self.target, out)
+        recorded = dict(reversed(l.split("  ", 1)) for l in hashes.read_text(encoding="utf-8").splitlines())
+        self.assertEqual(recorded[".agents/skills/feature-flow/SKILL.md"], install._sha256(skill.read_bytes()))
+
     def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
         helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         _, out, _ = self.run_install()
