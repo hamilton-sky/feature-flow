@@ -72,6 +72,14 @@ def tracked_clean():
             and _git("diff", "--cached", "--quiet", check=False).returncode == 0)
 
 
+def commit_paths(paths, message):
+    """Commit these paths only, whatever else is staged."""
+    paths = [str(p) for p in paths]
+    if _git("add", "--", *paths, check=False).returncode != 0:
+        return False
+    return _git("commit", "-q", "-m", message, "--", *paths, check=False).returncode == 0
+
+
 def commit_file(path, message):
     if _git("add", "--", str(path), check=False).returncode != 0:
         return False
