@@ -1,7 +1,8 @@
 import os
+import shutil
 import unittest
 
-from helpers import Repo
+from helpers import ROOT, Repo
 
 T1 = "plans/f/tasks/01-a.md"
 T2 = "plans/f/tasks/02-b.md"
@@ -163,6 +164,51 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class GuardWarning(unittest.TestCase):
+    def setUp(self):
+        self.repo = Repo()
+        for folder in ("agents", "guides"):
+            shutil.copytree(str(ROOT / folder), str(self.repo.path(folder)))
+        self.repo.path("tests").mkdir()
+        self.repo.path("tests/test_x.py").write_text("def test_x():\n    assert 1\n", encoding="utf-8")
+        self.repo.commit("tests")
+
+    def tearDown(self):
+        self.repo.close()
+
+    def build(self, test_text):
+        self.repo.flow("next")
+        self.repo.path("tests/test_x.py").write_text(test_text, encoding="utf-8")
+        self.repo.resolve(T1)
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        return self.repo.flow("prompt")[1]
+
+    def test_a_removed_assertion_reaches_the_reviewer_as_a_warning(self):
+        prompt = self.build("def test_x():\n    pass\n")
+        self.assertIn("The floor guard warns: warning: 1 assertion line(s) removed, 0 added.", prompt)
+        self.assertIn("GUARD-PASS", self.repo.log())
+        self.assertEqual(self.repo.state()["guard_warning"].count("warning:"), 1)
+
+    def test_no_removed_assertion_no_warning_text(self):
+        prompt = self.build("def test_x():\n    assert 1\n    assert 2\n")
+        self.assertNotIn("The floor guard warns", prompt)
+
+    def test_the_warning_is_cleared_when_the_next_ticket_is_picked(self):
+        self.build("def test_x():\n    pass\n")
+        self.repo.flow("verdict", self.write_verdict())
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("BUILD %s 02 " % T2), out)
+        self.assertEqual(self.repo.state().get("guard_warning", ""), "")
+
+    def write_verdict(self):
+        path = self.repo.dir.parent / (self.repo.dir.name + "-verdict.txt")
+        path.write_text("fine\nREVIEW: PASS\n", encoding="utf-8")
+        self.addCleanup(path.unlink)
+        return str(path)
+
+
 class StateOutsideGit(unittest.TestCase):
     """Ticket 14: a normal Codex session can write the worktree but not .git."""
 
@@ -224,3 +270,31 @@ class StateOutsideGit(unittest.TestCase):
         self.assertTrue(self.flow("next", FLOW_SESSION="abc123")[1].startswith("BUILD %s 01 " % T1))
         self.assertIn("10:00:00,-,START", self.repo.log())
         self.assertEqual(self.repo.state()["owner"], "abc123")
+
+
+class RunLimit(unittest.TestCase):
+    def setUp(self):
+        self.repo = Repo()
+        for folder in ("agents", "guides"):
+            shutil.copytree(str(ROOT / folder), str(self.repo.path(folder)))
+        self.repo.commit("prompts")
+
+    def tearDown(self):
+        self.repo.close()
+
+    def test_the_limit_is_recomputed_from_the_ticket_count_on_each_pick(self):
+        self.repo.flow("next")
+        full = int(self.repo.state()["limit"])
+        state = self.repo.path(".feature-flow/state/flow-f.state")
+        text = state.read_text(encoding="utf-8")
+        state.write_text(text.replace("limit=%d" % full, "limit=2"), encoding="utf-8")
+        self.assertEqual(self.repo.state()["limit"], "2")
+        self.repo.resolve(T1)
+        self.assertEqual(self.repo.flow("next")[1][:6], "REVIEW")
+        path = self.repo.dir.parent / (self.repo.dir.name + "-verdict.txt")
+        path.write_text("fine\nREVIEW: PASS\n", encoding="utf-8")
+        self.addCleanup(path.unlink)
+        self.repo.flow("verdict", str(path))
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("BUILD %s 02 " % T2), out)
+        self.assertEqual(int(self.repo.state()["limit"]), full)

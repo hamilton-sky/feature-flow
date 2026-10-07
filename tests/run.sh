@@ -118,9 +118,8 @@ out="$(guard f 01 "$B1" 2>&1)"; rc=$?
 expect_rc "a worker cannot excuse itself by adding Floor: allow" 1 $rc
 expect_has "and the edit to its own header is reported" "ticket-edit: plans/f/tasks/01-a.md" "$out"
 guard f 99 "$B1" > /dev/null 2>&1; expect_rc "a missing ticket exits 2" 2 $?
-# more fixtures: other languages, config files, odd arguments. ASCII only: mawk cuts a finding at 100
-# bytes and gawk at 100 characters, so a non-ASCII line has no single answer in an awk-based check;
-# tests/py/test_floorguard.py pins the byte cut.
+# more fixtures: other languages, config files, odd arguments. ASCII only here;
+# tests/py/test_floorguard.py pins the 100 character cut.
 ticket plans/f/tasks/04-d.md D open "02, 03" "Floor: skip, Config"
 git add -A; git commit -qm extras-base; B2="$(git rev-parse HEAD)"
 long="$(printf 'x%.0s' $(seq 1 120))"
@@ -706,7 +705,7 @@ pyflow f next; resolve plans/f/tasks/01-a.md
 sed 's/^runs=.*/runs=65/' .feature-flow/state/flow-f.state > .feature-flow/state/flow-f.state.new && mv .feature-flow/state/flow-f.state.new .feature-flow/state/flow-f.state
 pyflow f next
 expect_rc "passing the run limit exits 1" 1 "$RC"
-expect_has "and stops" "STOP run limit of 65 sessions reached, stopping" "$OUT"
+expect_has "and stops" "STOP run limit of 65 phases reached, stopping" "$OUT"
 
 D="$(flowrepo pyflow_noreview)"
 cd "$D" || exit 1

@@ -28,6 +28,10 @@ class TransformTests(unittest.TestCase):
         self.assertEqual(install.role_body(b"---\ntools: x\n---\n\n\nYou are.\n\nmore\n"), b"You are.\n\nmore\n")
         self.assertEqual(install.role_body(b"\nplain\n"), b"\nplain\n")
 
+    def test_role_body_drops_the_frontmatter_of_a_windows_checkout_too(self):
+        self.assertEqual(install.role_body(b"---\r\ntools: x\r\n---\r\n\r\nYou are.\r\nmore\r\n"),
+                         b"You are.\r\nmore\r\n")
+
 
 class RunTests(unittest.TestCase):
     def setUp(self):

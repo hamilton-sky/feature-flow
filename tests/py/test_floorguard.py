@@ -12,79 +12,237 @@ def diff(*files):
     """A --unified=0 diff with the given (path, [added lines]) pairs."""
     out = []
     for path, lines in files:
-        out += [b"diff --git a/" + path + b" b/" + path, b"--- a/" + path, b"+++ b/" + path, b"@@ -1 +1 @@"]
-        out += [b"+" + line for line in lines]
-    return b"\n".join(out) + b"\n"
+        out += ["diff --git a/" + path + " b/" + path, "--- a/" + path, "+++ b/" + path, "@@ -1 +1 @@"]
+        out += ["+" + line for line in lines]
+    return "\n".join(out) + "\n"
 
 
 class AllowLineTests(unittest.TestCase):
     def test_categories_are_lower_case_and_space_separated(self):
-        src = b"# T\n\nType: task\nFloor: Allow Skip,suppress\n"
-        self.assertEqual(floorguard.allow_line(src), b"skip suppress")
+        src = "# T\n\nType: task\nFloor: Allow Skip,suppress\n"
+        self.assertEqual(floorguard.allow_line(src), "skip suppress")
 
     def test_only_the_first_twenty_lines_count(self):
-        self.assertEqual(floorguard.allow_line(b"x\n" * 20 + b"Floor: allow skip\n"), b"")
-        self.assertEqual(floorguard.allow_line(b"x\n" * 19 + b"Floor: allow skip\n"), b"skip")
+        self.assertEqual(floorguard.allow_line("x\n" * 20 + "Floor: allow skip\n"), "")
+        self.assertEqual(floorguard.allow_line("x\n" * 19 + "Floor: allow skip\n"), "skip")
 
-    def test_without_allow_the_prefix_stays_like_in_bash(self):
-        self.assertEqual(floorguard.allow_line(b"Floor: skip, config\n"), b"floor: skip  config")
+    def test_without_allow_the_prefix_stays(self):
+        self.assertEqual(floorguard.allow_line("Floor: skip, config\n"), "floor: skip  config")
 
     def test_no_line_is_empty(self):
-        self.assertEqual(floorguard.allow_line(b""), b"")
-
-
-class AwkAssignTests(unittest.TestCase):
-    def test_escapes_follow_mawk(self):
-        self.assertEqual(floorguard._awk_assign(b"a\\tb\\\\c\\qd\\101\\x414\\"), b"a\tb\\c\\qdAA4\\")
+        self.assertEqual(floorguard.allow_line(""), "")
 
 
 class DiffFindingsTests(unittest.TestCase):
     def test_each_category_in_order(self):
-        d = diff((b"t.py", [b"@pytest.mark.skip", b"x = 1  # noqa", b"except Exception: pass", b"fail_under = 1"]))
-        self.assertEqual(floorguard.diff_findings(d, b""),
-                         b"skip: t.py: @pytest.mark.skip\nsuppress: t.py: x = 1  # noqa\n"
-                         b"empty-catch: t.py: except Exception: pass\nthreshold: t.py: fail_under = 1\n")
+        d = diff(("t.py", ["@pytest.mark.skip", "x = 1  # noqa", "except Exception: pass", "fail_under = 1"]))
+        self.assertEqual(floorguard.diff_findings(d, ""),
+                         "skip: t.py: @pytest.mark.skip\nsuppress: t.py: x = 1  # noqa\n"
+                         "empty-catch: t.py: except Exception: pass\nthreshold: t.py: fail_under = 1\n")
 
     def test_one_line_can_be_reported_twice(self):
-        d = diff((b"a.js", [b"  it.skip(x) // eslint-disable-line"]))
-        self.assertEqual(floorguard.diff_findings(d, b""),
-                         b"skip: a.js: it.skip(x) // eslint-disable-line\nsuppress: a.js: it.skip(x) // eslint-disable-line\n")
+        d = diff(("a.js", ["  it.skip(x) // eslint-disable-line"]))
+        self.assertEqual(floorguard.diff_findings(d, ""),
+                         "skip: a.js: it.skip(x) // eslint-disable-line\nsuppress: a.js: it.skip(x) // eslint-disable-line\n")
 
     def test_a_word_before_it_is_not_a_skip(self):
-        self.assertEqual(floorguard.diff_findings(diff((b"a.js", [b"my_it.skip(x)", b"split.skip("])), b""), b"")
+        self.assertEqual(floorguard.diff_findings(diff(("a.js", ["my_it.skip(x)", "split.skip("])), ""), "")
 
     def test_allowed_categories_are_quiet(self):
-        d = diff((b"t.py", [b"@pytest.mark.skip  # noqa"]))
-        self.assertEqual(floorguard.diff_findings(d, b"skip"), b"suppress: t.py: @pytest.mark.skip  # noqa\n")
+        d = diff(("t.py", ["@pytest.mark.skip  # noqa"]))
+        self.assertEqual(floorguard.diff_findings(d, "skip"), "suppress: t.py: @pytest.mark.skip  # noqa\n")
 
-    def test_text_is_cut_at_100_bytes(self):
-        line = b"# noqa " + b"x" * 92 + "é".encode() + b"tail"
-        out = floorguard.diff_findings(diff((b"a.py", [line])), b"")
-        self.assertEqual(out, b"suppress: a.py: " + line[:100] + b"\n")
+    def test_text_is_cut_at_100_characters(self):
+        line = "# noqa " + "x" * 92 + "é" + "tail"
+        out = floorguard.diff_findings(diff(("a.py", [line])), "")
+        self.assertEqual(out, "suppress: a.py: " + line[:100] + "\n")
+        self.assertTrue(line[:100].endswith("é"))
 
     def test_removed_lines_are_ignored(self):
-        self.assertEqual(floorguard.diff_findings(b"+++ b/a.py\n-@pytest.mark.skip\n", b""), b"")
+        self.assertEqual(floorguard.diff_findings("+++ b/a.py\n-@pytest.mark.skip\n", ""), "")
+
+
+class MoreSkipTests(unittest.TestCase):
+    def found(self, path, line):
+        return floorguard.diff_findings(diff((path, [line])), "")
+
+    def test_new_skip_patterns_are_caught(self):
+        for path, line in [("t.py", 'self.skipTest("x")'), ("t.py", "pytest.importorskip('numpy')"),
+                           ("t.py", "@unittest.expectedFailure"), ("a_test.go", 't.Skipf("x %d", 1)'),
+                           ("a_test.go", "t.SkipNow()"), ("a.rs", '#[ignore = "slow"]')]:
+            with self.subTest(line=line):
+                self.assertEqual(self.found(path, line), "skip: " + path + ": " + line + "\n")
+
+    def test_skip_look_alikes_are_clean(self):
+        for path, line in [("t.py", "self.skipTestCase = 1"), ("t.py", "importorskip_later = 1"),
+                           ("t.py", "expectedFailures = []"), ("a_test.go", "t.Skipfoo(x)"),
+                           ("a_test.go", "t.SkipNowhere()"), ("a.rs", "#[ignore_me = 1]")]:
+            with self.subTest(line=line):
+                self.assertEqual(self.found(path, line), "")
+
+    def test_focused_patterns_are_caught_on_test_paths(self):
+        for path, line in [("a.test.js", "it.only('x', f)"), ("a.test.js", "describe.only('x', f)"),
+                           ("a.test.js", "test.only('x', f)"), ("a.spec.js", "fit('x', f)"),
+                           ("a.spec.js", "  fdescribe('x', f)"), ("tests/a.js", "x; fit('x', f)")]:
+            with self.subTest(line=line):
+                self.assertEqual(self.found(path, line), "skip: " + path + ": " + line.strip() + "\n")
+
+    def test_focused_look_alikes_are_clean(self):
+        for path, line in [("train.py", "model.fit(x)"), ("a.spec.js", "model.fit(x)"),
+                           ("test_a.py", "def fit(self):"), ("a.spec.js", "outfit(x)"),
+                           ("a.spec.js", "outfdescribe(x)"), ("a.spec.js", "x.fdescribe(y)"),
+                           ("a.test.js", "it.onlyChild(x)"), ("app/models.py", 'qs.only("a")'),
+                           ("app/models.py", "fit(x)"), ("app/models.py", "fdescribe(x)")]:
+            with self.subTest(path=path, line=line):
+                self.assertEqual(self.found(path, line), "")
 
 
 class FrozenTests(unittest.TestCase):
     def test_status_and_answer_are_left_out(self):
-        text = b"# A\nStatus: open\nbody\n## Answer\nanything\n"
-        self.assertEqual(floorguard.frozen(text), b"# A\nbody\n")
+        text = "# A\nStatus: open\nbody\n## Answer\nanything\n"
+        self.assertEqual(floorguard.frozen(text), "# A\nbody\n")
 
     def test_a_missing_last_newline_is_the_same(self):
-        self.assertEqual(floorguard.frozen(b"a\nb"), floorguard.frozen(b"a\nb\n"))
+        self.assertEqual(floorguard.frozen("a\nb"), floorguard.frozen("a\nb\n"))
 
     def test_review_findings_end_it_too(self):
-        self.assertEqual(floorguard.frozen(b"a\n## Review findings (round 1, gate)\nx\n"), b"a\n")
+        self.assertEqual(floorguard.frozen("a\n## Review findings (round 1, gate)\nx\n"), "a\n")
 
 
 class RemovedLinesTests(unittest.TestCase):
     def test_placeholders_and_blank_lines_do_not_count(self):
-        d = b"--- a/map.md\n+++ b/map.md\n-<One line per resolved ticket.>\n-- <fog>\n-   \n+01 - x\n"
+        d = "--- a/map.md\n+++ b/map.md\n-<One line per resolved ticket.>\n-- <fog>\n-   \n+01 - x\n"
         self.assertEqual(floorguard.count_removed_real_lines(d), 0)
 
     def test_real_lines_count(self):
-        self.assertEqual(floorguard.count_removed_real_lines(b"-## Decisions so far\n-real\n"), 2)
+        self.assertEqual(floorguard.count_removed_real_lines("-## Decisions so far\n-real\n"), 2)
+
+
+class AssertionWarningTests(unittest.TestCase):
+    def diff(self, path, removed, added):
+        return ("--- a/" + path + "\n+++ b/" + path + "\n@@ -1 +1 @@\n"
+                + "".join("-" + l + "\n" for l in removed) + "".join("+" + l + "\n" for l in added))
+
+    def test_removed_asserts_in_a_test_file_count(self):
+        d = self.diff("tests/test_x.py", ["    assert 1", "    assert 2"], ["    assert 3"])
+        self.assertEqual(floorguard.count_assertions(d), (2, 1))
+
+    def test_the_same_text_in_a_readme_does_not_count(self):
+        d = self.diff("README.md", ["use assert here", "expect(x)"], [])
+        self.assertEqual(floorguard.count_assertions(d), (0, 0))
+
+    def test_warning_line_for_test_x_py_but_none_for_readme(self):
+        for path, expect in (("test_x.py", True), ("README.md", False)):
+            with self.subTest(path=path):
+                repo = helpers.Repo()
+                cwd = os.getcwd()
+                os.chdir(str(repo.dir))
+                try:
+                    repo.path(path).write_text("assert 1\n", encoding="utf-8")
+                    repo.commit("add")
+                    base = repo.head()
+                    repo.path(path).write_text("pass\n", encoding="utf-8")
+                    repo.commit("weaken")
+                    out = []
+                    floorguard.run(["f", "01", base], out.append, lambda t: None, {})
+                    self.assertEqual("warning: 1 assertion line(s) removed, 0 added." in "".join(out), expect)
+                finally:
+                    os.chdir(cwd)
+                    repo.close()
+
+
+class ConfigTests(unittest.TestCase):
+    def setUp(self):
+        self.repo = helpers.Repo()
+        self.cwd = os.getcwd()
+        os.chdir(str(self.repo.dir))
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+        self.repo.close()
+
+    def write(self, rel, text):
+        path = self.repo.path(rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def change(self, rel, before, after, allow=""):
+        """Commit `before`, then `after`; returns the guard result for the second commit."""
+        ticket = self.repo.path("plans/f/tasks/01-a.md")
+        text = ticket.read_text(encoding="utf-8")
+        text = "".join(l for l in text.splitlines(True) if not l.startswith("Floor:"))
+        if allow:
+            text = text.replace("Test first: no\n", "Test first: no\nFloor: allow %s\n" % allow)
+        ticket.write_text(text, encoding="utf-8")
+        self.write(rel, before)
+        self.repo.git("add", "-A")
+        self.repo.git("commit", "--allow-empty", "-qm", "before")
+        base = self.repo.head()
+        self.write(rel, after)
+        self.repo.commit("after")
+        out, err = [], []
+        code = floorguard.run(["f", "01", base], out.append, err.append, {})
+        return code, "".join(out)
+
+    def assertCaught(self, rel, before, after, allow="config"):
+        code, out = self.change(rel, before, after)
+        self.assertEqual(code, 1, out)
+        self.assertIn("config: %s\n" % rel, out)
+        code, out = self.change(rel, after, before, allow=allow)
+        self.assertEqual((code, out), (0, "floor guard: clean\n"))
+
+    def assertClean(self, rel, before, after):
+        code, out = self.change(rel, before, after)
+        self.assertEqual((code, out), (0, "floor guard: clean\n"))
+
+    def test_whole_file_configs_are_caught(self):
+        for rel in (".coveragerc", ".flake8", ".pylintrc", ".golangci.yml", ".golangci.yaml", "karma.conf.js",
+                    "playwright.config.ts", "cypress.config.js", "codecov.yml", ".nycrc", ".nycrc.json"):
+            with self.subTest(rel=rel):
+                self.assertCaught(rel, "a\n", "b\n")
+
+    def test_a_similar_name_is_clean(self):
+        self.assertClean("notcodecov.yml.txt", "a\n", "b\n")
+
+    def test_pyproject_coverage_threshold_is_caught(self):
+        before = "[project]\nversion = '1'\n\n[tool.coverage.report]\nfail_under = 90\n"
+        self.assertCaught("pyproject.toml", before, before.replace("90", "10"), allow="config, threshold")
+
+    def test_pyproject_poetry_dependency_is_clean(self):
+        before = "[tool.poetry.dependencies]\nrequests = '1'\n\n[tool.coverage.report]\nx = 1\n"
+        self.assertClean("pyproject.toml", before, before.replace("'1'", "'2'"))
+
+    def test_pyproject_project_version_is_clean(self):
+        self.assertClean("pyproject.toml", "[project]\nversion = '1'\n", "[project]\nversion = '2'\n")
+
+    def test_pyproject_deleted_lines_and_headers_count(self):
+        before = "[tool.ruff]\nline-length = 80\n\n[tool.poetry]\nname = 'x'\n"
+        self.assertCaught("pyproject.toml", before, before.replace("line-length = 80\n", ""))
+        self.assertCaught("pyproject.toml", before, before.replace("[tool.ruff]\nline-length = 80\n\n", ""))
+
+    def test_setup_cfg_sections(self):
+        before = "[metadata]\nversion = 1\n\n[flake8]\nmax-line-length = 80\n"
+        self.assertCaught("setup.cfg", before, before.replace("80", "200"))
+        self.assertClean("setup.cfg", before, before.replace("version = 1", "version = 2"))
+
+    def test_package_json_scripts_are_caught_and_version_is_clean(self):
+        before = '{"version": "1", "scripts": {"test": "jest"}, "dependencies": {"a": "1"}}'
+        self.assertCaught("package.json", before, before.replace('"jest"', '"true"'))
+        self.assertClean("package.json", before, before.replace('"version": "1"', '"version": "2"')
+                         .replace('"a": "1"', '"a": "2"'))
+
+    def test_package_json_not_valid_json_is_judged_by_bytes(self):
+        self.assertCaught("package.json", "{", "{ ")
+
+    def test_conftest_only_collection_changes_are_caught(self):
+        self.assertClean("conftest.py", "import pytest\n", "import pytest\n\n@pytest.fixture\ndef x():\n    return 1\n")
+        self.assertCaught("conftest.py", "import pytest\n", 'import pytest\ncollect_ignore = ["x"]\n')
+
+    def test_makefile_depends_on_commands_md(self):
+        self.assertClean("Makefile", "test:\n\ttrue\n", "test:\n\tfalse\n")
+        self.write("plans/f/commands.md", "# Commands: f\n\nTest: `make test`\n")
+        self.repo.commit("commands")
+        self.assertCaught("Makefile", "test:\n\ttrue\n", "test:\n\tfalse\n")
 
 
 class RunTests(unittest.TestCase):

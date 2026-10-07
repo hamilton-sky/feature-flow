@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,9 +36,17 @@ class Repo:
         self.git("init", "-q")
         self.git("config", "user.email", "t@t")
         self.git("config", "user.name", "t")
+        self.git("config", "gc.auto", "0")  # no background git while the folder is removed
+        self.git("config", "maintenance.auto", "false")
         self.commit("init")
 
     def close(self):
+        for attempt in range(5):  # a git process that is still finishing can refill .git/objects
+            try:
+                self.tmp.cleanup()
+                return
+            except OSError:
+                time.sleep(0.2)
         self.tmp.cleanup()
 
     def git(self, *args):

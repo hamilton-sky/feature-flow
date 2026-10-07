@@ -10,7 +10,7 @@ import secrets
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, git, prompts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, gate, git, prompts, state, suggest, tickets
 
 
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
@@ -41,6 +41,7 @@ class Conductor:
         self.commands = self.plan / "commands.md"
         self.max_retries = _env_int("FLOW_MAX_RETRIES", 2)
         self.max_rounds = _env_int("FLOW_MAX_REVIEW_ROUNDS", 3)
+        self.gate_timeout = _env_int("FLOW_GATE_TIMEOUT", 30)
         self.gate_on = os.environ.get("FLOW_GATE", "on") != "off"
         self.per_session = _env_int("FLOW_TICKETS_PER_SESSION", 4)
         self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
@@ -101,10 +102,17 @@ class Conductor:
         cmd = self.smoke_command()
         if not cmd:
             return
-        result = checks.smoke(cmd)
+        result = checks.smoke(cmd, self.gate_timeout)
         if not result.ok:
-            raise Stop("smoke test failed before %s: the base is already broken. fix it first. command: %s"
-                       % (self.ticket_name(), cmd))
+            log = self.state_file.with_name("%s.smoke.log" % self.feature)
+            text = result.out
+            if result.timed_out:
+                text += "\nsmoke test timed out after %d minutes\n" % self.gate_timeout
+            log.write_text(gate.tail(text), encoding="utf-8")
+            raise Stop("smoke test %s before %s: the base is already broken. fix it first. command: %s. "
+                       "the last %d lines are in %s"
+                       % ("timed out after %d minutes" % self.gate_timeout if result.timed_out else "failed",
+                          self.ticket_name(), cmd, gate.TAIL, log))
 
     def run_limit(self):
         result = checks.flow_status(self.scripts, self.feature, "--counts")
@@ -118,7 +126,7 @@ class Conductor:
         runs = self.num("runs") + 1
         limit = self.num("limit")
         if runs > limit:
-            raise Stop("run limit of %d sessions reached, stopping" % limit)
+            raise Stop("run limit of %d phases reached, stopping" % limit)
         self.st["runs"] = runs
 
     # ---- phases --------------------------------------------------------
@@ -180,12 +188,41 @@ class Conductor:
         if self.per_session > 0 and self.num("session_done") >= self.per_session:
             return self.handoff()
         path = nxt.out.strip().splitlines()[-1]
+        self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
-                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": ""})
+                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "guard_warning": ""})
+        self.snapshot_code()
         self.run_smoke()
         return self.hand_out_build()
 
+    def snapshot_code(self):
+        whole, each = codehash.flow_code(self.scripts)
+        self.st["code_sha"] = whole
+        self.st["code_files"] = codehash.dump(each)
+
+    def check_code(self, allowed=False):
+        """Stop when the files the conductor runs from changed since the ticket was picked."""
+        whole, each = codehash.flow_code(self.scripts)
+        if whole == self.get("code_sha"):
+            return
+        if allowed:
+            self.snapshot_code()
+            return
+        names = codehash.changed(codehash.load(self.get("code_files")), each)
+        raise Stop("flow code changed while building %s: %s. if intended, the ticket needs a line: "
+                   "Floor: allow flow-edit" % (self.ticket_name(), ", ".join(names)))
+
+    def flow_edit_allowed(self):
+        try:
+            source = git._git("show", "%s:%s" % (self.get("base"), Path(self.ticket()).as_posix()), check=False)
+        except OSError:
+            return False
+        if source.returncode != 0:
+            return False
+        return "flow-edit" in floorguard.allow_line(source.stdout).split()
+
     def judge_build(self):
+        self.check_code(self.flow_edit_allowed())
         status = tickets.status(self.ticket())
         if status not in tickets.DONE:
             if status in tickets.RESET:
@@ -196,7 +233,7 @@ class Conductor:
         if not git.is_clean():
             raise Stop("working tree is dirty after %s, it should have been committed" % self.ticket_name())
         if self.gate_on:
-            result = checks.gate(self.scripts, self.feature)
+            result = checks.gate(self.scripts, self.feature, self.gate_timeout)
             self.log("GATE-PASS" if result.ok else "GATE-FAIL")
             if not result.ok:
                 return self.send_back("gate", result.out)
@@ -204,6 +241,8 @@ class Conductor:
         self.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
         if not result.ok:
             return self.send_back("floor guard", result.out)
+        warnings = [l for l in result.out.splitlines() if l.startswith("warning:")]
+        self.st["guard_warning"] = warnings[0] if warnings else ""
         return self.hand_out_review()
 
     # ---- commands ------------------------------------------------------
@@ -294,6 +333,7 @@ class Conductor:
         return "OK %s. run %s %s" % (", ".join(done), self.invoke, self.feature)
 
     def judge_review(self):
+        self.check_code()
         if not git.tracked_clean() or git.head() != self.get("review_sha"):
             raise Stop("the reviewer changed tracked files, which a reviewer must never do")
         verdict = self.get("verdict")
@@ -318,7 +358,8 @@ class Conductor:
         if phase not in ("build", "review"):
             raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
         try:
-            return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"))
+            return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
+                                 self.get("guard_warning") if phase == "review" else "")
         except FileNotFoundError as err:
             raise Stop(str(err))
 
