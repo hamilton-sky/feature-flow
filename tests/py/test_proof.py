@@ -485,6 +485,24 @@ class ReviewFixes(unittest.TestCase):
         self.assertEqual(self.repo.porcelain(), "")
         self.assertEqual(self.repo.git("symbolic-ref", "--short", "HEAD"), branch)
 
+    def test_the_red_run_removes_ignored_files_it_created_and_keeps_old_ones(self):
+        self.repo.path(".gitignore").write_text("*.cache\ncachedir/\n", encoding="utf-8")
+        self.repo.path("tests").mkdir()
+        self.repo.path("tests/t.txt").write_text("x\n", encoding="utf-8")
+        self.repo.commit("test and ignore rules")
+        sha = self.repo.head()
+        branch = self.repo.git("symbolic-ref", "--short", "HEAD")
+        self.repo.path("old.cache").write_text("keep", encoding="utf-8")
+        cmd = py("import os; open('new.cache','w').write('n'); os.mkdir('cachedir'); "
+                 "open('cachedir/x','w').write('n'); raise SystemExit(1)")
+        with chdir(self.repo.dir):
+            self.assertTrue(proof._red(sha, cmd, 1, lambda v: None))
+        self.assertFalse(self.repo.path("new.cache").exists())
+        self.assertFalse(self.repo.path("cachedir").exists())
+        self.assertTrue(self.repo.path("old.cache").exists())
+        self.assertEqual(self.repo.porcelain(), "")
+        self.assertEqual(self.repo.git("symbolic-ref", "--short", "HEAD"), branch)
+
     def test_the_red_run_refuses_a_dirty_tree(self):
         self.repo.path("tests").mkdir()
         self.repo.path("tests/t.txt").write_text("x\n", encoding="utf-8")
@@ -539,9 +557,9 @@ class CodexAdapterNames(unittest.TestCase):
             text = (helpers.ROOT / rel).read_text(encoding="utf-8")
             self.assertNotIn('task_name="ticket_reviewer"', text)
             self.assertNotIn('task_name="ticket_builder"', text)
-            self.assertIn("ticket_reviewer_<NN>_spec", text)
-            self.assertIn("ticket_reviewer_<NN>_quality", text)
-            self.assertIn("ticket_builder_<NN>_<round>", text)
+            self.assertIn("ticket_builder_<NN>_<k>", text)
+            self.assertIn("ticket_reviewer_<NN>_<pass>_<k>", text)
+            self.assertNotIn("_<round>", text)
 
 
 if __name__ == "__main__":

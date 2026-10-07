@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import tempfile
 from pathlib import Path
 from dataclasses import dataclass
@@ -196,6 +197,34 @@ def _status():
     return out
 
 
+def _ignored():
+    """Paths git ignores right now (the `!!` entries), listed one by one."""
+    out = git._git("status", "--porcelain", "-z", "--ignored", "--untracked-files=all").stdout.split("\0")
+    return {entry[3:] for entry in out if entry.startswith("!! ")}
+
+
+def _drop_ignored(had_ignored):
+    """Remove the ignored files the Test command made, and the empty folders they leave. Old ones stay."""
+    top = git.toplevel()
+    root = Path(str(top)) if top is not None else Path(os.getcwd())
+    for path in sorted(_ignored() - had_ignored, key=len, reverse=True):
+        target = root / path
+        try:
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(str(target))
+            elif target.exists() or target.is_symlink():
+                target.unlink()
+        except OSError:
+            continue
+        parent = target.parent
+        while parent != root and root in parent.parents:
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
+
+
 def _undo(had):
     """Undo what the Test command did: the tree was clean (apart from the untracked files in had) before."""
     now = _status()
@@ -216,6 +245,7 @@ def _red(sha, test_command, timeout, remember):
                        "be undone safely. commit or stash them and run again"
                        % " ".join(path for code, path in before if code != "??")[:200])
     had = {path for _, path in before}
+    had_ignored = _ignored()
     remember(value)
     try:
         try:
@@ -232,6 +262,7 @@ def _red(sha, test_command, timeout, remember):
                 args, use_shell = gate.shell(test_command)
                 code, timed_out = proc.run(args, use_shell, log, timeout)
             _undo(had)
+            _drop_ignored(had_ignored)
         finally:
             os.chdir(here)
     finally:
