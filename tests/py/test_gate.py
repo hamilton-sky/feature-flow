@@ -35,7 +35,7 @@ class GateTests(unittest.TestCase):
     def run_gate(self, feature="f"):
         out, err = [], []
         code = gate.run(feature, out.append, err.append)
-        return code, b"".join(out).decode(), b"".join(err).decode()
+        return code, "".join(out), "".join(err)
 
     def test_all_three_pass_in_order(self):
         self.commands(b"# Commands: f\n\nLint: `echo l`\nTest: `echo t`\nBuild: `echo b`\n")
@@ -71,17 +71,17 @@ class GateTests(unittest.TestCase):
             del os.environ["FLOW_DIR"]
         self.assertEqual((code, out), (0, "gate: Test: echo moved\ngate: 1 command(s) passed\n"))
 
-    def test_the_value_is_read_like_awk(self):
+    def test_the_value_is_the_first_matching_line_without_backticks(self):
         path = self.dir / "commands.md"
         path.write_bytes(b" Build: no\nBuild:\t \t`a`b`\r\nBuild: second\n")
-        self.assertEqual(gate.command(path, "Build"), b"ab")
-        self.assertEqual(gate.command(path, "Test"), b"")
+        self.assertEqual(gate.command(path, "Build"), "ab")
+        self.assertEqual(gate.command(path, "Test"), "")
 
-    def test_tail_keeps_the_last_lines_like_tail(self):
-        self.assertEqual(gate.tail(b""), b"")
-        self.assertEqual(gate.tail(b"a\nb\nc\n", 2), b"b\nc\n")
-        self.assertEqual(gate.tail(b"a\nb\nc", 2), b"b\nc")
-        self.assertEqual(gate.tail(b"a\n\n", 1), b"\n")
+    def test_tail_keeps_the_last_lines(self):
+        self.assertEqual(gate.tail(""), "")
+        self.assertEqual(gate.tail("a\nb\nc\n", 2), "b\nc\n")
+        self.assertEqual(gate.tail("a\nb\nc", 2), "b\nc")
+        self.assertEqual(gate.tail("a\n\n", 1), "\n")
 
     def test_the_failure_output_is_cut_to_40_lines(self):
         self.commands(b"Test: `seq 100; exit 1`\n")
