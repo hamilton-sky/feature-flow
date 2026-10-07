@@ -44,3 +44,4 @@ The conductor runs each ticket's `check` block from Done when and, for `Test fir
 - 06 — guides teach the `check` block (template and plan.md both carry a parsed example), the test-only first commit, and spec then quality review; `test_proof.TemplateExample` keeps the examples parseable.
 - 07 — the hello demo tickets carry `check` blocks; `tests/run.sh` drives a prepared demo with no model through REVIEW (DONEWHEN-PASS, TESTFIRST-PASS), two PASSes to BUILD 02, and a combined test+code commit back to BUILD with a `test first` finding.
 08 — README documents the Done when checks, test-first check, two reviews and debug guide; version 0.3.0.
+09 — acceptance: the bar (220 unittest, 457 run.sh) passes; Answer names the tests for (a) to (e) and quotes the demo's ok lines.
