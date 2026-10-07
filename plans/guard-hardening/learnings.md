@@ -9,3 +9,4 @@ Append one line per lesson: `- (NN) what you found`. Never rewrite existing line
 - (06) a test that starts a sleeper must pass the timeout as a float argument (gate.run(..., timeout=0.02)); the env var is whole minutes. Use sys.executable plus a script file in test commands so the same command runs under bash and cmd.exe.
 - (07) a ticket added after the base fails the floor guard and one committed during review stops the run, so test a stale limit by editing limit= in the state file.
 - (08) after 'install.py . --agent all --force' in this repo, rm .feature-flow/{agents,guides,feature_flow,installed.txt,installed.sha256} (never state/) or the tree stays dirty.
+- (10) to run a new test against an old tag: git archive <tag> | tar -x -C <tmp>, then copy the test and tests/py/helpers.py over; the current helpers work with v0.1.6.

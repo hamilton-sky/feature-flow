@@ -1,7 +1,7 @@
 # Acceptance: run the bar end to end
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 09
 Test first: no
 
@@ -21,3 +21,21 @@ Run the map's bar: `python3 -m unittest discover -s tests/py && bash tests/run.s
 
 ## Answer
 
+**Built**: no files; only this Answer and Status. Ran from HEAD 3f2e325 (two commits after the ticket's start 89afee0).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py`: `Ran 169 tests in 58.321s`, `OK`, exit 0.
+- `bash tests/run.sh`: `441 passed, 0 failed`, exit 0.
+- Branch, `python3 -m unittest discover -s tests/py -k tamper -v`: `Ran 5 tests in 4.454s`, `OK` (CommittedInstall, PrivateInstall, SourceCheckout STOP tests, EditBeforeStart and FlowEditAllowed all ok).
+- v0.1.6: `git archive v0.1.6 | tar -x -C <tmp>/v016`, copied tests/py/test_tamper.py and tests/py/helpers.py over (the branch's helpers worked, no other helper files needed), same command run there: `Ran 5 tests in 4.234s`, `FAILED (failures=3)`:
+  - `CommittedInstall ... FAIL`, `AssertionError: 0 != 1 : REVIEW plans/f/tasks/01-a.md 01 22e0a3c9...`
+  - `PrivateInstall ... FAIL`, `AssertionError: 0 != 1 : REVIEW plans/f/tasks/01-a.md 01 8198f643...`
+  - `SourceCheckout ... FAIL`, `AssertionError: 0 != 1 : REVIEW plans/f/tasks/01-a.md 01 457a1b24...`
+  - `EditBeforeStart ... ok`, `FlowEditAllowed ... ok`
+  So 0.1.6 lets a tampered install through to REVIEW (exit 0) where the branch stops it (exit 1).
+
+**Decisions**: the v0.1.6 copy was in a temp folder outside the repo; /home/user/ff-0.1.6 and .feature-flow/state/ were not touched.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: none; this is the last ticket.

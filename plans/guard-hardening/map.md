@@ -34,3 +34,4 @@ The conductor notices when a build changes the code it runs; the floor guard cov
 07 — the run limit is recomputed from the ticket count at every pick; message says 'phases'; unused checks._bash removed.
 08 — dropped the tracked 0.1.4 copies under .feature-flow/, refreshed the two SKILL.md copies, tests/py/test_own_install.py keeps .claude/ and .agents/ equal to a fresh install.
 09 — README, guides/build.md and version 0.2.0 updated; installer not rerun (role copies do not embed the guide).
+10 — acceptance: suite 169 ok, run.sh 441/0; tamper STOP tests fail on v0.1.6 (3 failures) and pass on the branch
