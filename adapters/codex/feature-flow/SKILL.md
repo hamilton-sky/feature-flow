@@ -29,7 +29,7 @@ With a plan present, check these before `start`, and stop at the first that fail
 
 - `git status --porcelain` is empty.
 - `python3 scripts/flow-status.py <feature> --check` prints `OK`.
-- `.agents/flow-roles/ticket-builder.md` and `.agents/flow-roles/ticket-reviewer.md` exist. If not, say to run `bash install.sh --agent codex` from feature-flow.
+- `.agents/flow-roles/ticket-builder.md` and `.agents/flow-roles/ticket-reviewer.md` exist. If not, say to run `uvx feature-flow-cli install . --agent codex` in this repo (or `python3 install.py <repo> --agent codex` from a feature-flow clone).
 
 Then run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'`. The conductor keeps its state in `.feature-flow/state/`, a git-ignored folder in the repo, so it never needs to write `.git`. If it prints `STOP cannot write the flow state`, tell the user this session must be allowed to write that folder.
 

@@ -8,7 +8,7 @@ If no feature was given, list `plans/*/` and ask which one.
 
 Run `python3 scripts/flow-view.py <feature>`. Add `--watch` when the user said `watch`. It writes one HTML file, normally `.git/flow-<feature>.html`, and opens it in the default browser.
 
-If the script is not installed, say so and point to `install.sh`. If no browser could be opened (a remote machine, for example), print the path and tell the user to open it. Set `FLOW_NO_OPEN=1` to never open one.
+If the script is not installed, say so and point to `uvx feature-flow-cli install .` (or `python3 install.py <repo>` from a feature-flow clone). If no browser could be opened (a remote machine, for example), print the path and tell the user to open it. Set `FLOW_NO_OPEN=1` to never open one.
 
 ## Step 2: Summarise it in words
 
