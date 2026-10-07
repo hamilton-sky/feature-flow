@@ -4,7 +4,7 @@ Type: task
 Status: open
 Blocked by: 02, 03, 04
 Test first: no
-Floor: allow config, skip, suppress
+Floor: allow config, skip, suppress, threshold
 
 The bash scripts are gone, so simplify `feature_flow/floorguard.py` and `feature_flow/gate.py` to plain Python: drop `_awk_assign`, the byte-oriented lower-casing, `_ascii_lower` and the "parity"/"bash version" wording; handle the diff and `commands.md` as `str` (UTF-8, `errors="surrogateescape"` is fine); the 100 byte cut becomes 100 characters. `floorguard.allow_line` now takes and returns `str`: update its caller added to `feature_flow/conductor.py` in ticket 01. Keep the exit codes (0, 1, 2), the category names, the finding line `category: path: text` and the printed texts, because the conductor and the guides read them. `floorguard.run` runs the `git diff` once and reuses it for the findings and both assertion counts. Update the tests that pin mawk behaviour (`test_escapes_follow_mawk`, `test_text_is_cut_at_100_bytes`, `test_the_value_is_read_like_awk`, and the like) to the plain behaviour; do not delete coverage of exit codes or categories. In `.github/workflows/tests.yml` drop the mawk and gawk matrix entries and the "Select the awk under test" step; keep `jq` (tests/run.sh uses it), one Ubuntu and one macOS job, and the Windows and package jobs unchanged. Keep `tests/run.sh`: it also tests the viewer data, `--json`, the installer and the demo. Add a comment in `tests/run.sh` where it mentions mawk only if the line is now wrong.
 
