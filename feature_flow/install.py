@@ -241,7 +241,10 @@ class Installer:
         return recorded
 
     def untouched(self, dest):
-        """dest still holds the bytes an earlier feature-flow install wrote there."""
+        """dest still holds the bytes an earlier feature-flow install wrote there. Never a symlink:
+        writing through it would change the file it points to."""
+        if os.path.islink(dest):
+            return False
         old = _read(dest)
         if old is None:
             return False

@@ -70,7 +70,8 @@ def changes():
             continue
         if path in hashes:
             # only a worktree change: a staged version would ride along in the next commit
-            if code[0] in " ?" and top is not None and _sha256(top / path) == hashes[path]:
+            if (code[0] in " ?" and code[1] != "T" and top is not None and not (top / path).is_symlink()
+                    and _sha256(top / path) == hashes[path]):
                 continue
         elif code == "??" and path in listed:
             continue

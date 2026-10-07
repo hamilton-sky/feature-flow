@@ -128,6 +128,23 @@ class RunTests(unittest.TestCase):
         self.assertNotIn("skills/feature-flow", (self.target / ".feature-flow" / "installed.txt").read_text())
         self.assertFalse((home / ".agents").exists())
 
+    @unittest.skipIf(sys.platform == "win32", "symlinks need extra rights on Windows")
+    def test_an_upgrade_never_writes_through_a_symlink(self):
+        self.run_install()
+        skill = self.target / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+        shared = self.target / "shared-skill.md"
+        shared.write_bytes(b"skill from 0.1.1\n")
+        skill.unlink()
+        skill.symlink_to(shared)
+        released = install.RELEASED
+        install.RELEASED = frozenset([install._sha256(b"skill from 0.1.1\n")])
+        try:
+            _, out, _ = self.run_install()
+        finally:
+            install.RELEASED = released
+        self.assertIn("kept    %s/.claude/skills/feature-flow/SKILL.md" % self.target, out)
+        self.assertEqual(shared.read_bytes(), b"skill from 0.1.1\n")
+
     def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
         helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         _, out, _ = self.run_install()
