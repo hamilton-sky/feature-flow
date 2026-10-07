@@ -327,6 +327,8 @@ class Conductor:
         if Path(brief).resolve() != self.brief_file.resolve():
             self.brief_file.write_text(text, encoding="utf-8")
         if not findings and self.draft.is_dir():
+            if self.draft.resolve().parent != self.draft_root.resolve():
+                raise Stop("the draft folder %s is outside %s" % (self.draft_text(), self.draft_root.as_posix()))
             shutil.rmtree(str(self.draft))
         (self.draft / (os.environ.get("FLOW_TICKETS") or "tasks")).mkdir(parents=True, exist_ok=True)
         self.log("PLAN-PROMPT")
