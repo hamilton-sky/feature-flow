@@ -3,18 +3,23 @@
 import sys
 from pathlib import Path
 
+from feature_flow import suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
-USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt | verdict <file>\n"
+USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt | verdict <file> | reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
-COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept")
-ARGS = {"verdict": (3,), "plan-prompt": (3, 4)}
+COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset")
+ARGS = {"verdict": (3,), "plan-prompt": (3, 4), "reset": (2, 3)}
 
 
 def main(argv=None, scripts=None):
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) < 2 or args[1] not in COMMANDS or not args[0] or args[0].startswith("-"):
         print(USAGE, file=sys.stderr)
+        if len(args) >= 2 and args[0] in COMMANDS:
+            sys.stderr.write("did you mean: flow.py %s %s?\n" % (args[1], args[0]))
+        elif len(args) >= 2:
+            sys.stderr.write(suggest.hint(args[1], COMMANDS))
         return 2
     feature, command = args[0], args[1]
     if feature in (".", "..") or any(c in feature for c in "/\\:"):
@@ -37,6 +42,8 @@ def main(argv=None, scripts=None):
             line = conductor.plan_accept()
         elif command == "prompt":
             line = conductor.prompt()
+        elif command == "reset":
+            line = conductor.reset(args[2] if len(args) == 3 else None)
         elif command == "start":
             line = conductor.start()
         else:
