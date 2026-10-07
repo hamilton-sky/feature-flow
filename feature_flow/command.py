@@ -12,7 +12,7 @@ from pathlib import Path
 from feature_flow import __version__, cli, install, status, suggest, view
 
 USAGE = """\
-usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]
+usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
        feature-flow status <feature> [--next | --counts | --check | --mermaid [plain] | --json]
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
        feature-flow reset <feature> [NN]

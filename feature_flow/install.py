@@ -1,6 +1,6 @@
 """The installer, ported from install.sh with the same report and exit codes.
 
-usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]
+usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
 copies the feature-flow skill, its roles, scripts and guides into a repo so the flow works there.
 a file that already exists and differs is kept and reported, unless --force is given or nobody
 edited it since an earlier feature-flow install wrote it (then it is updated).
@@ -23,7 +23,7 @@ from feature_flow.released import RELEASED
 
 # the help text
 USAGE = """\
-usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]
+usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
 copies the feature-flow skill, its roles, scripts and guides into a repo so the flow works there.
   --agent claude (default)
     skills  go to <target>/.claude/skills/   (or ~/.claude/skills/ with --user)
@@ -36,6 +36,8 @@ copies the feature-flow skill, its roles, scripts and guides into a repo so the 
     (always: the skill and scripts/flow.py read them from the repo)
 a file that already exists and differs is kept and reported, unless --force is given or it is
   still exactly what an earlier feature-flow install wrote (then it is updated).
+  --private keeps the install out of git: its paths go into .git/info/exclude, which is never
+    committed, so only the plans and tickets are. Later installs keep that list up to date.
 nothing is ever deleted. CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrides ~/.agents for --user.
 """
 
@@ -52,6 +54,9 @@ INSTALLED = ".feature-flow/installed.txt"
 HASHES = ".feature-flow/installed.sha256"
 # the same record for a --user install, in ~/.claude and ~/.agents, paths relative to that folder
 USER_HASHES = "feature-flow.sha256"
+# the lines a --private install keeps in .git/info/exclude, between these two markers
+EXCLUDE_BEGIN = "# feature-flow install (--private): kept out of git"
+EXCLUDE_END = "# end of feature-flow install"
 
 
 def _sha256(data):
@@ -167,13 +172,14 @@ def _logical_cwd():
 
 
 class Installer:
-    def __init__(self, here, target, agent, user_level, force, dry, out):
+    def __init__(self, here, target, agent, user_level, force, dry, out, private=False):
         self.here = here
         self.target = target
         self.agent = agent
         self.force = force
         self.dry = dry
         self.out = out
+        self.private = private
         if user_level:
             home = os.environ.get("HOME", "")
             self.claude_dir = os.environ.get("CLAUDE_HOME") or home + "/.claude"
@@ -340,6 +346,50 @@ class Installer:
         os.replace(tmp, path)
         return True
 
+    def exclude_file(self):
+        """The repo's .git/info/exclude (a worktree's shared one too), or None outside a git repo."""
+        try:
+            r = subprocess.run(["git", "-C", self.target, "rev-parse", "--git-path", "info/exclude"],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+        except OSError:
+            return None
+        path = r.stdout.strip()
+        if r.returncode != 0 or not path:
+            return None
+        return os.path.normpath(os.path.join(self.target, path))
+
+    def excluded(self):
+        """An earlier --private install left its block in .git/info/exclude: keep the install private."""
+        path = self.exclude_file()
+        return path is not None and EXCLUDE_BEGIN in _read_text(path).splitlines()
+
+    def write_exclude(self, path):
+        """Put every in-repo file of the install between the markers in .git/info/exclude, keeping the
+        user's own lines. True when the file changed."""
+        try:
+            with open(path, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except (OSError, UnicodeDecodeError):
+            lines = []
+        if EXCLUDE_BEGIN in lines and EXCLUDE_END in lines[lines.index(EXCLUDE_BEGIN):]:
+            start = lines.index(EXCLUDE_BEGIN)
+            end = lines.index(EXCLUDE_END, start)
+            del lines[start:end + 1]
+        names = [n.strip() for n in _read_text(self.target + "/" + INSTALLED).splitlines()]
+        block = ["/.feature-flow/"] + ["/" + n for n in names if n and not n.startswith(".feature-flow/")]
+        text = "\n".join(lines + [EXCLUDE_BEGIN] + block + [EXCLUDE_END]) + "\n"
+        return self._write(path, text)
+
+    def tracked_installed(self):
+        """The installed files git already tracks: an exclude line does not untrack them."""
+        try:
+            r = subprocess.run(["git", "-C", self.target, "ls-files", "-z", "--full-name"],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+        except OSError:
+            return []
+        names = set(_read_text(self.target + "/" + INSTALLED).splitlines())
+        return [n for n in r.stdout.split("\0") if n in names]
+
     def report_leftovers(self, dirs):
         """A skill folder this installer does not own but that drives the flow (it runs the ticket
         scripts or ends a review with a verdict) is left from an earlier version: named once, never deleted."""
@@ -391,6 +441,16 @@ class Installer:
                 git = 127
             if git != 0:
                 self.out("note: %s is not a git repository, and the flow needs one" % self.target)
+            elif self.private or self.excluded():
+                self.private = True
+                exclude = self.exclude_file()
+                if exclude and self.write_exclude(exclude):
+                    self.out("kept out of git: the install is listed in " + os.path.relpath(exclude, self.target)
+                             .replace(os.sep, "/") + ", which is never committed")
+                if self.tracked_installed():
+                    self.out("note: git still tracks the install from before. untrack it, keeping the files: "
+                             "git rm -r -q --cached --ignore-unmatch --pathspec-from-file=%s"
+                             ' && git commit -m "chore: stop tracking feature-flow"' % INSTALLED)
             elif self.added or self.updated or listed:
                 git_c = ""
                 if os.path.realpath(self.target) != os.path.realpath(os.getcwd()):
@@ -406,9 +466,17 @@ class Installer:
         return 0
 
 
+def _read_text(path):
+    data = _read(path)
+    try:
+        return data.decode("utf-8") if data is not None else ""
+    except UnicodeDecodeError:
+        return ""
+
+
 def parse(argv):
     """The options, read in order like the bash case statement. Returns a dict, or None for --help."""
-    opts = {"target": "", "agent": "claude", "user": False, "force": False, "dry": False}
+    opts = {"target": "", "agent": "claude", "user": False, "private": False, "force": False, "dry": False}
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -421,6 +489,8 @@ def parse(argv):
             opts["agent"] = a[len("--agent="):]
         elif a == "--user":
             opts["user"] = True
+        elif a == "--private":
+            opts["private"] = True
         elif a == "--force":
             opts["force"] = True
         elif a == "--dry-run":
@@ -455,7 +525,7 @@ def run(argv, here, out, err):
         return 2
     target = os.path.normpath(os.path.join(_logical_cwd(), target))
     installer = Installer(os.path.abspath(str(here)), target, opts["agent"], opts["user"],
-                          opts["force"], opts["dry"], out)
+                          opts["force"], opts["dry"], out, opts["private"])
     return installer.run()
 
 

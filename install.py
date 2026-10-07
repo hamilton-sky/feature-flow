@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The feature-flow installer. usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]"""
+"""The feature-flow installer. usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]"""
 import sys
 from pathlib import Path
 
