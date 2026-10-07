@@ -59,4 +59,4 @@ Ask: write this plan? yes, edit, or cancel. On an edit, add it to the brief unde
 
 ## Step 6: Accept
 
-Run `plan-accept`. It copies the draft into `plans/<feature>/` (or the project's `FLOW_DIR`) and checks it, then prints `OK <folder>`, or `STOP <reason>`: report the reason and stop. It never overwrites a plan and never commits.
+Run `plan-accept`. It copies the draft into `plans/<feature>/` (or the project's `FLOW_DIR`) and checks it, then prints `OK <folder>`, or `STOP <reason>`: report the reason and stop. It never overwrites a plan and never commits: the skill commits the new folder, and only it, then goes on to build it.

@@ -23,7 +23,7 @@ When `plans/<feature>/` does not exist, or you are planning from the conversatio
 - `plan-review-prompt`: spawn a `plan-reviewer` subagent with the whole output, never with the planner's reply. Wait for its final reply and save it with Bash into `.feature-flow/state/plan-review-<feature>.txt`.
 - `plan-accept`: writes `plans/<feature>/` from the draft, only after the second yes.
 
-Then run `python3 scripts/flow-status.py <feature> --check`, list the files `plan-accept` wrote, and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `/feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
+Then run `python3 scripts/flow-status.py <feature> --check` and list the files `plan-accept` wrote. The second yes also approves committing the plan, so commit that folder and nothing else: `git add -- plans/<feature> && git commit -m "docs(<feature>): plan" -- plans/<feature>` (the folder `plan-accept` printed). If the commit fails, report why and stop. Then go straight on to building it below, unless the user asked to stop after planning.
 
 To add tickets to a plan that exists, edit it by hand following the ticket rules in `guides/plan.md`.
 
@@ -62,7 +62,7 @@ A conductor command looks like this:
 These apply from `start` on, once a plan exists.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
-- Never edit a ticket, the plan or the code, and never commit. The builder does that.
+- Never edit a ticket, the plan or the code, and never commit, apart from the approved plan above. The builder does that.
 - Never skip a step, reorder steps, or decide the next step yourself. Only `next` decides.
 - Never read a ticket's `## Answer` into the reviewer's prompt. `prompt` already holds everything it needs.
 - Tell the user one short line per phase (`01 built`, `01 review: PASS`), not the subagents' reports.
