@@ -173,6 +173,41 @@ class RunTests(unittest.TestCase):
         self.assertIn("  .claude/skills/feature-flow/SKILL.md", record.read_text(encoding="utf-8"))
         self.assertFalse((self.target / ".feature-flow" / "installed.sha256.tmp").exists())
 
+    def git(self, *args):
+        return helpers.subprocess.run(["git", "-C", str(self.target)] + list(args), check=True,
+                                      stdout=helpers.subprocess.PIPE, universal_newlines=True).stdout
+
+    def test_a_private_install_stays_out_of_git_and_keeps_the_users_excludes(self):
+        self.git("init", "-q")
+        exclude = self.target / ".git" / "info" / "exclude"
+        exclude.write_text("mine.log\n", encoding="utf-8")
+        _, out, _ = self.run_install("--private", "--agent", "all")
+        self.assertIn("kept out of git: the install is listed in .git/info/exclude", out)
+        self.assertNotIn("next: commit the installed files", out)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        lines = exclude.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lines[:2], ["mine.log", install.EXCLUDE_BEGIN])
+        self.assertIn("/scripts/flow.py", lines)
+        # a later install without the flag keeps it private and the block appears once
+        (self.target / "scripts" / "flow.py").unlink()
+        _, out, _ = self.run_install("--agent", "all")
+        self.assertNotIn("next: commit the installed files", out)
+        self.assertEqual(exclude.read_text(encoding="utf-8").splitlines(), lines)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_a_private_install_over_a_committed_one_says_how_to_untrack_it(self):
+        self.git("init", "-q")
+        self.run_install()
+        self.git("add", "--pathspec-from-file=.feature-flow/installed.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "install")
+        _, out, _ = self.run_install("--private")
+        self.assertIn("note: git still tracks the install from before", out)
+        self.git("rm", "-r", "-q", "--cached", "--ignore-unmatch", "--pathspec-from-file=.feature-flow/installed.txt")
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all").splitlines(),
+                         sorted("D  " + n for n in
+                                (self.target / ".feature-flow" / "installed.txt").read_text(encoding="utf-8").split()))
+        self.assertTrue((self.target / "scripts" / "flow.py").is_file())
+
     def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
         helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         _, out, _ = self.run_install()
