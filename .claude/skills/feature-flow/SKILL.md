@@ -23,7 +23,7 @@ When `plans/<feature>/` does not exist, or you are planning from the conversatio
 - `plan-review-prompt`: spawn a `plan-reviewer` subagent with the whole output, never with the planner's reply. Wait for its final reply and save it with Bash into `.feature-flow/state/plan-review-<feature>.txt`.
 - `plan-accept`: writes `plans/<feature>/` from the draft, only after the second yes.
 
-Then run `python3 scripts/flow-status.py <feature> --check`, list the files `plan-accept` wrote, and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `/feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
+Then run `python3 scripts/flow-status.py <feature> --check` and list the files `plan-accept` wrote. The second yes also approves committing the plan, so commit the folder `plan-accept` printed (`OK <folder>`, `plans/<feature>` unless `FLOW_DIR` is set) and nothing else: `git add -- <folder> && git commit -m "docs(<feature>): plan" -- <folder>`. If the commit fails, report why and stop. Then go straight on to building it below, unless the user asked to stop after planning.
 
 To add tickets to a plan that exists, edit it by hand following the ticket rules in `guides/plan.md`.
 
@@ -31,7 +31,7 @@ To add tickets to a plan that exists, edit it by hand following the ticket rules
 
 With a plan present, check these before `start`, and stop at the first that fails:
 
-- `git status --porcelain` is empty, apart from untracked Python bytecode (`__pycache__/`, `*.pyc`) and untracked files listed in `.feature-flow/installed.txt`: those are feature-flow's own install, so never stop for them. Suggest committing them (`git add --pathspec-from-file=.feature-flow/installed.txt && git commit -m "chore: install feature-flow"`) and carry on.
+- `git status --porcelain` is empty, apart from untracked Python bytecode (`__pycache__/`, `*.pyc`) and files listed in `.feature-flow/installed.txt` and that list itself: those are feature-flow's own install or upgrade, so never stop for them (`next` still stops if one of them was edited). Suggest committing them (`git add --pathspec-from-file=.feature-flow/installed.txt && git commit -m "chore: install feature-flow"`) and carry on.
 - `python3 scripts/flow-status.py <feature> --check` prints `OK`.
 - `ticket-builder.md` and `ticket-reviewer.md` are in `.claude/agents/`, `~/.claude/agents/`, or `$CLAUDE_HOME/agents/` when `CLAUDE_HOME` is set. If not, say to run `uvx feature-flow-cli install .` in this repo (or `python3 install.py <repo>` from a feature-flow clone).
 
@@ -41,7 +41,7 @@ If `start` prints `STOP` naming another owner, another session may still be work
 
 If the user says the flow is stuck on a ticket or asks for a reset, run `reset` (or `reset <NN>` to redo one ticket): it reopens a half-built ticket, commits that, and clears the run, then run `start` again. It needs `FLOW_TAKEOVER=1` while a session owns the feature, on the same clear yes. Never reset on your own.
 
-Say what will happen: for each ticket, a builder subagent and then a reviewer subagent. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given.
+Say what will happen: for each ticket, a builder subagent and then a reviewer subagent. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given or you came straight from planning: the plan's yes already covered the build.
 
 ## The loop
 
@@ -62,7 +62,7 @@ A conductor command looks like this:
 These apply from `start` on, once a plan exists.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
-- Never edit a ticket, the plan or the code, and never commit. The builder does that.
+- Never edit a ticket, the plan or the code, and never commit, apart from the approved plan above. The builder does that.
 - Never skip a step, reorder steps, or decide the next step yourself. Only `next` decides.
 - Never read a ticket's `## Answer` into the reviewer's prompt. `prompt` already holds everything it needs.
 - Tell the user one short line per phase (`01 built`, `01 review: PASS`), not the subagents' reports.

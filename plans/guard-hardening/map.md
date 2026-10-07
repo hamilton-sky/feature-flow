@@ -32,3 +32,4 @@ The conductor notices when a build changes the code it runs; the floor guard cov
 05 — floorguard.py and gate.py are plain str Python (allow_line and gate.run/command/tail take and return str); whole-diff git call runs once; CI awk matrix removed.
 06 — FLOW_GATE_TIMEOUT (whole minutes, default 30, 0 none) bounds each gate command and the smoke run via feature_flow/proc.py (kills the process tree); a failed or timed out smoke writes .feature-flow/state/<feature>.smoke.log and stops with one line.
 07 — the run limit is recomputed from the ticket count at every pick; message says 'phases'; unused checks._bash removed.
+08 — dropped the tracked 0.1.4 copies under .feature-flow/, refreshed the two SKILL.md copies, tests/py/test_own_install.py keeps .claude/ and .agents/ equal to a fresh install.

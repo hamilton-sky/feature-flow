@@ -8,3 +8,4 @@ Append one line per lesson: `- (NN) what you found`. Never rewrite existing line
 - (05) tests/run.sh takes ~2 minutes with the unit tests; run it in the background or with a long timeout.
 - (06) a test that starts a sleeper must pass the timeout as a float argument (gate.run(..., timeout=0.02)); the env var is whole minutes. Use sys.executable plus a script file in test commands so the same command runs under bash and cmd.exe.
 - (07) a ticket added after the base fails the floor guard and one committed during review stops the run, so test a stale limit by editing limit= in the state file.
+- (08) after 'install.py . --agent all --force' in this repo, rm .feature-flow/{agents,guides,feature_flow,installed.txt,installed.sha256} (never state/) or the tree stays dirty.
