@@ -32,7 +32,7 @@ Neither takes `FLOW_SESSION` and neither keeps state beyond the brief and the dr
 
 Built: `plan-prompt <brief> [findings]` and `plan-review-prompt` in feature_flow/cli.py and conductor.py; `prompts.plan` builds both from the role file, the guide (with <feature> and <draft> filled in), a task line and the brief. The brief is saved to .feature-flow/state/brief-<feature>.md; a first round clears .feature-flow/state/draft/<feature>/ and only that.
 
-Proof: `python3 -m unittest discover -s tests/py` runs tests/py/test_plan.py (planner prompt, STOP on an existing plan and a missing brief, findings round keeps the draft, reviewer prompt needs a brief and carries no planner text, usage names the commands). 107 tests OK; `bash tests/run.sh` 429 passed.
+Proof: `python3 -m unittest discover -s tests/py` runs tests/py/test_plan.py (planner prompt, STOP on an existing plan and a missing brief, findings round keeps the draft, reviewer prompt needs a brief and carries no planner text, usage names the commands). 112 tests OK; `bash tests/run.sh` 441 passed.
 
 Decisions: built together with ticket 04 in one commit, since both change the same three files.
 

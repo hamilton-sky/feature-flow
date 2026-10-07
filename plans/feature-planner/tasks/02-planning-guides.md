@@ -31,7 +31,7 @@ Three guides, runtime neutral like the others (no `/feature-flow`, `$feature-flo
 
 Built: guides/brief.md (the user's session: brief, approval 1, planner, plan reviewer with one retry, approval 2, plan-accept), guides/plan.md rewritten for the planner (reads the brief, outside research with sources, writes the draft, checks it with FLOW_DIR, fixed reply ending PLAN: READY or PLAN: QUESTIONS), guides/plan-review.md (eight checks, ends PLAN-REVIEW: PASS or FAIL).
 
-Proof: `bash tests/run.sh` prints ok for the six guides in the invocation loop and for the three new verdict and draft-folder checks; 429 passed, 0 failed.
+Proof: `bash tests/run.sh` prints ok for the six guides in the invocation loop and for the three new verdict and draft-folder checks; 441 passed, 0 failed.
 
 Decisions: the ticket rules are copied unchanged except rule 12, where the planner cannot talk to the user: "only when the user says so" became "only when the brief says so", and "tell the user you did" became "say so in your reply".
 

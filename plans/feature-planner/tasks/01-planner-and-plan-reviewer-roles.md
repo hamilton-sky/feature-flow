@@ -29,12 +29,125 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 
 ## Answer
 
-Built: agents/feature-planner.md (thinking strategy + rules, tools Read, Glob, Grep, Bash, Write, WebSearch, WebFetch) and agents/plan-reviewer.md (read only, ends PLAN-REVIEW: PASS/FAIL).
+**Built**
 
-Proof: `bash tests/run.sh` prints the new "planning roles" checks (planner has WebSearch and no Edit, reviewer has no Edit or Write), and installed checks for both roles in .claude/agents/ and .agents/flow-roles/. 422 passed, 0 failed.
+- Added `agents/feature-planner.md` with the planner's repository-first strategy, outside-research citations, fork and `settle` handling, lazy pass, draft-only write boundary and `flow-status --check` proof rule.
+- Added `agents/plan-reviewer.md` as a fresh read-only reviewer that checks the draft against the approved brief and emits the required verdict.
+- Added focused role-permission and Claude/Codex installation checks to `tests/run.sh`.
+- Made the conductor fixture use its running Python interpreter so the full suite does not depend on a separate `python` executable being installed.
+- Made `tests/run.sh` clear an inherited `FLOW_INVOKE`, so its default-invocation assertions are stable when the conductor runs it as the gate.
 
-Decisions: no installer change, it already copies every agents/*.md.
+**Proof**
 
-Shortcuts taken: none.
+- `bash tests/run.sh` printed `ok` for `the feature planner lists WebSearch`, `the feature planner has no Edit tool`, `the plan reviewer has no Edit tool`, and `the plan reviewer has no Write tool`.
+- The same fresh run printed `ok` for `Claude installs both planning roles` and `Codex installs both planning roles`.
+- The same exact run completed with `418 passed, 0 failed`; no PATH shim or command substitution was used. A gate-shaped run with inherited `FLOW_SESSION` and `FLOW_INVOKE='$feature-flow'` also completed with `418 passed, 0 failed`.
+- `python3 -c "import ast,pathlib; [ast.parse(p.read_text(), str(p)) for d in ('feature_flow', 'scripts') for p in pathlib.Path(d).rglob('*.py')]"` exited 0.
 
-Review fixes: the Codex review on PR #20 found that a findings round asks the planner to fix its draft, which a no-Edit role with "never edit an existing file" could not do. The planner now has Edit and may write and edit only inside the draft folder; the test checks that rule instead of the missing Edit.
+**Decisions**
+
+- Kept the role bodies short and protocol-focused, matching the existing builder and reviewer roles while spelling out every invariant named by the spec.
+- Tested only the front-matter tool lists, so prose cannot accidentally satisfy or fail a permission check.
+
+**Shortcuts taken**
+
+- none
+
+**Review fixes**
+
+- The gate reported that the exact `bash tests/run.sh` command failed because the fixture embedded `python -c` while this host provides only `python3`. Updated `tests/py/test_fixture_drive.py` to build its fixture commands from the quoted `sys.executable`; the focused regression passes and the exact full command now reports `418 passed, 0 failed`.
+- Round 2's three failures were reproduced by running the suite with the conductor's inherited `FLOW_INVOKE='$feature-flow'`: the variable changed three handoff assertions that intentionally check the default `/feature-flow` invocation. `tests/run.sh` now clears that caller-specific variable at startup; both the reproduction and the exact ticket command report `418 passed, 0 failed`.
+
+**For later tickets**
+
+- Ticket 02 can refer to the installed roles as `feature-planner.md` and `plan-reviewer.md`; the generic installer already delivers both to Claude and Codex destinations.
+
+## Review findings (round 1, gate)
+
+gate: Test: bash tests/run.sh
+gate: Test failed. the last lines of its output:
+  ok    it is under 90 lines
+  ok    the Codex skill is named feature-flow
+  ok    with a quoted description
+  ok    and no Claude-only header
+  ok    and no argument hint
+  ok    its openai.yaml makes it explicit only
+  ok    it hands off with $feature-flow
+  ok    it never says /feature-flow or $ARGUMENTS
+  ok    its mode matches ticket 02 (subagents)
+  ok    the Claude skill writes nothing under .git
+  ok    the Claude skill saves the review reply in .feature-flow/state/
+  ok    the Codex skill writes nothing under .git
+  ok    the Codex skill saves the review reply in .feature-flow/state/
+smoke-real.sh, prepare only
+  ok    --prepare builds the project without any model installed
+  ok    it says no model was called
+  ok    and tells a codex user what to type
+  ok    the project is installed for codex only
+  ok    the plan passes the ticket check
+  ok    and the first ticket is the one that is ready
+  ok    it is one clean commit
+  ok    a folder that is not empty is refused
+  ok    --prepare defaults to claude
+  ok    and tells a claude user what to type
+  ok    the project is installed for claude only
+  ok    without RUN_REAL or --prepare nothing runs
+  ok    RUN_REAL=1 without --interactive runs nothing either
+  ok    an unknown FLOW_AGENT is refused
+  ok    and the script itself says what is allowed
+  ok    and it creates nothing
+  ok    --prepare without a folder is refused
+  ok    --interactive without RUN_REAL is refused
+  ok    an unknown option is refused
+  ok    --interactive: a session that ends without HANDOFF, DONE or STOP exits 1
+  ok    and says so
+  ok    and prints the recovery command
+  ok    and starts no second session
+  ok    the session is started as a user would type it
+
+414 passed, 4 failed
+
+## Review findings (round 2, gate)
+
+gate: Test: bash tests/run.sh
+gate: Test failed. the last lines of its output:
+  ok    it is under 90 lines
+  ok    the Codex skill is named feature-flow
+  ok    with a quoted description
+  ok    and no Claude-only header
+  ok    and no argument hint
+  ok    its openai.yaml makes it explicit only
+  ok    it hands off with $feature-flow
+  ok    it never says /feature-flow or $ARGUMENTS
+  ok    its mode matches ticket 02 (subagents)
+  ok    the Claude skill writes nothing under .git
+  ok    the Claude skill saves the review reply in .feature-flow/state/
+  ok    the Codex skill writes nothing under .git
+  ok    the Codex skill saves the review reply in .feature-flow/state/
+smoke-real.sh, prepare only
+  ok    --prepare builds the project without any model installed
+  ok    it says no model was called
+  ok    and tells a codex user what to type
+  ok    the project is installed for codex only
+  ok    the plan passes the ticket check
+  ok    and the first ticket is the one that is ready
+  ok    it is one clean commit
+  ok    a folder that is not empty is refused
+  ok    --prepare defaults to claude
+  ok    and tells a claude user what to type
+  ok    the project is installed for claude only
+  ok    without RUN_REAL or --prepare nothing runs
+  ok    RUN_REAL=1 without --interactive runs nothing either
+  ok    an unknown FLOW_AGENT is refused
+  ok    and the script itself says what is allowed
+  ok    and it creates nothing
+  ok    --prepare without a folder is refused
+  ok    --interactive without RUN_REAL is refused
+  ok    an unknown option is refused
+  ok    --interactive: a session that ends without HANDOFF, DONE or STOP exits 1
+  ok    and says so
+  ok    and prints the recovery command
+  ok    and starts no second session
+  ok    the session is started as a user would type it
+
+415 passed, 3 failed

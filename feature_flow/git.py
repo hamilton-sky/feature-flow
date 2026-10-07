@@ -47,7 +47,7 @@ def changes():
     """Every changed path, untracked files included, as `git status --porcelain` sees them, except
     feature-flow's own install: a file still exactly as the installer wrote it, an untracked file it
     lists without a hash (an install from before it kept hashes), and its two record files, which every
-    install rewrites."""
+    install rewrites; and untracked Python bytecode, which the flow's own Python runs leave behind."""
     listed, hashes = set(), {}
     top = toplevel()
     if top is not None:
@@ -73,7 +73,7 @@ def changes():
             if (code[0] in " ?" and code[1] != "T" and top is not None and not (top / path).is_symlink()
                     and _sha256(top / path) == hashes[path]):
                 continue
-        elif code == "??" and path in listed:
+        elif code == "??" and (path in listed or _bytecode(path)):
             continue
         found.append(path)
     return found
@@ -86,6 +86,10 @@ def _sha256(path):
         return None
 
 
+def _bytecode(path):
+    return path.endswith(".pyc") or "__pycache__/" in "/" + path
+
+
 def is_clean():
     return not changes()
 
@@ -94,6 +98,14 @@ def tracked_clean():
     """No change to a tracked file, in the worktree or the index."""
     return (_git("diff", "--quiet", check=False).returncode == 0
             and _git("diff", "--cached", "--quiet", check=False).returncode == 0)
+
+
+def commit_paths(paths, message):
+    """Commit these paths only, whatever else is staged."""
+    paths = [str(p) for p in paths]
+    if _git("add", "--", *paths, check=False).returncode != 0:
+        return False
+    return _git("commit", "-q", "-m", message, "--", *paths, check=False).returncode == 0
 
 
 def commit_file(path, message):

@@ -4,6 +4,7 @@
 # exit code is the number of failed checks, capped at 1.
 
 set -uo pipefail
+unset FLOW_INVOKE
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
@@ -243,23 +244,25 @@ expect_rc "a feature without commands.md is not an error" 0 $rc
 python3 "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
 
 echo "planning roles"
-tools_of() { sed -n '/^tools:/,/^[a-z]/p' "$1" | grep '^- ' | tr -d ' -' | tr '\n' ' '; }
-PT="$(tools_of "$ROOT/agents/feature-planner.md")"; RT="$(tools_of "$ROOT/agents/plan-reviewer.md")"
-expect_has "the planner can research the web" "WebSearch" "$PT"
-expect_has "the planner may change only its draft" "only inside the draft folder" "$(cat "$ROOT/agents/feature-planner.md")"
-expect_lacks "the plan reviewer cannot edit files" "Edit" "$RT"
-expect_lacks "the plan reviewer cannot write files" "Write" "$RT"
 expect_has "the planner ends with a plan verdict" "PLAN: READY" "$(cat "$ROOT/agents/feature-planner.md")"
+expect_has "the planner checks the draft folder" "FLOW_DIR=.feature-flow/state/draft" "$(cat "$ROOT/agents/feature-planner.md")"
 expect_has "the plan reviewer ends with a review verdict" "PLAN-REVIEW: PASS" "$(cat "$ROOT/agents/plan-reviewer.md")"
 
 echo "install.py"
+planner_tools="$(awk 'NR > 1 && /^---$/ {exit} NR > 1 {print}' "$ROOT/agents/feature-planner.md" 2>/dev/null)"
+reviewer_tools="$(awk 'NR > 1 && /^---$/ {exit} NR > 1 {print}' "$ROOT/agents/plan-reviewer.md" 2>/dev/null)"
+expect_has "the feature planner lists WebSearch" "- WebSearch" "$planner_tools"
+expect_lacks "the feature planner has no Edit tool" "- Edit" "$planner_tools"
+expect_lacks "the plan reviewer has no Edit tool" "- Edit" "$reviewer_tools"
+expect_lacks "the plan reviewer has no Write tool" "- Write" "$reviewer_tools"
 cd "$TMP" || exit 1
 I="$TMP/inst"; mkdir -p "$I/repo" "$I/fresh"
 out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"; rc=$?
 expect_rc "installs into a repo" 0 $rc
-for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md .claude/agents/feature-planner.md .claude/agents/plan-reviewer.md scripts/flow.py scripts/gate.py scripts/floor-guard.py scripts/flow-status.py scripts/flow-view.py scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
+for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/flow.py scripts/gate.py scripts/floor-guard.py scripts/flow-status.py scripts/flow-view.py scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
   if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
 done
+if [ -f "$I/repo/.claude/agents/feature-planner.md" ] && [ -f "$I/repo/.claude/agents/plan-reviewer.md" ]; then ok "Claude installs both planning roles"; else bad "Claude installs both planning roles"; fi
 n="$(find "$I/repo/scripts" -name '*.sh' | wc -l | tr -d ' ')"; expect_rc "no bash script is installed under scripts/" 0 "$n"
 expect_has "only the three skills are installed" "architect-review automation-design feature-flow" "$(ls "$I/repo/.claude/skills" | tr '\n' ' ')"
 n="$(find "$I/repo/.feature-flow" \( -name __pycache__ -o -name '*.pyc' \) | wc -l | tr -d ' ')"; expect_rc "no __pycache__ is installed" 0 "$n"
@@ -318,6 +321,7 @@ done
 for f in .agents/flow-roles/ticket-builder.md .agents/flow-roles/ticket-reviewer.md scripts/flow.py .feature-flow/feature_flow/cli.py .feature-flow/guides/review.md; do
   if [ -f "$C/repo/$f" ]; then ok "codex installed $f"; else bad "codex installed $f"; fi
 done
+if [ -f "$C/repo/.agents/flow-roles/feature-planner.md" ] && [ -f "$C/repo/.agents/flow-roles/plan-reviewer.md" ]; then ok "Codex installs both planning roles"; else bad "Codex installs both planning roles"; fi
 mkdir -p "$C/repo/.agents/skills/old-build"; printf 'python3 scripts/flow-status.py f\n' > "$C/repo/.agents/skills/old-build/SKILL.md"
 expect_has "codex: a leftover flow skill is named" "no longer installed: old-build." "$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"
 rm -rf "$C/repo/.agents/skills/old-build"
@@ -360,9 +364,6 @@ expect_has "the builder role keeps its rules" "You are the builder." "$RB"
 expect_has "the reviewer role keeps its rules" "You are the reviewer, not the author." "$RR"
 expect_lacks "a role file has no frontmatter" "tools:" "$RR"
 [ "$(head -1 "$C/repo/.agents/flow-roles/ticket-reviewer.md")" = "You are the reviewer, not the author. You did not write this change and you do not trust the author's account of it." ] && ok "a role file starts with its first sentence" || bad "a role file starts with its first sentence"
-for r in feature-planner plan-reviewer; do
-  if [ -f "$C/repo/.agents/flow-roles/$r.md" ]; then ok "the Codex install puts the $r role in .agents/flow-roles/"; else bad "the Codex install puts the $r role in .agents/flow-roles/"; fi
-done
 out="$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"
 expect_has "a second codex run adds nothing" "added 0, updated 0" "$out"
 echo "my own edit" >> "$CS/architect-review/SKILL.md"
@@ -564,7 +565,7 @@ expect_rc "python3 -m unittest discover -s tests/py passes" 0 $rc
 [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -20
 out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor parses as Python 3.9" 0 $?
-out="$(cd "$ROOT" && grep -rlE '^(import|from) ' feature_flow | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum)\b')"
+out="$(cd "$ROOT" && grep -rlE '^(import|from) ' feature_flow | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib)\b')"
 if [ -z "$out" ]; then ok "the conductor imports only the standard library"; else bad "the conductor imports only the standard library" "$out"; fi
 
 flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and feature_flow/
