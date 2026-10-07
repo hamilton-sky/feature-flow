@@ -1,7 +1,8 @@
 import os
+import shutil
 import unittest
 
-from helpers import Repo
+from helpers import ROOT, Repo
 
 T1 = "plans/f/tasks/01-a.md"
 T2 = "plans/f/tasks/02-b.md"
@@ -161,6 +162,51 @@ class BuildAndChecks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuardWarning(unittest.TestCase):
+    def setUp(self):
+        self.repo = Repo()
+        for folder in ("agents", "guides"):
+            shutil.copytree(str(ROOT / folder), str(self.repo.path(folder)))
+        self.repo.path("tests").mkdir()
+        self.repo.path("tests/test_x.py").write_text("def test_x():\n    assert 1\n", encoding="utf-8")
+        self.repo.commit("tests")
+
+    def tearDown(self):
+        self.repo.close()
+
+    def build(self, test_text):
+        self.repo.flow("next")
+        self.repo.path("tests/test_x.py").write_text(test_text, encoding="utf-8")
+        self.repo.resolve(T1)
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        return self.repo.flow("prompt")[1]
+
+    def test_a_removed_assertion_reaches_the_reviewer_as_a_warning(self):
+        prompt = self.build("def test_x():\n    pass\n")
+        self.assertIn("The floor guard warns: warning: 1 assertion line(s) removed, 0 added.", prompt)
+        self.assertIn("GUARD-PASS", self.repo.log())
+        self.assertEqual(self.repo.state()["guard_warning"].count("warning:"), 1)
+
+    def test_no_removed_assertion_no_warning_text(self):
+        prompt = self.build("def test_x():\n    assert 1\n    assert 2\n")
+        self.assertNotIn("The floor guard warns", prompt)
+
+    def test_the_warning_is_cleared_when_the_next_ticket_is_picked(self):
+        self.build("def test_x():\n    pass\n")
+        self.repo.flow("verdict", self.write_verdict())
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("BUILD %s 02 " % T2), out)
+        self.assertEqual(self.repo.state().get("guard_warning", ""), "")
+
+    def write_verdict(self):
+        path = self.repo.dir.parent / (self.repo.dir.name + "-verdict.txt")
+        path.write_text("fine\nREVIEW: PASS\n", encoding="utf-8")
+        self.addCleanup(path.unlink)
+        return str(path)
 
 
 class StateOutsideGit(unittest.TestCase):

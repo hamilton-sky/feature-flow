@@ -47,8 +47,7 @@ HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 PACKAGE_KEYS = ("jest", "scripts", "eslintConfig", "nyc", "c8", "mocha", "ava")
 CONFTEST_WORDS = ("collect_ignore", "pytest_collection_modifyitems", "deselect", "skip")
 MAKE_COMMAND = re.compile(r"^\s*(Build|Test|Lint|Smoke):\s*`?make\b", re.M)
-ASSERT_REMOVED = re.compile(rb"^-.*(assert|expect\()")
-ASSERT_ADDED = re.compile(rb"^\+.*(assert|expect\()")
+ASSERT_LINE = re.compile(rb"assert|expect\(")
 FIELDS = re.compile(rb"[ \t\n]+")
 SPACE_CHARS = " \t\n\v\f\r"
 HEX = b"0123456789abcdefABCDEF"
@@ -184,8 +183,20 @@ def count_removed_real_lines(diff):
     return n
 
 
-def count_matching(diff, pattern):
-    return sum(1 for line in _records(diff) if pattern.search(line))
+def count_assertions(diff):
+    """(removed, added) assertion lines, counting only files whose path looks like a test."""
+    removed = added = 0
+    old = new = False
+    for line in _records(diff):
+        if line.startswith(b"--- "):
+            old = bool(DELETED_TEST.search(_text(line[4:].strip(b" \t").removeprefix(b"a/"))))
+        elif line.startswith(b"+++ "):
+            new = bool(DELETED_TEST.search(_text(line[4:].strip(b" \t").removeprefix(b"b/"))))
+        elif line.startswith(b"-") and old and ASSERT_LINE.search(line):
+            removed += 1
+        elif line.startswith(b"+") and new and ASSERT_LINE.search(line):
+            added += 1
+    return removed, added
 
 
 def _find_ticket(dir_, num):
@@ -308,9 +319,7 @@ def run(argv, out, err, environ=None):
     findings = "\n".join(line for line in findings.split("\n") if line.strip(SPACE_CHARS))
 
     diff = g.git("diff", "--no-color", "--unified=0", base, "HEAD", *outside)[1]
-    removed_asserts = count_matching(diff, ASSERT_REMOVED)
-    diff = g.git("diff", "--no-color", "--unified=0", base, "HEAD", *outside)[1]
-    added_asserts = count_matching(diff, ASSERT_ADDED)
+    removed_asserts, added_asserts = count_assertions(diff)
     if removed_asserts > added_asserts:
         out("warning: %d assertion line(s) removed, %d added. check that no test got weaker.\n"
             % (removed_asserts, added_asserts))

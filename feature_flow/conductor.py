@@ -181,7 +181,7 @@ class Conductor:
             return self.handoff()
         path = nxt.out.strip().splitlines()[-1]
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
-                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": ""})
+                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "guard_warning": ""})
         self.snapshot_code()
         self.run_smoke()
         return self.hand_out_build()
@@ -232,6 +232,8 @@ class Conductor:
         self.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
         if not result.ok:
             return self.send_back("floor guard", result.out)
+        warnings = [l for l in result.out.splitlines() if l.startswith("warning:")]
+        self.st["guard_warning"] = warnings[0] if warnings else ""
         return self.hand_out_review()
 
     # ---- commands ------------------------------------------------------
@@ -347,7 +349,8 @@ class Conductor:
         if phase not in ("build", "review"):
             raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
         try:
-            return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"))
+            return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
+                                 self.get("guard_warning") if phase == "review" else "")
         except FileNotFoundError as err:
             raise Stop(str(err))
 

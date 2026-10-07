@@ -122,6 +122,39 @@ class RemovedLinesTests(unittest.TestCase):
         self.assertEqual(floorguard.count_removed_real_lines(b"-## Decisions so far\n-real\n"), 2)
 
 
+class AssertionWarningTests(unittest.TestCase):
+    def diff(self, path, removed, added):
+        return (b"--- a/" + path + b"\n+++ b/" + path + b"\n@@ -1 +1 @@\n"
+                + b"".join(b"-" + l + b"\n" for l in removed) + b"".join(b"+" + l + b"\n" for l in added))
+
+    def test_removed_asserts_in_a_test_file_count(self):
+        d = self.diff(b"tests/test_x.py", [b"    assert 1", b"    assert 2"], [b"    assert 3"])
+        self.assertEqual(floorguard.count_assertions(d), (2, 1))
+
+    def test_the_same_text_in_a_readme_does_not_count(self):
+        d = self.diff(b"README.md", [b"use assert here", b"expect(x)"], [])
+        self.assertEqual(floorguard.count_assertions(d), (0, 0))
+
+    def test_warning_line_for_test_x_py_but_none_for_readme(self):
+        for path, expect in (("test_x.py", True), ("README.md", False)):
+            with self.subTest(path=path):
+                repo = helpers.Repo()
+                cwd = os.getcwd()
+                os.chdir(str(repo.dir))
+                try:
+                    repo.path(path).write_text("assert 1\n", encoding="utf-8")
+                    repo.commit("add")
+                    base = repo.head()
+                    repo.path(path).write_text("pass\n", encoding="utf-8")
+                    repo.commit("weaken")
+                    out = []
+                    floorguard.run(["f", "01", base], out.append, lambda t: None, {})
+                    self.assertEqual("warning: 1 assertion line(s) removed, 0 added." in "".join(out), expect)
+                finally:
+                    os.chdir(cwd)
+                    repo.close()
+
+
 class ConfigTests(unittest.TestCase):
     def setUp(self):
         self.repo = helpers.Repo()

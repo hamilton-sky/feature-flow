@@ -32,7 +32,7 @@ def _body(path):
     return text.strip("\n")
 
 
-def build(phase, scripts, feature, ticket, num, sha):
+def build(phase, scripts, feature, ticket, num, sha, warning=""):
     role = _body(find_file(scripts, "agents", ROLES[phase]))
     guide = _body(find_file(scripts, "guides", GUIDES[phase]))
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
@@ -49,6 +49,8 @@ def build(phase, scripts, feature, ticket, num, sha):
         task = ("Your task: review ticket %s of the feature `%s` (`%s %s %s`). The ticket is `%s`, and the work "
                 "started at commit `%s`.\n%s\nDo not edit any file or create a commit. Your final reply must end "
                 "with exactly `REVIEW: PASS` or `REVIEW: FAIL`." % (num, feature, feature, num, sha, ticket, sha, fresh))
+        if warning:
+            task += "\nThe floor guard warns: %s" % warning
         intro = "The review guide follows. Follow it exactly."
     return "\n\n".join([role, "---", intro, guide, "---", task]) + "\n"
 

@@ -1,7 +1,7 @@
 # Pass the assertion warning to the reviewer
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Floor: allow skip, suppress, threshold
@@ -26,3 +26,16 @@ Today `floorguard.run` prints `warning: N assertion line(s) removed, M added...`
 
 ## Answer
 
+
+**Built**: `feature_flow/floorguard.py` (`count_assertions` replaces `count_matching`, `ASSERT_REMOVED`/`ASSERT_ADDED` replaced by `ASSERT_LINE`; counts only lines under a `---`/`+++` path matching `DELETED_TEST`), `feature_flow/conductor.py` (`judge_build` stores the guard's first `warning:` line as `guard_warning` when the guard passes; `pick_ticket` clears it; `prompt` passes it for the review phase), `feature_flow/prompts.py` (`build` takes `warning` and appends `The floor guard warns: ...` to the reviewer's task), tests in `tests/py/test_floorguard.py` and `tests/py/test_conductor.py`.
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -k floorguard`: Ran 40 tests, OK (includes removed assert in `test_x.py` warns, same text in `README.md` does not).
+- `python3 -m unittest discover -s tests/py -k GuardWarning`: Ran 3 tests, OK (review prompt has `The floor guard warns` with a removed assertion, none without, state cleared when ticket 02 is picked). The conductor test failed first for the right reason (text missing from the prompt).
+- `python3 -m unittest discover -s tests/py`: Ran 160 tests, OK. `bash tests/run.sh`: 441 passed, 0 failed, exit 0.
+
+**Decisions**: the warning is read from the guard's output text (first line starting `warning:`), so the guard's output and exit code are unchanged. Only the review prompt gets it, not the build prompt. A deleted test file counts through its `---` path, an added one through `+++`.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: ticket 05 (one-diff refactor) must keep `count_assertions(diff)` returning `(removed, added)` over the same diff, and `guard_warning` in the run state. `prompts.build` has a new optional `warning` argument.
