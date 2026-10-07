@@ -1,7 +1,7 @@
 # Acceptance: turn a conversation into a plan in Claude Code
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 07
 Test first: no
 
