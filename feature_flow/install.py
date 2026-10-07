@@ -333,8 +333,11 @@ class Installer:
         except (OSError, UnicodeDecodeError):
             pass
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8", newline="\n") as f:
+        # a new file moved into place: a link at the path is replaced, never written through
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
+        os.replace(tmp, path)
         return True
 
     def report_leftovers(self, dirs):

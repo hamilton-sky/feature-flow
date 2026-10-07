@@ -161,6 +161,18 @@ class RunTests(unittest.TestCase):
         self.assertIn("kept    %s/.claude/skills/feature-flow/SKILL.md" % self.target, out)
         self.assertEqual(shared.read_bytes(), b"skill from 0.1.1\n")
 
+    def test_the_hash_record_is_never_written_through_a_link(self):
+        self.run_install()
+        record = self.target / ".feature-flow" / "installed.sha256"
+        shared = self.target / "shared.sha256"
+        shared.write_text("keep\n", encoding="utf-8")
+        record.unlink()
+        os.link(str(shared), str(record))
+        self.run_install()
+        self.assertEqual(shared.read_text(encoding="utf-8"), "keep\n")
+        self.assertIn("  .claude/skills/feature-flow/SKILL.md", record.read_text(encoding="utf-8"))
+        self.assertFalse((self.target / ".feature-flow" / "installed.sha256.tmp").exists())
+
     def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
         helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         _, out, _ = self.run_install()
