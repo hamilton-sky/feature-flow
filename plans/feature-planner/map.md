@@ -25,6 +25,7 @@
 04 - plan-accept copies a checked draft into the plan folder, never overwriting and never committing.
 05 - the Claude skill plans through the brief, a feature-planner and a plan-reviewer subagent, and plan-accept.
 06 - the Codex skill plans the same way with spawn_agent and fork_turns="none"; unverified by hand.
+07 - a fixture drive takes a brief through plan-prompt, plan-review-prompt and plan-accept to BUILD; README documents the two approvals and the roles.
 
 ## Open questions
 

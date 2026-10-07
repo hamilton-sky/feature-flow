@@ -1,7 +1,7 @@
 # Drive a plan end to end in a fixture, and document it
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 04, 05, 06
 Test first: yes
 
@@ -22,3 +22,9 @@ Add a fixture drive in `tests/py/test_fixture_drive.py` for planning, the same w
 - tests/py/test_fixture_drive.py, README.md
 
 ## Answer
+
+Built: tests/py/test_fixture_drive.py PlanDrive: start prints PLAN, plan-prompt, a draft written where the planner would, plan-review-prompt with a clean tree, plan-accept prints OK plans/csv, commit, start prints OK <token>, next hands out BUILD 01. README: a Quick start row for planning from the conversation, a paragraph on the two approvals, the skill row, the two new roles, and the Codex limits.
+
+Proof: `python3 -m unittest discover -s tests/py` 108 tests OK (the Windows job runs the same discover); `grep -c 'feature-planner' README.md` prints 2; `bash tests/run.sh` 442 passed, 0 failed.
+
+Shortcuts taken: none.
