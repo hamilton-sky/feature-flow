@@ -1,11 +1,15 @@
+import contextlib
+import io
+import os
 import shutil
 import sys
 import unittest
+from unittest import mock
 
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import proof  # the package under test, from this checkout
+from feature_flow import cli, conductor, git, proof  # the package under test, from this checkout
 
 FENCE = "```"
 
@@ -198,6 +202,211 @@ class Conducted(unittest.TestCase):
         rc, out = self.build(FLOW_GATE="off")
         self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
         self.assertNotIn("DONEWHEN-", self.repo.log())
+
+
+TEST_CMD = py("import os,sys; sys.exit(0 if os.path.exists('code.txt') else 1)")
+
+
+class TestFirst(unittest.TestCase):
+    """Test first: yes tickets. The Test command passes only where code.txt exists, so a commit that
+    holds tests/t.txt without code.txt is red."""
+    setUp = Conducted.setUp
+    tearDown = Conducted.tearDown
+    plan = Conducted.plan
+
+    def prepare(self, yes=True, test_cmd=TEST_CMD):
+        path = self.repo.path(T1)
+        text = path.read_text(encoding="utf-8")
+        if yes:
+            text = text.replace("Test first: no", "Test first: yes")
+        path.write_text(text, encoding="utf-8")
+        commands = self.repo.path("plans/f/commands.md")
+        commands.write_text("# Commands: f\n\n%sSmoke: `<the quickest command>`\n"
+                            % ("Test: `%s`\n" % test_cmd if test_cmd else ""), encoding="utf-8")
+        self.repo.commit("plan")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+
+    def write(self, rel, message):
+        self.repo.path(rel).parent.mkdir(parents=True, exist_ok=True)
+        self.repo.path(rel).write_text("x\n", encoding="utf-8")
+        self.repo.commit(message)
+
+    def resolve_with(self, *files):
+        for rel in files:
+            self.repo.path(rel).parent.mkdir(parents=True, exist_ok=True)
+            self.repo.path(rel).write_text("x\n", encoding="utf-8")
+        self.repo.set_status(T1, "resolved")
+        self.repo.commit("work")
+
+    def findings(self):
+        return self.repo.path(T1).read_text(encoding="utf-8")
+
+    def assertSentBack(self, out):
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        self.assertIn("## Review findings (round 1, test first)", self.findings())
+
+    def inproc(self, *args, patches=()):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
+        out = io.StringIO()
+        here = os.getcwd()
+        os.chdir(str(self.repo.dir))
+        try:
+            with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(out), \
+                    contextlib.ExitStack() as stack:
+                # this process runs the checkout's feature_flow, not the copy in the repo that was hashed
+                stack.enter_context(mock.patch.object(conductor.Conductor, "check_code", lambda *a, **k: None))
+                for patch in patches:
+                    stack.enter_context(patch)
+                rc = cli.main(["f"] + list(args), scripts=self.repo.path("scripts"))
+        finally:
+            os.chdir(here)
+        return rc, out.getvalue().strip()
+
+    def test_test_and_code_in_one_commit_is_sent_back(self):
+        self.prepare()
+        self.resolve_with("tests/t.txt", "code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertSentBack(out)
+        self.assertIn("TESTFIRST-FAIL", self.repo.log())
+        self.assertIn("revert that commit, commit the test files alone", self.findings())
+
+    def test_a_test_only_commit_that_passes_is_sent_back(self):
+        self.prepare()
+        self.write("code.txt", "code")
+        self.write("tests/t.txt", "test")
+        self.resolve_with("work.txt")
+        rc, out = self.repo.flow("next")
+        self.assertSentBack(out)
+        self.assertIn("passes without the production change", self.findings())
+        self.assertIn("TESTFIRST-FAIL", self.repo.log())
+
+    def test_no_test_only_commit_is_sent_back(self):
+        self.prepare()
+        self.resolve_with("code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertSentBack(out)
+        self.assertIn("no commit between base and HEAD changes only test files", self.findings())
+
+    def test_a_failing_test_commit_then_code_reaches_review(self):
+        self.prepare()
+        branch = self.repo.git("symbolic-ref", "--short", "HEAD")
+        self.write("tests/t.txt", "test")
+        self.resolve_with("code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertIn("TESTFIRST-PASS", self.repo.log())
+        self.assertIn("fail the Test command before the code", self.repo.flow("prompt")[1])
+        self.assertEqual(self.repo.git("symbolic-ref", "--short", "HEAD"), branch)
+        self.assertEqual(self.repo.porcelain(), "")
+        self.assertEqual(self.repo.state().get("restore", ""), "")
+
+    def test_a_timed_out_red_run_does_not_count(self):
+        self.prepare(test_cmd=py("import os,sys,time; os.path.exists('code.txt') or time.sleep(30)"))
+        self.write("tests/t.txt", "test")
+        self.resolve_with("code.txt")
+        real = proof.test_first
+        quick = mock.patch.object(proof, "test_first", lambda b, c, d, t, r: real(b, c, d, 0.02, r))
+        rc, out = self.inproc("next", patches=[quick])
+        self.assertSentBack(out)
+        self.assertIn("timed out after 0.02 minutes", self.findings())
+        self.assertIn("TESTFIRST-FAIL", self.repo.log())
+
+    def test_a_rebuild_keeps_the_earlier_test_only_commit(self):
+        self.prepare()
+        self.write("tests/t.txt", "test")
+        self.repo.set_status(T1, "resolved")
+        self.repo.commit("work")
+        rc, out = self.repo.flow("next")  # the Test command fails at HEAD: the gate sends it back
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        self.assertIn("round 1, gate", self.findings())
+        self.resolve_with("code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertIn("TESTFIRST-PASS", self.repo.log())
+
+    def test_a_combined_commit_recovers_on_the_next_build(self):
+        self.prepare()
+        self.resolve_with("tests/t.txt", "code.txt")
+        combined = self.repo.head()
+        rc, out = self.repo.flow("next")
+        self.assertSentBack(out)
+        self.repo.git("rm", "-q", "tests/t.txt", "code.txt")
+        self.repo.commit("revert the combined commit")
+        self.repo.git("checkout", combined, "--", "tests/t.txt")
+        self.repo.commit("the test alone")
+        self.repo.git("checkout", combined, "--", "code.txt")
+        self.repo.set_status(T1, "resolved")
+        self.repo.commit("the code")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertIn("TESTFIRST-PASS", self.repo.log())
+
+    def test_gate_off_skips_test_first(self):
+        self.prepare()
+        self.resolve_with("tests/t.txt", "code.txt")
+        rc, out = self.repo.flow("next", FLOW_GATE="off")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertNotIn("TESTFIRST-", self.repo.log())
+
+    def test_test_first_no_is_not_checked(self):
+        self.prepare(yes=False)
+        self.resolve_with("tests/t.txt", "code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertNotIn("TESTFIRST-", self.repo.log())
+
+    def test_no_test_command_skips_with_a_note(self):
+        self.prepare(test_cmd="")
+        self.resolve_with("tests/t.txt", "code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertIn("TESTFIRST-SKIP", self.repo.log())
+        self.assertIn("did not check test first", self.repo.flow("prompt")[1])
+
+    def test_a_left_over_restore_is_undone_before_anything_else(self):
+        self.prepare()
+        branch = self.repo.git("symbolic-ref", "--short", "HEAD")
+        self.write("tests/t.txt", "test")
+        self.repo.git("checkout", "-q", "--detach", "HEAD")
+        state = self.repo.path(".feature-flow/state/flow-f.state")
+        state.write_text(state.read_text(encoding="utf-8") + "restore=%s\n" % branch, encoding="utf-8")
+        rc, out = self.repo.flow("next")  # the ticket is still claimed, so this builds again
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        self.assertEqual(self.repo.git("symbolic-ref", "--short", "HEAD"), branch)
+        self.assertEqual(self.repo.state().get("restore", ""), "")
+
+    def stop_on(self, wanted):
+        real = git._git
+
+        def fail(*args, **kw):
+            if wanted(args):
+                raise RuntimeError("git %s failed: boom" % " ".join(args))
+            return real(*args, **kw)
+        return mock.patch.object(git, "_git", fail)
+
+    def test_a_failed_switch_is_a_single_stop_line(self):
+        self.prepare()
+        self.write("tests/t.txt", "test")
+        self.resolve_with("code.txt")
+        rc, out = self.inproc("next", patches=[self.stop_on(lambda a: "--detach" in a)])
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(out.splitlines()), 1, out)
+        self.assertTrue(out.startswith("STOP "), out)
+        self.assertIn("boom", out)
+
+    def test_a_failed_way_back_is_a_single_stop_line(self):
+        self.prepare()
+        branch = self.repo.git("symbolic-ref", "--short", "HEAD")
+        self.write("tests/t.txt", "test")
+        self.resolve_with("code.txt")
+        rc, out = self.inproc("next", patches=[self.stop_on(lambda a: a == ("checkout", "-q", branch))])
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(out.splitlines()), 1, out)
+        self.assertTrue(out.startswith("STOP "), out)
+        self.assertIn("boom", out)
+        self.assertIn("git checkout %s" % branch, out)
+        self.assertEqual(self.repo.state()["restore"], branch)  # the next `next` still puts it right
 
 
 if __name__ == "__main__":

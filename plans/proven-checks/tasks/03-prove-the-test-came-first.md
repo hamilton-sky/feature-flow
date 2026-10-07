@@ -1,7 +1,7 @@
 # Prove a Test first ticket had a failing test before the code
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 02
 Test first: yes
 
@@ -39,3 +39,19 @@ All tests go in `tests/py/test_proof.py`, so `-k proof` selects them.
 
 ## Answer
 
+Built: `feature_flow/proof.py` (`wants_test_first`, `test_first`, `GitError`, `RECOVER`), `feature_flow/conductor.py` (`run_test_first`, called in `judge_build` after the Done when checks; the `restore` undo at the top of `next`), `tests/py/test_proof.py` (new `TestFirst` class, 14 tests).
+
+Proof:
+- `python3 -m unittest discover -s tests/py -k proof`: 39 tests, OK (run after the last edit). It includes the one-commit test+code case (sent back, `## Review findings (round 1, test first)`, `TESTFIRST-FAIL`), the passing test-only commit, the red test-only commit then code (REVIEW, `TESTFIRST-PASS`, branch name unchanged, `git status --porcelain` empty, `restore` empty), the 0.02 minute timeout, the rebuild keeping the earlier test-only commit, `FLOW_GATE=off`, `Test first: no`, no Test command (`TESTFIRST-SKIP`, prompt says `did not check test first`), a left-over `restore` put right by `next`, and a failed switch and a failed way back each giving one `STOP` line.
+- `python3 -m unittest discover -s tests/py`: 208 tests OK; `bash tests/run.sh`: 441 passed, 0 failed.
+- Test first: the tests were run before `proof.py`/`conductor.py` had the code (11 failures and errors, the feature absent), then the code was added.
+
+Decisions:
+- The send-back findings carry a recovery recipe (`proof.RECOVER`): revert the commit that holds test and code, commit the test files alone, then restore the production files in a later commit. This answers the PR bot's concern about a combined first attempt; a test (`test_a_combined_commit_recovers_on_the_next_build`) shows that recipe reaches REVIEW with `TESTFIRST-PASS`. The ticket's Not-in-this-ticket did not forbid it (ticket 06 owns the builder's instructions, not the finding text). The no-candidate and the passes-at-every-candidate findings both use it.
+- A switch or way-back failure is `proof.GitError`, turned into a `Stop` by the conductor; `restore` is left set after a failed way back so the next `next` retries it.
+- The timeout and the failed-git tests run `cli.main` in process (the timeout is a float, `FLOW_GATE_TIMEOUT` is whole minutes; git calls need patching). They patch `Conductor.check_code` because the process runs the checkout's `feature_flow`, not the copy hashed in the temp repo.
+- `Test first:` is read from the ticket's header lines (before the first `## `), case-insensitive, from the same base text as ticket 02.
+
+Shortcuts taken: none.
+
+For later tickets: `review_notes` can now hold two or three notes (Done when, test first). Ticket 06 should tell builders the test-only commit must come first and be alone; the finding text already says how to recover from a combined commit.

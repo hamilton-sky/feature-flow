@@ -249,6 +249,11 @@ class Conductor:
             if report is not None:
                 return self.send_back("done when", report)
             notes.append(note)
+            report, note = self.run_test_first()
+            if report is not None:
+                return self.send_back("test first", report)
+            if note:
+                notes.append(note)
         self.st["review_notes"] = NOTE_SEP.join(notes)
         return self.hand_out_review()
 
@@ -281,6 +286,26 @@ class Conductor:
         if not ok:
             return report, ""
         return None, "the conductor ran %d Done when check(s) and all passed" % len(found)
+
+    def run_test_first(self):
+        """For a `Test first: yes` ticket, prove a test-only commit failed the Test command.
+        Returns (failure report or None, note for the reviewer or "")."""
+        if not proof.wants_test_first(self.ticket_at_base()):
+            return None, ""
+        test = tickets.commands_value(self.commands, "Test")
+        if not test:
+            self.log("TESTFIRST-SKIP")
+            return None, "the conductor did not check test first: commands.md has no Test command"
+
+        def remember(value):
+            self.st["restore"] = value
+            self.save()
+        try:
+            ok, text = proof.test_first(self.get("base"), test, self.plan, self.gate_timeout, remember)
+        except proof.GitError as err:
+            raise Stop("test first check of %s: %s" % (self.ticket_name(), err))
+        self.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")
+        return (None, text) if ok else (text, "")
 
     # ---- commands ------------------------------------------------------
 
@@ -315,6 +340,14 @@ class Conductor:
 
     def next(self):
         self.check_owner()
+        if self.get("restore"):
+            try:
+                git._git("checkout", "-q", self.get("restore"))
+            except RuntimeError as err:
+                raise Stop("cannot put the working copy back after the test first check: %s. run `git checkout %s` "
+                           "by hand" % (err, self.get("restore")))
+            self.st["restore"] = ""
+            self.save()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
         if self.get("relay_handoff") == "1":

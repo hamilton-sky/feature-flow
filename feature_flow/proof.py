@@ -1,10 +1,11 @@
 """The conductor's own proof of a ticket: the check block in its Done when."""
 
+import os
 import re
 import tempfile
 from dataclasses import dataclass
 
-from feature_flow import gate, proc
+from feature_flow import floorguard, gate, git, proc
 
 FENCE = "```"
 OPEN = FENCE + "check"
@@ -117,3 +118,83 @@ def run_checks(checks, timeout):
         failures.append("$ %s\n  wanted: %s\n  got: %s\n  the last lines of its output:\n%s"
                         % (check.command, _wanted(check), got, gate.tail(output)))
     return not failures, "\n".join(failures)
+
+
+class GitError(RuntimeError):
+    """A git call of the test-first check failed. The message names the git error and what to undo by hand."""
+
+
+RECOVER = ("If the test and the code are in one commit (or the test commit sits on top of code that is already "
+           "there), recover: revert that commit, commit the test files alone, then restore the production "
+           "files in a later commit (git checkout <the old commit> -- <paths>). Do not rewrite history.")
+
+
+def wants_test_first(text):
+    """True when the ticket's header lines (before its first `## ` heading) say `Test first: yes`."""
+    for line in text.split("\n"):
+        if line.startswith("## "):
+            break
+        if re.match(r"^Test first:[ \t]*yes\b", line, re.IGNORECASE):
+            return True
+    return False
+
+
+def _candidates(base, plan_dir):
+    """The commits after base (oldest first, first parent only) that change test files and nothing else
+    outside the plan folder."""
+    prefix = str(plan_dir).replace("\\", "/").rstrip("/") + "/"
+    found = []
+    for sha in git._git("rev-list", "--reverse", "--first-parent", "%s..HEAD" % base).stdout.split():
+        paths = git._git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).stdout.splitlines()
+        paths = [p for p in paths if not p.startswith(prefix)]
+        if paths and all(floorguard.DELETED_TEST.search(p) for p in paths):
+            found.append(sha)
+    return found
+
+
+def _red(sha, test_command, timeout, remember):
+    """Run the Test command with HEAD detached at sha, then go back. True when it failed (not a timeout)."""
+    result = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False)
+    value = result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else git.head()
+    remember(value)
+    try:
+        try:
+            git._git("checkout", "-q", "--detach", sha)
+        except RuntimeError as err:
+            raise GitError("%s. the working copy may be left detached: run `git checkout %s` by hand to go back"
+                           % (err, value))
+        top = git.toplevel()
+        here = os.getcwd()
+        try:
+            if top is not None:
+                os.chdir(str(top))
+            with tempfile.TemporaryFile() as log:
+                args, use_shell = gate.shell(test_command)
+                code, timed_out = proc.run(args, use_shell, log, timeout)
+        finally:
+            os.chdir(here)
+    finally:
+        try:
+            git._git("checkout", "-q", value)
+        except RuntimeError as err:
+            raise GitError("%s. the working copy is left at %s: run `git checkout %s` by hand to go back"
+                           % (err, sha[:10], value))
+        remember("")
+    return not timed_out and code != 0
+
+
+def test_first(base, test_command, plan_dir, timeout, remember):
+    """Prove a test-only commit between base and HEAD fails the Test command. Returns (ok, text): the note
+    for the reviewer, or the send-back finding. remember(value) records the branch (or sha) to go back to
+    while HEAD is detached, and "" once it is back. Raises GitError when git cannot switch."""
+    found = _candidates(base, plan_dir)
+    if not found:
+        return False, ("no commit between base and HEAD changes only test files. Commit the failing test "
+                       "alone first, then the code. " + RECOVER)
+    for sha in found:
+        if _red(sha, test_command, timeout, remember):
+            return True, "the conductor saw %s fail the Test command before the code" % sha[:10]
+    return False, ("the test-only commit(s) %s: the Test command passes without the production change (or timed "
+                   "out after %s minutes), so it does not show a failing test before the code. Write a test that "
+                   "fails without the production change. %s"
+                   % (", ".join(sha[:10] for sha in found), format(timeout, "g"), RECOVER))
