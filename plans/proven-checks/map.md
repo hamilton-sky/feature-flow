@@ -31,6 +31,7 @@ The conductor runs each ticket's `check` block from Done when and, for `Test fir
   - `git status --porcelain` (ticket 03's test that the working copy is back): stable, script-readable status, empty when clean. docs: https://git-scm.com/docs/git-status
   - `git worktree add` is used only by the person running this plan, to pin the 0.2.0 conductor (spec.md § How this plan is built), not by any ticket's code. docs: https://git-scm.com/docs/git-worktree
 - (plan) Apart from the git pages above, no outside sources: every other decision here comes from the repository.
+- 01 — `proof.checks_in(text)` parses ```check blocks in Done when into frozen `Check(command, exit, prints)` dataclasses (`exit` int or "nonzero", `prints` tuple); broken blocks raise `ParseError` quoting the line.
 
 ## Open questions
 
