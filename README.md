@@ -156,7 +156,7 @@ Floor: allow config        optional, only when a human decides the guard may let
 - **The Answers are the handoff between subagents.** The next builder reads the Answers of the tickets it depends on.
 - `settle` tickets record a decision. `convert` tickets migrate something and must be safe to run twice.
 - **A worker may change only** its own Status line and Answer, lines appended to `map.md` and `learnings.md`, and the code the ticket calls for. Rewriting its own Done when, editing another ticket, or touching `commands.md` fails the guard.
-- `Floor:` categories: `skip`, `suppress`, `empty-catch`, `test-delete`, `threshold`, `config`, `ticket-edit`, `commands-edit`. The line is read from the ticket as it was before the work started, so a worker cannot excuse itself.
+- `Floor:` categories: `skip`, `suppress`, `empty-catch`, `test-delete`, `threshold`, `config`, `ticket-edit`, `commands-edit`, and `flow-edit` (allows the conductor's code check below, for the build only). `skip` covers skipped, expected-fail and focused tests (`.only(`, `fit(`, `fdescribe(` on test paths); `config` covers more lint and test config files, the lint and test sections of `pyproject.toml` and `setup.cfg`, scripts and test keys in `package.json`, new skip or xfail words in `conftest.py`, and a `Makefile` only when `commands.md` uses `make`. A test file that loses assertions is shown to the reviewer as a warning, not a finding. The line is read from the ticket as it was before the work started, so a worker cannot excuse itself.
 - The guard needs the plan to be tracked by git. If you keep tickets in an ignored folder, it cannot see changes to them.
 - The commands in `commands.md` run with nobody watching and must exit non zero on failure.
 
@@ -222,12 +222,13 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops |
 | `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket |
+| `FLOW_GATE_TIMEOUT` | `30` | minutes each gate command and the smoke test may run; `0` means no limit. A failed smoke test writes `.feature-flow/state/<feature>.smoke.log` |
 | `FLOW_SMOKE` | the `Smoke:` line of `commands.md` | command run before every ticket; the run stops if it fails |
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
 | `FLOW_NO_OPEN` | unset | `1` makes `flow-view.py` never open a browser |
 | `FLOW_WATCH_SECONDS` | `3` | how often `flow-view.py --watch` rewrites the page |
 
-The run also stops on its own after a number of steps that grows with the ticket count, so a loop of failures cannot go on forever.
+The run also stops on its own after a number of phases (`BUILD` and `REVIEW` hand-outs) that grows with the ticket count, recomputed at every pick, so a loop of failures cannot go on forever.
 
 ## What is tested
 
@@ -254,7 +255,7 @@ bash tests/run.sh
 python3 -m unittest discover -s tests/py
 ```
 
-Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu (once with `mawk`, once with `gawk`) and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
+Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
 
 A `package` job builds the wheel and the sdist and runs `tests/package_smoke.py` on Ubuntu (Python 3.9 and the latest), macOS and Windows: it installs the wheel in a fresh virtual environment, runs `feature-flow install`, and checks that the repo gets the same files as from `install.py` in a clone. Run it locally with `python3 -m pip install build && python3 tests/package_smoke.py`.
 
@@ -285,7 +286,7 @@ git tag v0.1.1 && git push origin v0.1.1
 
 ## Caution
 
-The builder subagent has edit and shell access and commits after each ticket. Each ticket costs at least two subagents. Build on a branch you can throw away. Ignore build output in `.gitignore`, because the conductor stops if the tree is dirty after a ticket. The gate runs your Build, Test and Lint commands with no time limit. The floor guard is pattern matching: it can miss things and it can raise false alarms, and `Floor: allow` is the release valve. The run stops on its own when a ticket stays unresolved, when the smoke test or the gate keeps failing, when a ticket keeps failing review, or when it reaches its step limit.
+The builder subagent has edit and shell access and commits after each ticket. Each ticket costs at least two subagents. Build on a branch you can throw away. Ignore build output in `.gitignore`, because the conductor stops if the tree is dirty after a ticket. The gate and the smoke test stop after 30 minutes (`FLOW_GATE_TIMEOUT`). The conductor also checks that the code it runs (the `feature_flow` package, `scripts/*.py` and the build and review role and guide files) did not change during a build or review; if it did, the run stops with `STOP flow code changed while building <ticket>: <files>`, and `Floor: allow flow-edit` on the ticket allows it for the build. That check is a tripwire, not a sandbox. The floor guard is pattern matching: it can miss things and it can raise false alarms, and `Floor: allow` is the release valve. The run stops on its own when a ticket stays unresolved, when the smoke test or the gate keeps failing, when a ticket keeps failing review, or when it reaches its phase limit.
 
 ## License
 

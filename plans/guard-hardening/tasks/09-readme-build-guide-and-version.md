@@ -1,7 +1,7 @@
 # Document the changes and bump the version to 0.2.0
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01, 02, 03, 04, 05, 06, 07, 08
 Test first: no
 
@@ -25,3 +25,12 @@ Only build this after PR #34 is merged and this branch has merged main. Update `
 
 ## Answer
 
+**Built**: README.md (Floor categories line with `flow-edit`, skip/config coverage and the assertion warning; `FLOW_GATE_TIMEOUT` row; run limit counted in phases; Caution: gate and smoke timeout, code tripwire and `Floor: allow flow-edit`; the mawk/gawk CI wording removed), guides/build.md (two bullets: no edits to flow code without `Floor: allow flow-edit`; focused and skipped tests are findings), feature_flow/__init__.py (0.2.0).
+
+**Proof**: `python3 -c "import feature_flow; print(feature_flow.__version__)"` printed `0.2.0`. `grep -c flow-edit README.md guides/build.md` printed 2 and 1; `grep -c FLOW_GATE_TIMEOUT README.md` printed 2. `python3 -m unittest discover -s tests/py` ran 168 tests, OK; `bash tests/run.sh` 441 passed, 0 failed.
+
+**Decisions**: did not run the installer: the `.claude`/`.agents` role copies do not contain guides/build.md text (grep found none), and guides go to untracked `.feature-flow/`. skills/ and adapters/ untouched.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the `v0.2.0` tag is pushed by the user. Ticket 10 runs the full bar.
