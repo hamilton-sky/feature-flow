@@ -19,6 +19,8 @@
 
 ## Decisions so far
 
+01 - feature-planner and plan-reviewer role files added; the installer picks them up unchanged.
+
 ## Open questions
 
 - Should a Codex run without web search be refused, or plan from the codebase only? Assumed: plan from the codebase and say so.
