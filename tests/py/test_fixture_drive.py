@@ -2,10 +2,11 @@
 
 The bar of plans/interactive-flow-python: `python scripts/flow.py f start`, then `next` with the
 token, hands out BUILD; once the ticket is resolved and committed, `next` hands out REVIEW.
-The plan's commands are plain `python -c` calls so no shell feature beyond `bash -c` is needed.
+The plan's commands use the interpreter running this test, so they work wherever the suite runs.
 """
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -19,10 +20,11 @@ TICKET = "plans/f/tasks/01-a.md"
 TICKET_TEXT = ("# %s\n\nType: task\nStatus: %s\nBlocked by: %s\nTest first: no\n\n\nbody\n\n"
                "## Done when\n\n- x\n\n## Answer\n")
 
+PYTHON = shlex.quote(sys.executable)
 COMMANDS = ("# Commands: f\n\n"
-            "Build: `python -c \"pass\"`\n"
-            "Smoke: `python -c \"pass\"`\n"
-            "Test: `python -c \"pass\"`\n")
+            "Build: `%s -c \"pass\"`\n"
+            "Smoke: `%s -c \"pass\"`\n"
+            "Test: `%s -c \"pass\"`\n") % ((PYTHON,) * 3)
 
 
 class FixtureDrive(unittest.TestCase):

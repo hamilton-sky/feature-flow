@@ -1,7 +1,7 @@
 # Add the feature-planner and plan-reviewer roles
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -34,12 +34,13 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 - Added `agents/feature-planner.md` with the planner's repository-first strategy, outside-research citations, fork and `settle` handling, lazy pass, draft-only write boundary and `flow-status --check` proof rule.
 - Added `agents/plan-reviewer.md` as a fresh read-only reviewer that checks the draft against the approved brief and emits the required verdict.
 - Added focused role-permission and Claude/Codex installation checks to `tests/run.sh`.
+- Made the conductor fixture use its running Python interpreter so the full suite does not depend on a separate `python` executable being installed.
 
 **Proof**
 
-- `bash tests/run.sh` (with a temporary PATH-only `python` alias to this host's `python3`, because the existing fixture invokes `python`) printed `ok` for `the feature planner lists WebSearch`, `the feature planner has no Edit tool`, `the plan reviewer has no Edit tool`, and `the plan reviewer has no Write tool`.
+- `bash tests/run.sh` printed `ok` for `the feature planner lists WebSearch`, `the feature planner has no Edit tool`, `the plan reviewer has no Edit tool`, and `the plan reviewer has no Write tool`.
 - The same fresh run printed `ok` for `Claude installs both planning roles` and `Codex installs both planning roles`.
-- The same run completed with `418 passed, 0 failed`. The repository smoke command also exited 0.
+- The same exact run completed with `418 passed, 0 failed`; no PATH shim or command substitution was used. The repository smoke command also exited 0.
 
 **Decisions**
 
@@ -49,6 +50,10 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 **Shortcuts taken**
 
 - none
+
+**Review fixes**
+
+- The gate reported that the exact `bash tests/run.sh` command failed because the fixture embedded `python -c` while this host provides only `python3`. Updated `tests/py/test_fixture_drive.py` to build its fixture commands from the quoted `sys.executable`; the focused regression passes and the exact full command now reports `418 passed, 0 failed`.
 
 **For later tickets**
 
