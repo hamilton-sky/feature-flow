@@ -243,6 +243,12 @@ expect_rc "a feature without commands.md is not an error" 0 $rc
 python3 "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
 
 echo "install.py"
+planner_tools="$(awk 'NR > 1 && /^---$/ {exit} NR > 1 {print}' "$ROOT/agents/feature-planner.md" 2>/dev/null)"
+reviewer_tools="$(awk 'NR > 1 && /^---$/ {exit} NR > 1 {print}' "$ROOT/agents/plan-reviewer.md" 2>/dev/null)"
+expect_has "the feature planner lists WebSearch" "- WebSearch" "$planner_tools"
+expect_lacks "the feature planner has no Edit tool" "- Edit" "$planner_tools"
+expect_lacks "the plan reviewer has no Edit tool" "- Edit" "$reviewer_tools"
+expect_lacks "the plan reviewer has no Write tool" "- Write" "$reviewer_tools"
 cd "$TMP" || exit 1
 I="$TMP/inst"; mkdir -p "$I/repo" "$I/fresh"
 out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"; rc=$?
@@ -250,6 +256,7 @@ expect_rc "installs into a repo" 0 $rc
 for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/flow.py scripts/gate.py scripts/floor-guard.py scripts/flow-status.py scripts/flow-view.py scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
   if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
 done
+if [ -f "$I/repo/.claude/agents/feature-planner.md" ] && [ -f "$I/repo/.claude/agents/plan-reviewer.md" ]; then ok "Claude installs both planning roles"; else bad "Claude installs both planning roles"; fi
 n="$(find "$I/repo/scripts" -name '*.sh' | wc -l | tr -d ' ')"; expect_rc "no bash script is installed under scripts/" 0 "$n"
 expect_has "only the three skills are installed" "architect-review automation-design feature-flow" "$(ls "$I/repo/.claude/skills" | tr '\n' ' ')"
 n="$(find "$I/repo/.feature-flow" \( -name __pycache__ -o -name '*.pyc' \) | wc -l | tr -d ' ')"; expect_rc "no __pycache__ is installed" 0 "$n"
@@ -308,6 +315,7 @@ done
 for f in .agents/flow-roles/ticket-builder.md .agents/flow-roles/ticket-reviewer.md scripts/flow.py .feature-flow/feature_flow/cli.py .feature-flow/guides/review.md; do
   if [ -f "$C/repo/$f" ]; then ok "codex installed $f"; else bad "codex installed $f"; fi
 done
+if [ -f "$C/repo/.agents/flow-roles/feature-planner.md" ] && [ -f "$C/repo/.agents/flow-roles/plan-reviewer.md" ]; then ok "Codex installs both planning roles"; else bad "Codex installs both planning roles"; fi
 mkdir -p "$C/repo/.agents/skills/old-build"; printf 'python3 scripts/flow-status.py f\n' > "$C/repo/.agents/skills/old-build/SKILL.md"
 expect_has "codex: a leftover flow skill is named" "no longer installed: old-build." "$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"
 rm -rf "$C/repo/.agents/skills/old-build"

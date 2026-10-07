@@ -1,7 +1,7 @@
 # Add the feature-planner and plan-reviewer roles
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -28,3 +28,28 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 - agents/ticket-builder.md, agents/ticket-reviewer.md (the style to match)
 
 ## Answer
+
+**Built**
+
+- Added `agents/feature-planner.md` with the planner's repository-first strategy, outside-research citations, fork and `settle` handling, lazy pass, draft-only write boundary and `flow-status --check` proof rule.
+- Added `agents/plan-reviewer.md` as a fresh read-only reviewer that checks the draft against the approved brief and emits the required verdict.
+- Added focused role-permission and Claude/Codex installation checks to `tests/run.sh`.
+
+**Proof**
+
+- `bash tests/run.sh` (with a temporary PATH-only `python` alias to this host's `python3`, because the existing fixture invokes `python`) printed `ok` for `the feature planner lists WebSearch`, `the feature planner has no Edit tool`, `the plan reviewer has no Edit tool`, and `the plan reviewer has no Write tool`.
+- The same fresh run printed `ok` for `Claude installs both planning roles` and `Codex installs both planning roles`.
+- The same run completed with `418 passed, 0 failed`. The repository smoke command also exited 0.
+
+**Decisions**
+
+- Kept the role bodies short and protocol-focused, matching the existing builder and reviewer roles while spelling out every invariant named by the spec.
+- Tested only the front-matter tool lists, so prose cannot accidentally satisfy or fail a permission check.
+
+**Shortcuts taken**
+
+- none
+
+**For later tickets**
+
+- Ticket 02 can refer to the installed roles as `feature-planner.md` and `plan-reviewer.md`; the generic installer already delivers both to Claude and Codex destinations.

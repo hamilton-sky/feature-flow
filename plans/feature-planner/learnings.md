@@ -5,3 +5,4 @@ trap, a quirk of the environment. Append one or two lines, newest last, tagged w
 ticket number. Never edit or delete another line. Keep it short; a human prunes it.
 
 - (NN) <what you found, and what to do about it>
+- (01) This host has `python3` but no `python`; tests/py/test_fixture_drive.py invokes `python`, so prepend a temporary `python` alias to `python3` when running the suite here.

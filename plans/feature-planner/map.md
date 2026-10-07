@@ -19,6 +19,8 @@
 
 ## Decisions so far
 
+01 — Added protocol-focused planner and read-only plan-reviewer roles; the generic installer supplies both to Claude and Codex.
+
 ## Open questions
 
 - Should a Codex run without web search be refused, or plan from the codebase only? Assumed: plan from the codebase and say so.
