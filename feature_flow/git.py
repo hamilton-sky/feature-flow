@@ -32,7 +32,8 @@ def head():
 
 def changes():
     """Every changed path, untracked files included, as `git status --porcelain` sees them, except
-    the untracked files feature-flow's installer wrote: an install not committed yet is not a change."""
+    the untracked files feature-flow's installer wrote (an install not committed yet is not a change)
+    and untracked Python bytecode, which the flow's own Python runs leave behind."""
     installed = set()
     top = toplevel()
     if top is not None:
@@ -51,10 +52,14 @@ def changes():
         code, path = entry[:2], entry[3:]
         if code[0] in "RC":
             i += 1  # the rename's source path follows
-        if code == "??" and path in installed:
+        if code == "??" and (path in installed or _bytecode(path)):
             continue
         found.append(path)
     return found
+
+
+def _bytecode(path):
+    return path.endswith(".pyc") or "__pycache__/" in "/" + path
 
 
 def is_clean():

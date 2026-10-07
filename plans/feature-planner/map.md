@@ -28,6 +28,7 @@
 06 - the Codex skill plans the same way with spawn_agent and fork_turns="none"; unverified by hand.
 07 - a fixture drive takes a brief through plan-prompt, plan-review-prompt and plan-accept to BUILD; README documents the two approvals and the roles.
 08 - a cloud Claude Code run took a brief through both approvals to an accepted plan that passes --check; __pycache__ dirt filed as ticket 09.
+09 - untracked Python bytecode no longer counts as a dirty tree, in the conductor, both skills and the build guide.
 
 ## Open questions
 
