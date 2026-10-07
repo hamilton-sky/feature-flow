@@ -1,7 +1,7 @@
 # Acceptance: turn a conversation into a plan in Claude Code
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 07
 Test first: no
 
@@ -36,5 +36,5 @@ What went wrong:
 - The planner and the plan reviewer run Python while researching, which leaves untracked `__pycache__/` folders in a repo with no `.gitignore` for them (the reviewer left two). `next` counts untracked files as dirt, so the build would stop on "working tree is not clean". Filed as ticket 09.
 - Not the product: the subagents started in the session's own folder, not the scratch repo, so each prompt got one line naming the repo; and the subagent tool lists came from the role files the session loaded at start, not main's. A run in the user's own repo has neither problem.
 
-Left open: the user decides whether this run counts or they run it again in their own Claude Code session.
+Resolved: the user accepted this run as the acceptance run (2026-10-07).
 
