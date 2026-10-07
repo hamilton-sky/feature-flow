@@ -41,11 +41,14 @@ Then, in your repo, in the agent:
 | | Claude Code | Codex |
 |---|---|---|
 | Plan a feature (no plan yet) | `/feature-flow csv-export` | `$feature-flow csv-export` |
+| Plan what you just talked through | `/feature-flow` | `$feature-flow` |
 | Build its tickets (a plan exists) | `/feature-flow csv-export` | `$feature-flow csv-export` |
 | The same, asking nothing | `/feature-flow csv-export auto` | `$feature-flow csv-export auto` |
 | Watch the graph, animated | `/feature-flow csv-export show` | `$feature-flow csv-export show` |
 
 The same command plans when `plans/csv-export/` does not exist yet and builds when it does. Commit the plan before you build it.
+
+**Planning asks you twice.** First the session shows a short feature brief, written from your conversation (what, why, scope, the bar, and anything it had to assume), and waits for yes, edit or cancel. Then a fresh `feature-planner` subagent, given only that brief, reads the code, looks up outside docs where the code cannot answer, and writes a draft plan into the git-ignored `.feature-flow/state/draft/`. A fresh `plan-reviewer` checks the draft against the brief. The session shows you the goal, the commands, the ticket graph, what was dropped and the review result, and waits for a second yes. Only then does `flow.py plan-accept` copy the draft into `plans/<feature>/`.
 
 Try the graph first, with no setup and no agent: `bash examples/demo.sh --open`.
 
@@ -95,7 +98,7 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
 
 | Skill | What it does |
 |---|---|
-| `feature-flow` | **Plan:** writes `plans/<feature>/` with a spec, a map, commands, learnings and tickets, shows you the graph, and waits for a yes. **Build:** runs the tickets one by one, a builder and a reviewer subagent each, with `flow.py` deciding every step. **Show:** the animated ticket graph and a summary of what is ready and what blocks the finish. |
+| `feature-flow` | **Plan:** turns the conversation (or your answers) into a feature brief and waits for a yes, has a planner and a plan reviewer subagent draft and check `plans/<feature>/` (a spec, a map, commands, learnings and tickets), shows you the graph, and writes it after a second yes. **Build:** runs the tickets one by one, a builder and a reviewer subagent each, with `flow.py` deciding every step. **Show:** the animated ticket graph and a summary of what is ready and what blocks the finish. |
 | `architect-review` | Architecture review of a file, diff or feature, with severity rated findings. Reads `CLAUDE.md` or `AGENTS.md` for the project's own rules. |
 | `automation-design` | Blueprint for an automation pipeline. Hands off to `feature-flow` for the plan. |
 
@@ -103,10 +106,12 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
 |---|---|---|
 | `ticket-builder` | Read, Glob, Grep, Edit, Write, Bash | Builds one ticket by the build guide in its prompt. |
 | `ticket-reviewer` | Read, Glob, Grep, Bash (no Edit, no Write) | Reviews one ticket by the review guide in its prompt and ends with `REVIEW: PASS` or `REVIEW: FAIL`. |
+| `feature-planner` | Read, Glob, Grep, Bash, Write, Edit, WebSearch, WebFetch | Plans one feature from the approved brief by the plan guide, writes only the draft, cites outside sources, and ends with `PLAN: READY` or `PLAN: QUESTIONS`. |
+| `plan-reviewer` | Read, Glob, Grep, Bash (no Edit, no Write) | Checks the draft against the brief by the plan review guide and ends with `PLAN-REVIEW: PASS` or `PLAN-REVIEW: FAIL`. |
 
-In Claude Code the reviewer's tool list is enforced, so it cannot edit. A Codex subagent cannot be limited that way, so there the reviewer works from its instructions, and the conductor stops the run if it changed anything.
+In Claude Code the reviewers' tool lists are enforced, so they cannot edit. A Codex subagent cannot be limited that way, so there the reviewers work from their instructions: the conductor stops the run if a ticket reviewer changed anything, and a planner's draft reaches `plans/` only through `plan-accept`. On Codex the planner can research the web only if web search is on; otherwise it plans from the code and says so. The Codex planning path has not been run by hand.
 
-The guides in `guides/` (installed to `.feature-flow/guides/`) hold the protocol: how to build, review, plan and show. The skill holds only what differs per agent.
+The guides in `guides/` (installed to `.feature-flow/guides/`) hold the protocol: how to build, review, write the brief, plan, review a plan and show. The skill holds only what differs per agent.
 
 ## Plans and tickets
 

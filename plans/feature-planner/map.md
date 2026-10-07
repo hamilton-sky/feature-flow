@@ -21,6 +21,13 @@
 
 01 — Added protocol-focused planner and read-only plan-reviewer roles; the generic installer supplies both to Claude and Codex.
 
+02 - guides/brief.md (session), guides/plan.md (planner, draft folder) and guides/plan-review.md (reviewer) written; ticket rules unchanged apart from rule 12's wording.
+03 - plan-prompt and plan-review-prompt serve the planner and reviewer prompts; the brief is saved in the state folder, the draft is .feature-flow/state/draft/<feature>/.
+04 - plan-accept copies a checked draft into the plan folder, never overwriting and never committing.
+05 - the Claude skill plans through the brief, a feature-planner and a plan-reviewer subagent, and plan-accept.
+06 - the Codex skill plans the same way with spawn_agent and fork_turns="none"; unverified by hand.
+07 - a fixture drive takes a brief through plan-prompt, plan-review-prompt and plan-accept to BUILD; README documents the two approvals and the roles.
+
 ## Open questions
 
 - Should a Codex run without web search be refused, or plan from the codebase only? Assumed: plan from the codebase and say so.
