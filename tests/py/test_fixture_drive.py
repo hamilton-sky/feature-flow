@@ -111,7 +111,8 @@ class PlanDrive(unittest.TestCase):
         full = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
         full.update(env)
         result = subprocess.run([sys.executable, "scripts/flow.py", "csv"] + list(args), cwd=str(self.dir),
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=full)
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=full,
+                                encoding="utf-8")
         return result.returncode, result.stdout.strip()
 
     def test_a_brief_becomes_a_plan_that_starts(self):

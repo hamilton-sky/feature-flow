@@ -306,7 +306,7 @@ class Conductor:
 
     def no_plan_yet(self):
         if self.plan.is_dir():
-            raise Stop("%s already exists. pick another name: a plan is never overwritten" % self.plan)
+            raise Stop("%s already exists. pick another name: a plan is never overwritten" % self.plan.as_posix())
 
     def draft_text(self):
         return self.draft.as_posix() + "/"
@@ -363,6 +363,6 @@ class Conductor:
         check = checks.flow_status(self.scripts, self.feature, "--check")
         if not check.ok:
             raise Stop("the accepted plan in %s fails the plan check: %s"
-                       % (self.plan, " ".join(check.out.split())[:400]))
+                       % (self.plan.as_posix(), " ".join(check.out.split())[:400]))
         self.log("PLAN-ACCEPT")
         return "OK %s" % self.plan.as_posix()

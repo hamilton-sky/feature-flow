@@ -26,7 +26,8 @@ class Planning(unittest.TestCase):
         full = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
         full.update(env)
         result = subprocess.run([sys.executable, "scripts/flow.py", "g"] + list(args), cwd=str(self.repo.dir),
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=full)
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=full,
+                                encoding="utf-8")
         return result.returncode, result.stdout.strip(), result.stderr
 
     def write_draft(self, tickets=(("01-a", "A", "—"), ("02-b", "B", "01"))):

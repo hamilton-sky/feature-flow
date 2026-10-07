@@ -47,7 +47,11 @@ def main(argv=None, scripts=None):
             conductor.log("STOP")
         print(line)
         return 1
-    print(line, end="" if line.endswith("\n") else "\n")
+    out = sys.stdout
+    if command in ("plan-prompt", "plan-review-prompt") and hasattr(out, "reconfigure"):
+        # the plan guides hold non-ASCII text, which a Windows console code page cannot print
+        out.reconfigure(encoding="utf-8")
+    print(line, end="" if line.endswith("\n") else "\n", file=out)
     return 0
 
 
