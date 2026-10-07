@@ -1,4 +1,5 @@
 import os
+import os
 import sys
 import tempfile
 import time
@@ -102,7 +103,8 @@ class SmokeLogTests(unittest.TestCase):
         self.assertEqual(len(out.splitlines()), 1, out)
         self.assertTrue(out.startswith("STOP smoke test failed before 01-a: the base is already broken. "
                                        "fix it first. command: "), out)
-        self.assertTrue(out.endswith("the last 40 lines are in %s" % log), out)
+        said = out.rsplit("the last 40 lines are in ", 1)[1]
+        self.assertTrue(os.path.samefile(said, str(log)), out)  # /var is /private/var on macOS
         self.assertIn("boom", log.read_text(encoding="utf-8"))
 
     def test_timeout_that_is_not_a_number_stops_the_conductor(self):
