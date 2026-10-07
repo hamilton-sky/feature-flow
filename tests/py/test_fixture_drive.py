@@ -6,7 +6,6 @@ The plan's commands use the interpreter running this test, so they work wherever
 """
 
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -20,7 +19,8 @@ TICKET = "plans/f/tasks/01-a.md"
 TICKET_TEXT = ("# %s\n\nType: task\nStatus: %s\nBlocked by: %s\nTest first: no\n\n\nbody\n\n"
                "## Done when\n\n- x\n\n## Answer\n")
 
-PYTHON = shlex.quote(sys.executable)
+# Double quotes, which both bash -c and cmd.exe read; shlex.quote's single quotes break cmd.exe.
+PYTHON = '"%s"' % sys.executable
 COMMANDS = ("# Commands: f\n\n"
             "Build: `%s -c \"pass\"`\n"
             "Smoke: `%s -c \"pass\"`\n"
