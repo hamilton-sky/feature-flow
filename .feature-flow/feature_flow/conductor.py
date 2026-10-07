@@ -10,7 +10,7 @@ import secrets
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, git, prompts, state, tickets
+from feature_flow import checks, git, prompts, state, suggest, tickets
 
 
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
@@ -161,8 +161,10 @@ class Conductor:
         check = checks.flow_status(self.scripts, self.feature, "--check")
         if not check.ok:
             raise Stop("ticket check failed, fix the tickets first")
-        if not git.is_clean():
-            raise Stop("working tree is not clean, commit or stash first")
+        dirty = git.changes()
+        if dirty:
+            raise Stop("working tree is not clean, commit or stash first: %s%s"
+                       % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
         nxt = checks.flow_status(self.scripts, self.feature, "--next")
         if nxt.code == 10:
             done = self.num("done")
@@ -251,6 +253,45 @@ class Conductor:
         if phase == "review":
             return self.judge_review()
         return self.pick_ticket()
+
+    def reset(self, num=None):
+        """Put the feature back to a clean start: reopen a half-built ticket (or ticket num), commit that,
+        and forget the run. The tickets stay the truth; only the conductor's note and counters go."""
+        if not self.plan.is_dir():
+            hint = suggest.hint(self.feature, suggest.features(self.root)).strip()
+            raise Stop("no plan folder %s%s" % (self.plan, ". " + hint if hint else ""))
+        owner = self.get("owner")
+        if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
+            raise Stop("%s is owned by session %s. if that session is closed or dead, run reset with FLOW_TAKEOVER=1"
+                       % (self.feature, owner))
+        paths = tickets.ticket_files(str(self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")))
+        if num is not None:
+            chosen = [p for p in paths if tickets.number(p) == num.zfill(2)]
+            if not chosen:
+                raise Stop("no ticket %s in %s" % (num, self.plan))
+        else:
+            chosen = [p for p in paths if tickets.status(p) in tickets.RESET]
+        reopened = []
+        for path in chosen:
+            if tickets.status(path) != "open":
+                tickets.set_open(path)
+                reopened.append(path)
+        if reopened:
+            nums = ", ".join(tickets.number(p) for p in reopened)
+            if not git.commit_paths(reopened, "chore(%s): reset %s to open" % (self.feature, nums)):
+                raise Stop("reopened %s but could not commit it. this session must be allowed to run git commit"
+                           % nums)
+        had_run = self.state_file.is_file()
+        for path in (self.state_file, self.findings_file):
+            if path.is_file():
+                path.unlink()
+        if not reopened and not had_run:
+            return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
+        self.st = {}
+        self.log("RESET")
+        done = ["cleared the run state"] if had_run else []
+        done += ["reopened %s" % tickets.name(p) for p in reopened]
+        return "OK %s. run %s %s" % (", ".join(done), self.invoke, self.feature)
 
     def judge_review(self):
         if not git.tracked_clean() or git.head() != self.get("review_sha"):

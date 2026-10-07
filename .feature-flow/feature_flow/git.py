@@ -30,15 +30,54 @@ def head():
     return _git("rev-parse", "HEAD").stdout.strip()
 
 
+def changes():
+    """Every changed path, untracked files included, as `git status --porcelain` sees them, except
+    the untracked files feature-flow's installer wrote (an install not committed yet is not a change)
+    and untracked Python bytecode, which the flow's own Python runs leave behind."""
+    installed = set()
+    top = toplevel()
+    if top is not None:
+        try:
+            installed = set((top / ".feature-flow" / "installed.txt").read_text(encoding="utf-8").splitlines())
+        except (OSError, UnicodeDecodeError):
+            pass
+    entries = _git("status", "--porcelain", "-z", "-uall").stdout.split("\0")
+    found = []
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        code, path = entry[:2], entry[3:]
+        if code[0] in "RC":
+            i += 1  # the rename's source path follows
+        if code == "??" and (path in installed or _bytecode(path)):
+            continue
+        found.append(path)
+    return found
+
+
+def _bytecode(path):
+    return path.endswith(".pyc") or "__pycache__/" in "/" + path
+
+
 def is_clean():
-    """No change at all, untracked files included, as `git status --porcelain` sees it."""
-    return _git("status", "--porcelain").stdout.strip() == ""
+    return not changes()
 
 
 def tracked_clean():
     """No change to a tracked file, in the worktree or the index."""
     return (_git("diff", "--quiet", check=False).returncode == 0
             and _git("diff", "--cached", "--quiet", check=False).returncode == 0)
+
+
+def commit_paths(paths, message):
+    """Commit these paths only, whatever else is staged."""
+    paths = [str(p) for p in paths]
+    if _git("add", "--", *paths, check=False).returncode != 0:
+        return False
+    return _git("commit", "-q", "-m", message, "--", *paths, check=False).returncode == 0
 
 
 def commit_file(path, message):

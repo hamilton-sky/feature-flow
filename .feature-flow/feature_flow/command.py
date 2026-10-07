@@ -7,16 +7,23 @@ python3 scripts/flow.py, with the copy the installer put there.
 import os
 import sys
 
-from feature_flow import __version__, install, status, view
+from pathlib import Path
+
+from feature_flow import __version__, cli, install, status, suggest, view
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]
        feature-flow status <feature> [--next | --counts | --check | --mermaid [plain] | --json]
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
+       feature-flow reset <feature> [NN]
        feature-flow --version
 install copies the skill, its roles, scripts and guides into a repo; feature-flow install --help says more.
 status and view read plans/<feature>/ in the current directory, like scripts/flow-status.py and scripts/flow-view.py.
+reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.
 """
+
+
+COMMANDS = ("install", "status", "view", "reset", "--version", "--help")
 
 
 def main(argv=None):
@@ -35,5 +42,10 @@ def main(argv=None):
         return status.main(rest)
     if command == "view":
         return view.main(rest, here=os.path.join(install.source_root(), "scripts"))
-    sys.stderr.write("unknown command: %s\n%s" % (command, USAGE))
+    if command == "reset":
+        if not rest or len(rest) > 2:
+            sys.stderr.write(USAGE)
+            return 2
+        return cli.main(rest[:1] + ["reset"] + rest[1:], scripts=Path.cwd() / "scripts")
+    sys.stderr.write("unknown command: %s\n%s%s" % (command, suggest.hint(command, COMMANDS), USAGE))
     return 2

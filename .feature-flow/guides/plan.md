@@ -19,7 +19,7 @@ Write everything inside `<draft>`, laid out as the plan will be:
     └── 02-slug.md
 ```
 
-Write and edit only inside `<draft>` (on a findings round, fix the draft there), never change a file outside it, never commit. The conductor copies the draft into the repo after the user approves it. If the repo documents another place for plans (CLAUDE.md, AGENTS.md, `docs/`), still write the draft here, and name that place and the two variables the scripts need (`FLOW_DIR`, `FLOW_TICKETS`) in your reply.
+Write only inside `<draft>` (on a findings round, rewrite the draft files there), never change a file outside it, never commit. The conductor copies the draft into the repo after the user approves it. If the repo documents another place for plans (CLAUDE.md, AGENTS.md, `docs/`), still write the draft here, and name that place and the two variables the scripts need (`FLOW_DIR`, `FLOW_TICKETS`) in your reply.
 
 ## Step 1: Read the brief
 

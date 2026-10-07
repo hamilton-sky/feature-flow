@@ -8,7 +8,7 @@ import os
 import re
 import sys
 
-from feature_flow import tickets
+from feature_flow import suggest, tickets
 
 USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --mermaid [plain] | --json]"
 
@@ -48,6 +48,7 @@ def run(argv, out, err):
     folder = "%s/%s/%s" % (root, feature, _env("FLOW_TICKETS", "tasks"))
     if not os.path.isdir(folder):
         err.write("no ticket folder: %s\n" % folder)
+        err.write(suggest.hint(feature, suggest.features(root)))
         return 2
     paths = tickets.ticket_files(folder)
     if not paths:

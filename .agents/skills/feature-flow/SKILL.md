@@ -31,13 +31,15 @@ To add tickets to a plan that exists, edit it by hand following the ticket rules
 
 With a plan present, check these before `start`, and stop at the first that fails:
 
-- `git status --porcelain` is empty.
+- `git status --porcelain` is empty, apart from untracked Python bytecode (`__pycache__/`, `*.pyc`) and untracked files listed in `.feature-flow/installed.txt`: those are feature-flow's own install, so never stop for them. Suggest committing them (`git add --pathspec-from-file=.feature-flow/installed.txt && git commit -m "chore: install feature-flow"`) and carry on.
 - `python3 scripts/flow-status.py <feature> --check` prints `OK`.
 - `.agents/flow-roles/ticket-builder.md` and `.agents/flow-roles/ticket-reviewer.md` exist. If not, say to run `uvx feature-flow-cli install . --agent codex` in this repo (or `python3 install.py <repo> --agent codex` from a feature-flow clone).
 
 Then run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'`. The conductor keeps its state in `.feature-flow/state/`, a git-ignored folder in the repo, so it never needs to write `.git`. If it prints `STOP cannot write the flow state`, tell the user this session must be allowed to write that folder.
 
 If `start` prints `STOP` naming another owner, another session may still be working this feature. Ask the user whether that session is closed. Only on a clear yes, run `start` once more with `FLOW_TAKEOVER=1`. In `auto` mode, never take over: report and stop.
+
+If the user says the flow is stuck on a ticket or asks for a reset, run `reset` (or `reset <NN>` to redo one ticket): it reopens a half-built ticket, commits that, and clears the run, then run `start` again. It needs `FLOW_TAKEOVER=1` while a session owns the feature, on the same clear yes. Never reset on your own.
 
 Say what will happen: for each ticket, a builder subagent and then a reviewer subagent. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given.
 
