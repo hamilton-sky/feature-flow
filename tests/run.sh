@@ -800,11 +800,14 @@ unset FLOW_SESSION FLOW_RELAY
 cd "$ROOT" || exit 1
 
 echo "flow.py, guides and prompt"
-for g in build review plan show; do
+for g in build review plan show brief plan-review; do
   if [ -f "$ROOT/guides/$g.md" ]; then ok "guides/$g.md exists"; else bad "guides/$g.md exists"; fi
   n="$(grep -cE '\$ARGUMENTS|(^|[^$])/feature-flow|\$feature-flow' "$ROOT/guides/$g.md")"
   expect_rc "guides/$g.md names no runtime's skill invocation" 0 "$n"
 done
+expect_has "the plan guide ends with a plan verdict" "PLAN: READY" "$(cat "$ROOT/guides/plan.md")"
+expect_has "the plan review guide ends with a review verdict" "PLAN-REVIEW: PASS" "$(cat "$ROOT/guides/plan-review.md")"
+expect_has "the plan guide writes into the draft folder" ".feature-flow/state/draft/" "$(cat "$ROOT/guides/plan.md")"
 if [ -f "$ROOT/guides/templates/ticket.md" ]; then ok "guides/templates/ticket.md exists"; else bad "guides/templates/ticket.md exists"; fi
 D="$(flowrepo pyflow_prompt)"
 cd "$D" || exit 1

@@ -20,6 +20,7 @@
 ## Decisions so far
 
 01 - feature-planner and plan-reviewer role files added; the installer picks them up unchanged.
+02 - guides/brief.md (session), guides/plan.md (planner, draft folder) and guides/plan-review.md (reviewer) written; ticket rules unchanged apart from rule 12's wording.
 
 ## Open questions
 
