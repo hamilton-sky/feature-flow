@@ -43,14 +43,14 @@ Then, in your repo, in the agent:
 | | Claude Code | Codex |
 |---|---|---|
 | Plan a feature (no plan yet) | `/feature-flow csv-export` | `$feature-flow csv-export` |
-| Plan what you just talked through | `/feature-flow` | `$feature-flow` |
+| Plan and build what you just talked through | `/feature-flow` | `$feature-flow` |
 | Build its tickets (a plan exists) | `/feature-flow csv-export` | `$feature-flow csv-export` |
 | The same, asking nothing | `/feature-flow csv-export auto` | `$feature-flow csv-export auto` |
 | Watch the graph, animated | `/feature-flow csv-export show` | `$feature-flow csv-export show` |
 
-The same command plans when `plans/csv-export/` does not exist yet and builds when it does. Commit the plan before you build it.
+The same command plans when `plans/csv-export/` does not exist yet and builds when it does. After your second yes it commits the new plan folder, and only that folder, then goes straight on to building it; say so if you want it to stop after planning.
 
-**Planning asks you twice.** First the session shows a short feature brief, written from your conversation (what, why, scope, the bar, and anything it had to assume), and waits for yes, edit or cancel. Then a fresh `feature-planner` subagent, given only that brief, reads the code, looks up outside docs where the code cannot answer, and writes a draft plan into the git-ignored `.feature-flow/state/draft/`. A fresh `plan-reviewer` checks the draft against the brief. The session shows you the goal, the commands, the ticket graph, what was dropped and the review result, and waits for a second yes. Only then does `flow.py plan-accept` copy the draft into `plans/<feature>/`.
+**Planning asks you twice.** First the session shows a short feature brief, written from your conversation (what, why, scope, the bar, and anything it had to assume), and waits for yes, edit or cancel. Then a fresh `feature-planner` subagent, given only that brief, reads the code, looks up outside docs where the code cannot answer, and writes a draft plan into the git-ignored `.feature-flow/state/draft/`. A fresh `plan-reviewer` checks the draft against the brief. The session shows you the goal, the commands, the ticket graph, what was dropped and the review result, and waits for a second yes. Only then does `flow.py plan-accept` copy the draft into `plans/<feature>/`, and the session commits it and starts the build.
 
 Try the graph first, with no setup and no agent: `bash examples/demo.sh --open`.
 

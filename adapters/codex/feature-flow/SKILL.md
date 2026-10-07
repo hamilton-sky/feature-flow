@@ -23,7 +23,7 @@ When `plans/<feature>/` does not exist, or you are planning from the conversatio
 - `plan-review-prompt`: start a new reviewer the same way, with `task_name="plan_reviewer"` and `fork_turns="none"`, never with the planner's reply. Get its final reply with `wait_agent` and save it with the shell into `.feature-flow/state/plan-review-<feature>.txt`.
 - `plan-accept`: writes `plans/<feature>/` from the draft, only after the second yes.
 
-Then run `python3 scripts/flow-status.py <feature> --check`, list the files `plan-accept` wrote, and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `$feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
+Then run `python3 scripts/flow-status.py <feature> --check` and list the files `plan-accept` wrote. The second yes also approves committing the plan, so commit the folder `plan-accept` printed (`OK <folder>`, `plans/<feature>` unless `FLOW_DIR` is set) and nothing else: `git add -- <folder> && git commit -m "docs(<feature>): plan" -- <folder>`. If the commit fails, report why and stop. Then go straight on to building it below, unless the user asked to stop after planning.
 
 To add tickets to a plan that exists, edit it by hand following the ticket rules in `.feature-flow/guides/plan.md`.
 
@@ -41,7 +41,7 @@ If `start` prints `STOP` naming another owner, another session may still be work
 
 If the user says the flow is stuck on a ticket or asks for a reset, run `reset` (or `reset <NN>` to redo one ticket): it reopens a half-built ticket, commits that, and clears the run, then run `start` again. It needs `FLOW_TAKEOVER=1` while a session owns the feature, on the same clear yes. Never reset on your own.
 
-Say what will happen: for each ticket, a builder subagent and then a reviewer subagent. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given.
+Say what will happen: for each ticket, a builder subagent and then a reviewer subagent. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given or you came straight from planning: the plan's yes already covered the build.
 
 ## The loop
 
@@ -62,7 +62,7 @@ A conductor command looks like this:
 These apply from `start` on, once a plan exists.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
-- Never edit a ticket, the plan or the code, and never commit. The builder does that.
+- Never edit a ticket, the plan or the code, and never commit, apart from the approved plan above. The builder does that.
 - Never skip a step, reorder steps, or decide the next step yourself. Only `next` decides.
 - Never read a ticket's `## Answer` into the reviewer's prompt. `prompt` already holds everything it needs.
 - Tell the user one short line per phase (`01 built`, `01 review: PASS`), not the subagents' reports.

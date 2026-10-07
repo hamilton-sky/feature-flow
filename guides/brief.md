@@ -55,8 +55,8 @@ Show, from the planner's reply and the draft:
 - what it assumed, its open questions, and any outside sources it relied on
 - the plan review result, and its findings if it failed
 
-Ask: write this plan? yes, edit, or cancel. On an edit, add it to the brief under `Decided:`, save, and go back to Step 3. On cancel, stop: the draft stays in the state folder and nothing in the repo changed. Skip the question only in auto mode.
+Ask: write this plan, commit it and start building? yes, edit, or cancel (say if you want it to stop after the commit). On an edit, add it to the brief under `Decided:`, save, and go back to Step 3. On cancel, stop: the draft stays in the state folder and nothing in the repo changed. Skip the question only in auto mode.
 
 ## Step 6: Accept
 
-Run `plan-accept`. It copies the draft into `plans/<feature>/` (or the project's `FLOW_DIR`) and checks it, then prints `OK <folder>`, or `STOP <reason>`: report the reason and stop. It never overwrites a plan and never commits.
+Run `plan-accept`. It copies the draft into `plans/<feature>/` (or the project's `FLOW_DIR`) and checks it, then prints `OK <folder>`, or `STOP <reason>`: report the reason and stop. It never overwrites a plan and never commits: the skill commits the new folder, and only it, then goes on to build it.
