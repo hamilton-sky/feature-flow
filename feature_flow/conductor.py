@@ -126,7 +126,7 @@ class Conductor:
         runs = self.num("runs") + 1
         limit = self.num("limit")
         if runs > limit:
-            raise Stop("run limit of %d sessions reached, stopping" % limit)
+            raise Stop("run limit of %d phases reached, stopping" % limit)
         self.st["runs"] = runs
 
     # ---- phases --------------------------------------------------------
@@ -188,6 +188,7 @@ class Conductor:
         if self.per_session > 0 and self.num("session_done") >= self.per_session:
             return self.handoff()
         path = nxt.out.strip().splitlines()[-1]
+        self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                         "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "guard_warning": ""})
         self.snapshot_code()

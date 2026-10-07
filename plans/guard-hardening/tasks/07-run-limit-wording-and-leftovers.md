@@ -1,7 +1,7 @@
 # Recompute the run limit, say phases, drop the unused bash helper
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 06
 Test first: yes
 Floor: allow flow-edit, skip, suppress
@@ -27,3 +27,17 @@ In `feature_flow/conductor.py`: recompute `limit` in `pick_ticket` from the curr
 
 ## Answer
 
+
+**Built**: `feature_flow/conductor.py` (`pick_ticket` sets `limit = run_limit()` after a ticket is chosen; message now `run limit of %d phases reached, stopping`), `feature_flow/checks.py` (deleted `_bash`, the now unused `import subprocess`, and the "bash scripts it still calls" docstring words), `tests/py/test_conductor.py` (class `RunLimit`), `tests/run.sh` (the one expected string `65 sessions` became `65 phases`).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -k RunLimit` failed before the change (`STOP run limit of 2 sessions reached`) and the full suite now prints `Ran 166 tests ... OK`. The test sets the state file's `limit=2` after the first `next`, then picks ticket 02 and reads the state file: limit is back to the computed value.
+- tests/run.sh check `and stops` expects `STOP run limit of 65 phases reached, stopping` from `flow.py f next` at the limit: `441 passed, 0 failed`. `grep -rn "sessions reached" feature_flow` prints only a stale `.pyc` match, no source line.
+- `grep -n "_bash" feature_flow/checks.py` prints nothing.
+- Full `python3 -m unittest discover -s tests/py` OK and `bash tests/run.sh` rc=0, 441 passed.
+
+**Decisions**: the test simulates the stale limit by editing the state file rather than adding a ticket, because a ticket added after the base is flagged by the floor guard, and one committed during review stops the run as a reviewer change. Kept the first-`next` init of `limit` in `next()` so `count_run` always has a value.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: ticket 08 (repo's committed copies under `.feature-flow/`) still has the old `sessions reached` text in `.feature-flow/feature_flow/conductor.py`; refreshing it is that ticket's job. tests/run.sh was edited for the wording only.

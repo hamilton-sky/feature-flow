@@ -705,7 +705,7 @@ pyflow f next; resolve plans/f/tasks/01-a.md
 sed 's/^runs=.*/runs=65/' .feature-flow/state/flow-f.state > .feature-flow/state/flow-f.state.new && mv .feature-flow/state/flow-f.state.new .feature-flow/state/flow-f.state
 pyflow f next
 expect_rc "passing the run limit exits 1" 1 "$RC"
-expect_has "and stops" "STOP run limit of 65 sessions reached, stopping" "$OUT"
+expect_has "and stops" "STOP run limit of 65 phases reached, stopping" "$OUT"
 
 D="$(flowrepo pyflow_noreview)"
 cd "$D" || exit 1

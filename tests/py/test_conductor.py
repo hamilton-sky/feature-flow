@@ -270,3 +270,31 @@ class StateOutsideGit(unittest.TestCase):
         self.assertTrue(self.flow("next", FLOW_SESSION="abc123")[1].startswith("BUILD %s 01 " % T1))
         self.assertIn("10:00:00,-,START", self.repo.log())
         self.assertEqual(self.repo.state()["owner"], "abc123")
+
+
+class RunLimit(unittest.TestCase):
+    def setUp(self):
+        self.repo = Repo()
+        for folder in ("agents", "guides"):
+            shutil.copytree(str(ROOT / folder), str(self.repo.path(folder)))
+        self.repo.commit("prompts")
+
+    def tearDown(self):
+        self.repo.close()
+
+    def test_the_limit_is_recomputed_from_the_ticket_count_on_each_pick(self):
+        self.repo.flow("next")
+        full = int(self.repo.state()["limit"])
+        state = self.repo.path(".feature-flow/state/flow-f.state")
+        text = state.read_text(encoding="utf-8")
+        state.write_text(text.replace("limit=%d" % full, "limit=2"), encoding="utf-8")
+        self.assertEqual(self.repo.state()["limit"], "2")
+        self.repo.resolve(T1)
+        self.assertEqual(self.repo.flow("next")[1][:6], "REVIEW")
+        path = self.repo.dir.parent / (self.repo.dir.name + "-verdict.txt")
+        path.write_text("fine\nREVIEW: PASS\n", encoding="utf-8")
+        self.addCleanup(path.unlink)
+        self.repo.flow("verdict", str(path))
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("BUILD %s 02 " % T2), out)
+        self.assertEqual(int(self.repo.state()["limit"]), full)

@@ -1,11 +1,10 @@
-"""The checks the conductor runs: the bash scripts it still calls, and the ported ones in process.
+"""The checks the conductor runs, in process.
 
 Each call lives in one function so plans/interactive-flow-python can swap it for an
 in-process call without touching the conductor.
 """
 
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -36,12 +35,6 @@ class _Collect:
 
     def text(self):
         return "".join(self.parts)
-
-
-def _bash(script, *args):
-    result = subprocess.run(["bash", str(script)] + [str(a) for a in args],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-    return Result(result.returncode, result.stdout)
 
 
 def flow_status(scripts, feature, mode, root=None):
