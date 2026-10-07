@@ -1,7 +1,7 @@
 # Add the feature-planner and plan-reviewer roles
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: —
 Test first: yes
 
@@ -53,3 +53,48 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 **For later tickets**
 
 - Ticket 02 can refer to the installed roles as `feature-planner.md` and `plan-reviewer.md`; the generic installer already delivers both to Claude and Codex destinations.
+
+## Review findings (round 1, gate)
+
+gate: Test: bash tests/run.sh
+gate: Test failed. the last lines of its output:
+  ok    it is under 90 lines
+  ok    the Codex skill is named feature-flow
+  ok    with a quoted description
+  ok    and no Claude-only header
+  ok    and no argument hint
+  ok    its openai.yaml makes it explicit only
+  ok    it hands off with $feature-flow
+  ok    it never says /feature-flow or $ARGUMENTS
+  ok    its mode matches ticket 02 (subagents)
+  ok    the Claude skill writes nothing under .git
+  ok    the Claude skill saves the review reply in .feature-flow/state/
+  ok    the Codex skill writes nothing under .git
+  ok    the Codex skill saves the review reply in .feature-flow/state/
+smoke-real.sh, prepare only
+  ok    --prepare builds the project without any model installed
+  ok    it says no model was called
+  ok    and tells a codex user what to type
+  ok    the project is installed for codex only
+  ok    the plan passes the ticket check
+  ok    and the first ticket is the one that is ready
+  ok    it is one clean commit
+  ok    a folder that is not empty is refused
+  ok    --prepare defaults to claude
+  ok    and tells a claude user what to type
+  ok    the project is installed for claude only
+  ok    without RUN_REAL or --prepare nothing runs
+  ok    RUN_REAL=1 without --interactive runs nothing either
+  ok    an unknown FLOW_AGENT is refused
+  ok    and the script itself says what is allowed
+  ok    and it creates nothing
+  ok    --prepare without a folder is refused
+  ok    --interactive without RUN_REAL is refused
+  ok    an unknown option is refused
+  ok    --interactive: a session that ends without HANDOFF, DONE or STOP exits 1
+  ok    and says so
+  ok    and prints the recovery command
+  ok    and starts no second session
+  ok    the session is started as a user would type it
+
+414 passed, 4 failed
