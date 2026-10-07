@@ -76,6 +76,17 @@ class BuildAndChecks(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
 
+    def test_untracked_python_bytecode_is_not_a_dirty_tree_but_other_files_are(self):
+        self.repo.path("pkg/__pycache__").mkdir(parents=True)
+        self.repo.path("pkg/__pycache__/m.cpython-312.pyc").write_bytes(b"\0")
+        self.repo.path("stray.pyc").write_bytes(b"\0")
+        self.repo.path("notes.txt").write_text("mine\n", encoding="utf-8")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (1, "STOP working tree is not clean, commit or stash first: notes.txt"))
+        self.repo.path("notes.txt").unlink()
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
+
     def test_resolved_ticket_with_a_dirty_tree_stops(self):
         self.repo.flow("next")
         self.repo.set_status(T1, "resolved")

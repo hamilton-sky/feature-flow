@@ -1,7 +1,7 @@
 # Keep Python's __pycache__ from stopping the build
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -24,3 +24,9 @@ Two ways, pick one and say why in the Answer: (a) `git.changes()` skips untracke
 - feature_flow/git.py (`changes`), feature_flow/conductor.py (`next`)
 
 ## Answer
+
+Built: (a). `git.changes()` skips untracked `__pycache__/` folders and `*.pyc` files, as it skips the uncommitted install, so `next` no longer stops on bytecode left by the planner, the reviewer or the gate's own Test and Smoke runs. Chosen over (b) because it also covers the gate's runs, which no guide can reach. Both skills and `guides/build.md` say the same, so the session's own pre-start check does not stop on it either. Tracked `.pyc` changes still count.
+
+Proof: `python3 -m unittest discover -s tests/py` runs `test_untracked_python_bytecode_is_not_a_dirty_tree_but_other_files_are` (STOP names only `notes.txt` with `pkg/__pycache__/m.cpython-312.pyc` and `stray.pyc` present; BUILD once `notes.txt` is gone); 113 tests OK. `bash tests/run.sh` 441 passed, 0 failed.
+
+Shortcuts taken: none.
