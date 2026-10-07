@@ -243,6 +243,11 @@ out="$(python3 "$G" nofeature 2>&1)"; rc=$?
 expect_rc "a feature without commands.md is not an error" 0 $rc
 python3 "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
 
+echo "planning roles"
+expect_has "the planner ends with a plan verdict" "PLAN: READY" "$(cat "$ROOT/agents/feature-planner.md")"
+expect_has "the planner checks the draft folder" "FLOW_DIR=.feature-flow/state/draft" "$(cat "$ROOT/agents/feature-planner.md")"
+expect_has "the plan reviewer ends with a review verdict" "PLAN-REVIEW: PASS" "$(cat "$ROOT/agents/plan-reviewer.md")"
+
 echo "install.py"
 planner_tools="$(awk 'NR > 1 && /^---$/ {exit} NR > 1 {print}' "$ROOT/agents/feature-planner.md" 2>/dev/null)"
 reviewer_tools="$(awk 'NR > 1 && /^---$/ {exit} NR > 1 {print}' "$ROOT/agents/plan-reviewer.md" 2>/dev/null)"
@@ -796,11 +801,14 @@ unset FLOW_SESSION FLOW_RELAY
 cd "$ROOT" || exit 1
 
 echo "flow.py, guides and prompt"
-for g in build review plan show; do
+for g in build review plan show brief plan-review; do
   if [ -f "$ROOT/guides/$g.md" ]; then ok "guides/$g.md exists"; else bad "guides/$g.md exists"; fi
   n="$(grep -cE '\$ARGUMENTS|(^|[^$])/feature-flow|\$feature-flow' "$ROOT/guides/$g.md")"
   expect_rc "guides/$g.md names no runtime's skill invocation" 0 "$n"
 done
+expect_has "the plan guide ends with a plan verdict" "PLAN: READY" "$(cat "$ROOT/guides/plan.md")"
+expect_has "the plan review guide ends with a review verdict" "PLAN-REVIEW: PASS" "$(cat "$ROOT/guides/plan-review.md")"
+expect_has "the plan guide writes into the draft folder" ".feature-flow/state/draft/" "$(cat "$ROOT/guides/plan.md")"
 if [ -f "$ROOT/guides/templates/ticket.md" ]; then ok "guides/templates/ticket.md exists"; else bad "guides/templates/ticket.md exists"; fi
 D="$(flowrepo pyflow_prompt)"
 cd "$D" || exit 1
@@ -867,6 +875,13 @@ expect_rc "it never says /feature-flow or \$ARGUMENTS" 0 "$(grep -cE '(^|[^$])/f
 mode="$(grep -E '^Codex mode: (subagents|relay)$' "$ROOT/plans/interactive-flow/tasks/02-probe-codex-sessions.md" | sed 's/^Codex mode: //')"
 relay="$(grep -c 'FLOW_RELAY=1' "$CX_SKILL")"
 if { [ "$mode" = subagents ] && [ "$relay" = 0 ]; } || { [ "$mode" = relay ] && [ "$relay" -ge 1 ]; }; then ok "its mode matches ticket 02 ($mode)"; else bad "its mode matches ticket 02 ($mode)"; fi
+for n in Claude Codex; do
+  s="$CS_SKILL"; [ "$n" = Claude ] || s="$CX_SKILL"
+  for w in plan-prompt plan-review-prompt plan-accept feature-planner plan-reviewer guides/brief.md; do
+    if grep -q -- "$w" "$s"; then ok "the $n skill plans with $w"; else bad "the $n skill plans with $w"; fi
+  done
+done
+expect_has "the Codex planner never sees the conversation" 'task_name="feature_planner", fork_turns="none"' "$(cat "$CX_SKILL")"
 for n in Claude Codex; do
   s="$CS_SKILL"; [ "$n" = Claude ] || s="$CX_SKILL"
   expect_rc "the $n skill writes nothing under .git" 0 "$(grep -cE '(>|-o) *\.git/' "$s")"

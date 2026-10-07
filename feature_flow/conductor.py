@@ -7,6 +7,7 @@ caller, and prints exactly one line per command.
 import os
 import re
 import secrets
+import shutil
 from pathlib import Path
 
 from feature_flow import checks, git, prompts, state, tickets
@@ -53,6 +54,9 @@ class Conductor:
         except OSError as err:
             raise Stop("cannot write the flow state in %s: %s. this session must be allowed to write there"
                        % (top / state.STATE_DIR, err.strerror or err))
+        self.draft_root = state.STATE_DIR / "draft"
+        self.draft = self.draft_root / feature
+        self.brief_file = state.STATE_DIR / ("brief-%s.md" % feature)
         self.state_file = state.state_path(folder, feature)
         self.log_file = state.log_path(folder, feature)
         self.findings_file = state.file_path(folder, feature, "findings")
@@ -299,3 +303,70 @@ class Conductor:
         self.save()
         self.log("VERDICT-%s" % (found or "none").upper())
         return "OK" if found else "RETRY no review verdict"
+
+    # ---- planning: stateless, the brief and the draft are all there is --
+
+    def no_plan_yet(self):
+        if self.plan.is_dir():
+            raise Stop("%s already exists. pick another name: a plan is never overwritten" % self.plan.as_posix())
+
+    def draft_text(self):
+        return self.draft.as_posix() + "/"
+
+    def read_text(self, path, what):
+        try:
+            return Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError as err:
+            raise Stop("cannot read the %s %s: %s" % (what, path, err.strerror))
+
+    def plan_prompt(self, brief, findings=None):
+        """The feature-planner's prompt. Saves the brief; a first round (no findings) starts an empty draft."""
+        self.no_plan_yet()
+        text = self.read_text(brief, "brief")
+        notes = self.read_text(findings, "review findings") if findings else ""
+        if not text.strip():
+            raise Stop("the brief %s is empty" % brief)
+        if Path(brief).resolve() != self.brief_file.resolve():
+            self.brief_file.write_text(text, encoding="utf-8")
+        if not findings and self.draft.is_dir():
+            if self.draft.resolve().parent != self.draft_root.resolve():
+                raise Stop("the draft folder %s is outside %s" % (self.draft_text(), self.draft_root.as_posix()))
+            shutil.rmtree(str(self.draft))
+        (self.draft / (os.environ.get("FLOW_TICKETS") or "tasks")).mkdir(parents=True, exist_ok=True)
+        self.log("PLAN-PROMPT")
+        try:
+            return prompts.plan("plan", self.scripts, self.feature, self.draft_text(), text, notes)
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+
+    def plan_review_prompt(self):
+        """The plan-reviewer's prompt: the saved brief and the draft, nothing from the planner."""
+        self.no_plan_yet()
+        if not self.brief_file.is_file():
+            raise Stop("no brief for %s. run plan-prompt first" % self.feature)
+        if not self.draft.is_dir():
+            raise Stop("no draft plan in %s. run the planner first" % self.draft_text())
+        self.log("PLAN-REVIEW-PROMPT")
+        try:
+            return prompts.plan("plan-review", self.scripts, self.feature, self.draft_text(),
+                                self.read_text(self.brief_file, "brief"))
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+
+    def plan_accept(self):
+        """Copy a draft that passes the check into the plan folder. Never overwrites, never commits."""
+        self.no_plan_yet()
+        if not self.draft.is_dir():
+            raise Stop("no draft plan in %s. run the planner first" % self.draft_text())
+        check = checks.flow_status(self.scripts, self.feature, "--check", root=self.draft_root)
+        if not check.ok:
+            raise Stop("the draft fails the plan check, fix it first: %s"
+                       % " ".join(check.out.split())[:400])
+        self.plan.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(str(self.draft), str(self.plan))
+        check = checks.flow_status(self.scripts, self.feature, "--check")
+        if not check.ok:
+            raise Stop("the accepted plan in %s fails the plan check: %s"
+                       % (self.plan.as_posix(), " ".join(check.out.split())[:400]))
+        self.log("PLAN-ACCEPT")
+        return "OK %s" % self.plan.as_posix()
