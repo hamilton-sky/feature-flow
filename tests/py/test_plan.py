@@ -135,7 +135,7 @@ class Planning(unittest.TestCase):
         victim = self.repo.path("victim")
         victim.mkdir()
         (victim / "keep.txt").write_text("keep\n", encoding="utf-8")
-        for name in ("../../../victim", "..", "a/b", "a\\b"):
+        for name in ("../../../victim", "..", "a/b", "a\\b", "C:foo", "C:"):
             full = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
             result = subprocess.run([sys.executable, "scripts/flow.py", name, "plan-prompt", "brief.md"],
                                     cwd=str(self.repo.dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE,

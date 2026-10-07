@@ -17,7 +17,7 @@ def main(argv=None, scripts=None):
         print(USAGE, file=sys.stderr)
         return 2
     feature, command = args[0], args[1]
-    if feature in (".", "..") or "/" in feature or "\\" in feature:
+    if feature in (".", "..") or any(c in feature for c in "/\\:"):
         print("the feature must be a plain folder name, not %s" % feature, file=sys.stderr)
         return 2
     if len(args) not in ARGS.get(command, (2,)):
