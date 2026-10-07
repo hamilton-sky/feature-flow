@@ -61,6 +61,21 @@ class BuildAndChecks(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (1, "STOP 01-a still fails the gate after 3 round(s)"))
 
+    def test_an_uncommitted_install_is_not_a_dirty_tree_but_other_files_are(self):
+        for rel in (".claude/agents/ticket-builder.md", ".agents/skills/feature-flow/SKILL.md"):
+            self.repo.path(rel).parent.mkdir(parents=True, exist_ok=True)
+            self.repo.path(rel).write_text("x\n", encoding="utf-8")
+        self.repo.path(".feature-flow").mkdir()
+        self.repo.path(".feature-flow/installed.txt").write_text(
+            ".agents/skills/feature-flow/SKILL.md\n.claude/agents/ticket-builder.md\n.feature-flow/installed.txt\n",
+            encoding="utf-8")
+        self.repo.path("notes.txt").write_text("mine\n", encoding="utf-8")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (1, "STOP working tree is not clean, commit or stash first: notes.txt"))
+        self.repo.path("notes.txt").unlink()
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
+
     def test_resolved_ticket_with_a_dirty_tree_stops(self):
         self.repo.flow("next")
         self.repo.set_status(T1, "resolved")

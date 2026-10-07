@@ -5,9 +5,8 @@ The text is runtime neutral: any agent that can read a prompt can follow it.
 
 from pathlib import Path
 
-ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md",
-         "plan": "feature-planner.md", "plan-review": "plan-reviewer.md"}
-GUIDES = {"build": "build.md", "review": "review.md", "plan": "plan.md", "plan-review": "plan-review.md"}
+ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md"}
+GUIDES = {"build": "build.md", "review": "review.md"}
 
 
 def find_file(scripts, folder, name):
@@ -51,28 +50,3 @@ def build(phase, scripts, feature, ticket, num, sha):
                 "with exactly `REVIEW: PASS` or `REVIEW: FAIL`." % (num, feature, feature, num, sha, ticket, sha, fresh))
         intro = "The review guide follows. Follow it exactly."
     return "\n\n".join([role, "---", intro, guide, "---", task]) + "\n"
-
-
-def plan(phase, scripts, feature, draft, brief, findings=""):
-    """The prompt for the feature-planner (phase "plan") or the plan-reviewer ("plan-review").
-
-    Both get the approved brief and the draft folder, never the conversation or each other's reasoning.
-    """
-    role = _body(find_file(scripts, "agents", ROLES[phase]))
-    guide = _body(find_file(scripts, "guides", GUIDES[phase]))
-    guide = guide.replace("<feature>", feature).replace("<draft>", draft)
-    if phase == "plan":
-        task = ("Your task: plan the feature `%s` from the approved brief below. Write the draft only inside "
-                "`%s`, laid out as the plan guide says. Do not write anywhere else and do not commit. Your final "
-                "reply must end with exactly `PLAN: READY` or `PLAN: QUESTIONS`." % (feature, draft))
-        intro = "The plan guide follows. Follow it exactly."
-    else:
-        task = ("Your task: review the draft plan for the feature `%s` in `%s` against the approved brief below. "
-                "Do not edit any file or create a commit. Your final reply must end with exactly "
-                "`PLAN-REVIEW: PASS` or `PLAN-REVIEW: FAIL`." % (feature, draft))
-        intro = "The plan review guide follows. Follow it exactly."
-    parts = [role, "---", intro, guide, "---", task, "## The brief", brief.strip("\n")]
-    if findings.strip():
-        parts += ["## Review findings from the last round", "The draft is already in `%s`. Fix each finding in it, "
-                  "or say in your reply why it stays." % draft, findings.strip("\n")]
-    return "\n\n".join(parts) + "\n"

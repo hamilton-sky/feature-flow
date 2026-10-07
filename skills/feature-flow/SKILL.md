@@ -1,13 +1,13 @@
 ---
 name: feature-flow
-description: Use to plan a feature (from the conversation so far, with a fresh planner and plan reviewer subagent) or build its tickets, one fresh builder and one fresh reviewer subagent per ticket, with scripts/flow.py deciding every step. Also draws the ticket graph with show.
+description: Use to plan a feature or build its tickets, one fresh builder and one fresh reviewer subagent per ticket, with scripts/flow.py deciding every step. Also draws the ticket graph with show.
 argument-hint: "[feature] [show] [auto]"
 disable-model-invocation: true
 ---
 
 Plan or build the feature in `$ARGUMENTS`.
 
-The first word is the **feature**. `show` means draw the graph. `auto` means ask nothing and go. If no feature was given and the conversation so far describes work to build, plan it (below) and propose the feature's name in the brief. If no feature was given otherwise, list `plans/*/` and ask which one.
+The first word is the **feature**. `show` means draw the graph. `auto` means ask nothing and go. If no feature was given, list `plans/*/` and ask which one.
 
 The conductor is `python3 scripts/flow.py <feature> <command>`. It decides the order, runs the gate and the floor guard, and keeps its state in `.feature-flow/state/`, a folder git ignores. You ask it, and you do what it says. The guides it uses are in `guides/` or `.feature-flow/guides/`.
 
@@ -17,21 +17,17 @@ With `show`, follow `guides/show.md` for the feature and stop.
 
 ## Plan
 
-When `plans/<feature>/` does not exist, or you are planning from the conversation, follow `guides/brief.md` with the user. You write the brief and ask for both yeses (unless `auto`); a subagent plans, another reviews, and you never draft the plan yourself. Once the brief names the feature, run `FLOW_INVOKE=/feature-flow python3 scripts/flow.py <feature> start` and check that it prints `PLAN`, and check that `feature-planner.md` and `plan-reviewer.md` are installed where the builder's role is (see below).
+If `plans/<feature>/` does not exist, run `FLOW_INVOKE=/feature-flow python3 scripts/flow.py <feature> start` and check that it prints `PLAN`. Then:
 
-- `plan-prompt <brief>`: spawn a `feature-planner` subagent with the whole output as its prompt. Wait for its final reply.
-- `plan-review-prompt`: spawn a `plan-reviewer` subagent with the whole output, never with the planner's reply. Wait for its final reply and save it with Bash into `.feature-flow/state/plan-review-<feature>.txt`.
-- `plan-accept`: writes `plans/<feature>/` from the draft, only after the second yes.
-
-Then run `python3 scripts/flow-status.py <feature> --check`, list the files `plan-accept` wrote, and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `/feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
-
-To add tickets to a plan that exists, edit it by hand following the ticket rules in `guides/plan.md`.
+1. Follow `guides/plan.md` with the user.
+2. Run `python3 scripts/flow-status.py <feature> --check` and fix every problem.
+3. Stop. List the files you created and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `/feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
 
 ## Before building
 
 With a plan present, check these before `start`, and stop at the first that fails:
 
-- `git status --porcelain` is empty.
+- `git status --porcelain` is empty, apart from untracked files listed in `.feature-flow/installed.txt`: those are feature-flow's own install, so never stop for them. Suggest committing them (`git add --pathspec-from-file=.feature-flow/installed.txt && git commit -m "chore: install feature-flow"`) and carry on.
 - `python3 scripts/flow-status.py <feature> --check` prints `OK`.
 - `ticket-builder.md` and `ticket-reviewer.md` are in `.claude/agents/`, `~/.claude/agents/`, or `$CLAUDE_HOME/agents/` when `CLAUDE_HOME` is set. If not, say to run `uvx feature-flow-cli install .` in this repo (or `python3 install.py <repo>` from a feature-flow clone).
 
@@ -57,7 +53,7 @@ A conductor command looks like this:
 
 ## Rules while building
 
-These apply from `start` on, once a plan exists.
+These apply from `start` on, once a plan exists. Planning (above) writes the plan files itself.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
 - Never edit a ticket, the plan or the code, and never commit. The builder does that.

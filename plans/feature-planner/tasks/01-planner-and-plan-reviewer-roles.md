@@ -1,7 +1,7 @@
 # Add the feature-planner and plan-reviewer roles
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: —
 Test first: yes
 
@@ -28,13 +28,3 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 - agents/ticket-builder.md, agents/ticket-reviewer.md (the style to match)
 
 ## Answer
-
-Built: agents/feature-planner.md (thinking strategy + rules, tools Read, Glob, Grep, Bash, Write, WebSearch, WebFetch) and agents/plan-reviewer.md (read only, ends PLAN-REVIEW: PASS/FAIL).
-
-Proof: `bash tests/run.sh` prints the new "planning roles" checks (planner has WebSearch and no Edit, reviewer has no Edit or Write), and installed checks for both roles in .claude/agents/ and .agents/flow-roles/. 422 passed, 0 failed.
-
-Decisions: no installer change, it already copies every agents/*.md.
-
-Shortcuts taken: none.
-
-Review fixes: the Codex review on PR #20 found that a findings round asks the planner to fix its draft, which a no-Edit role with "never edit an existing file" could not do. The planner now has Edit and may write and edit only inside the draft folder; the test checks that rule instead of the missing Edit.

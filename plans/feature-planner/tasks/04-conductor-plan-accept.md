@@ -1,7 +1,7 @@
 # Accept a reviewed draft into plans/
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 03
 Test first: yes
 
@@ -23,9 +23,3 @@ Add `flow.py <feature> plan-accept`: STOP if `plans/<feature>/` already exists (
 - feature_flow/checks.py (`flow_status`), feature_flow/status.py (`FLOW_DIR`)
 
 ## Answer
-
-Built: `plan-accept` checks the draft with `checks.flow_status(..., root=draft)` (FLOW_DIR for one call), copies it into FLOW_DIR/<feature> (default plans/), checks again and prints `OK <folder>`. STOPs on an existing plan, no draft, or a failing check, and then copies nothing. Never commits.
-
-Proof: tests/py/test_plan.py: accept copies every file and prints OK plans/g; follows FLOW_DIR=docs/plans; STOPs on an existing plan, without a draft, and on a cyclic draft with plans/g left absent. 107 tests OK.
-
-Shortcuts taken: none.

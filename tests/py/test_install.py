@@ -61,6 +61,28 @@ class RunTests(unittest.TestCase):
         self.assertIn("  update  ", out)
         self.assertNotIn(b"my own edit", skill.read_bytes())
 
+    def test_the_installed_list_names_every_written_file_and_keeps_earlier_runs(self):
+        self.run_install("--agent", "codex")
+        listed = (self.target / ".feature-flow" / "installed.txt").read_text(encoding="utf-8").split()
+        self.assertIn(".feature-flow/installed.txt", listed)
+        self.assertIn(".agents/skills/feature-flow/SKILL.md", listed)
+        self.assertIn("scripts/flow.py", listed)
+        self.assertNotIn(".claude/skills/feature-flow/SKILL.md", listed)
+        skill = self.target / ".agents" / "skills" / "feature-flow" / "SKILL.md"
+        skill.write_bytes(skill.read_bytes() + b"my own edit\n")
+        self.run_install("--agent", "claude")
+        listed = (self.target / ".feature-flow" / "installed.txt").read_text(encoding="utf-8").split()
+        self.assertIn(".claude/skills/feature-flow/SKILL.md", listed)
+        self.assertIn(".agents/skills/feature-flow/SKILL.md", listed)
+        files = sorted(p.relative_to(self.target).as_posix() for p in self.target.rglob("*") if p.is_file())
+        self.assertEqual(sorted(listed), files)
+
+    def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
+        helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)
+        _, out, _ = self.run_install()
+        self.assertIn("next: commit the installed files: git -C ", out)
+        self.assertIn(" add --pathspec-from-file=.feature-flow/installed.txt && git -C ", out)
+
     def test_the_python_commands_are_installed_and_no_bash_scripts(self):
         self.run_install()
         scripts = sorted(p.name for p in (self.target / "scripts").iterdir())
