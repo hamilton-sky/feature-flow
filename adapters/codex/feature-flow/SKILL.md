@@ -1,13 +1,13 @@
 ---
 name: feature-flow
-description: "Use to plan a feature (from the conversation so far, with a fresh planner and plan reviewer subagent) or build its tickets, one fresh builder and one fresh reviewer subagent per ticket, with scripts/flow.py deciding every step. Also draws the ticket graph with show."
+description: "Use to plan a feature or build its tickets, one fresh builder and one fresh reviewer subagent per ticket, with scripts/flow.py deciding every step. Also draws the ticket graph with show."
 ---
 
 `<arguments>` below stands for the text the user typed after `$feature-flow`.
 
 Plan or build the feature in `<arguments>`.
 
-The first word is the **feature**. `show` means draw the graph. `auto` means ask nothing and go. If no feature was given and the conversation so far describes work to build, plan it (below) and propose the feature's name in the brief. If no feature was given otherwise, list `plans/*/` and ask which one.
+The first word is the **feature**. `show` means draw the graph. `auto` means ask nothing and go. If no feature was given, list `plans/*/` and ask which one.
 
 The conductor is `python3 scripts/flow.py <feature> <command>`. It decides the order, runs the gate and the floor guard, and keeps its state in `.feature-flow/state/`, a folder git ignores. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
 
@@ -17,15 +17,11 @@ With `show`, follow `.feature-flow/guides/show.md` for the feature and stop.
 
 ## Plan
 
-When `plans/<feature>/` does not exist, or you are planning from the conversation, follow `.feature-flow/guides/brief.md` with the user. You write the brief and ask for both yeses (unless `auto`); a child agent plans, another reviews, and you never draft the plan yourself. Once the brief names the feature, run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start` and check that it prints `PLAN`, and check that `.agents/flow-roles/feature-planner.md` and `.agents/flow-roles/plan-reviewer.md` exist (see below).
+If `plans/<feature>/` does not exist, run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start` and check that it prints `PLAN`. Then:
 
-- `plan-prompt <brief>`: start the planner with `spawn_agent(task_name="feature_planner", fork_turns="none", message=...)`. The message is "Work only in <repo>." followed by the whole output. Get its final reply with `wait_agent`. A child cannot be limited to the draft folder, so it works from its instructions, and `plan-accept` is the only way its draft reaches `plans/`. If web search is off in this Codex, the planner plans from the codebase and says so.
-- `plan-review-prompt`: start a new reviewer the same way, with `task_name="plan_reviewer"` and `fork_turns="none"`, never with the planner's reply. Get its final reply with `wait_agent` and save it with the shell into `.feature-flow/state/plan-review-<feature>.txt`.
-- `plan-accept`: writes `plans/<feature>/` from the draft, only after the second yes.
-
-Then run `python3 scripts/flow-status.py <feature> --check`, list the files `plan-accept` wrote, and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `$feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
-
-To add tickets to a plan that exists, edit it by hand following the ticket rules in `.feature-flow/guides/plan.md`.
+1. Follow `.feature-flow/guides/plan.md` with the user.
+2. Run `python3 scripts/flow-status.py <feature> --check` and fix every problem.
+3. Stop. List the files you created and suggest the commit command (`git add plans/<feature> && git commit -m "docs(<feature>): plan"`). Say to commit the plan and run `$feature-flow <feature>` again. While the plan is uncommitted, do not say the feature is ready to build.
 
 ## Before building
 
@@ -57,7 +53,7 @@ A conductor command looks like this:
 
 ## Rules while building
 
-These apply from `start` on, once a plan exists.
+These apply from `start` on, once a plan exists. Planning (above) writes the plan files itself.
 
 - Never run the gate, the floor guard or a review yourself. The conductor runs the checks, and the reviewer subagent reviews.
 - Never edit a ticket, the plan or the code, and never commit. The builder does that.

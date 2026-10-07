@@ -4,7 +4,6 @@ Each call lives in one function so plans/interactive-flow-python can swap it for
 in-process call without touching the conductor.
 """
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -42,21 +41,10 @@ def _bash(script, *args):
     return Result(result.returncode, result.stdout)
 
 
-def flow_status(scripts, feature, mode, root=None):
-    """The ticket graph reader with --next, --counts or --check, in process. stderr is folded into the output.
-    root, when given, stands in for FLOW_DIR for this one call (the planner's draft folder)."""
+def flow_status(scripts, feature, mode):
+    """The ticket graph reader with --next, --counts or --check, in process. stderr is folded into the output."""
     out = _Collect()
-    saved = os.environ.get("FLOW_DIR")
-    if root is not None:
-        os.environ["FLOW_DIR"] = str(root)
-    try:
-        code = status.run([feature, mode], out, out)
-    finally:
-        if root is not None:
-            if saved is None:
-                del os.environ["FLOW_DIR"]
-            else:
-                os.environ["FLOW_DIR"] = saved
+    code = status.run([feature, mode], out, out)
     return Result(code, out.text())
 
 
