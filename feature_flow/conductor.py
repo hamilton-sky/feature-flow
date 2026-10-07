@@ -261,12 +261,12 @@ class Conductor:
 
     def ticket_at_base(self):
         """The ticket text as it was at the base commit, so a builder cannot change what is checked."""
-        try:
-            source = git._git("show", "%s:%s" % (self.get("base"), Path(self.ticket()).as_posix()), check=False)
-        except OSError:
-            source = None
-        if source is not None and source.returncode == 0:
-            return source.stdout
+        rel = proof.repo_relative(self.ticket())
+        listed = git._git("ls-tree", "--name-only", self.get("base"), "--", rel, check=False)
+        if listed.returncode != 0:
+            raise Stop("cannot read %s at the base commit: %s" % (rel, listed.stderr.strip()))
+        if listed.stdout.strip():
+            return git._git("show", "%s:%s" % (self.get("base"), rel)).stdout
         text = Path(self.ticket()).read_text(encoding="utf-8")
         return text.split("\n## Answer", 1)[0]
 

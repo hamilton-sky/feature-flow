@@ -3,6 +3,7 @@
 import os
 import re
 import tempfile
+from pathlib import Path
 from dataclasses import dataclass
 
 from feature_flow import floorguard, gate, git, proc
@@ -102,12 +103,23 @@ def run_checks(checks, timeout):
     Returns (ok, report); the report names each failing command, what was wanted, what happened and the
     last lines of its output."""
     failures = []
+    top = git.toplevel()
+    here = os.getcwd()
+    try:
+        if top is not None:
+            os.chdir(str(top))
+        return _run_checks(checks, timeout, failures)
+    finally:
+        os.chdir(here)
+
+
+def _run_checks(checks, timeout, failures):
     for check in checks:
         with tempfile.TemporaryFile() as log:
             args, use_shell = gate.shell(check.command)
             code, timed_out = proc.run(args, use_shell, log, timeout)
             log.seek(0)
-            output = log.read().decode("utf-8", "surrogateescape").replace("\r\n", "\n")
+            output = log.read().decode("utf-8", "replace").replace("\r\n", "\n")
         if timed_out:
             got = "timed out after %s minutes" % format(timeout, "g")
         else:
@@ -139,23 +151,71 @@ def wants_test_first(text):
     return False
 
 
+def repo_relative(path):
+    """path as a posix path relative to the repository root (git's own spelling), when it is inside it."""
+    top = git.toplevel()
+    path = Path(path)
+    if top is not None:
+        try:
+            path = (path if path.is_absolute() else Path.cwd() / path).resolve().relative_to(top.resolve())
+        except (ValueError, OSError):
+            pass
+    return path.as_posix()
+
+
 def _candidates(base, plan_dir):
     """The commits after base (oldest first, first parent only) that change test files and nothing else
-    outside the plan folder."""
-    prefix = str(plan_dir).replace("\\", "/").rstrip("/") + "/"
+    outside the plan folder, and whose whole tree differs from base only in test files and the plan folder
+    (a test commit on top of production changes does not count)."""
+    prefix = repo_relative(plan_dir).rstrip("/") + "/"
     found = []
     for sha in git._git("rev-list", "--reverse", "--first-parent", "%s..HEAD" % base).stdout.split():
         paths = git._git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).stdout.splitlines()
         paths = [p for p in paths if not p.startswith(prefix)]
-        if paths and all(floorguard.DELETED_TEST.search(p) for p in paths):
+        if not (paths and all(floorguard.DELETED_TEST.search(p) for p in paths)):
+            continue
+        total = git._git("diff", "--name-only", base, sha).stdout.splitlines()
+        if all(p.startswith(prefix) or floorguard.DELETED_TEST.search(p) for p in total):
             found.append(sha)
     return found
+
+
+def _status():
+    """(code, path) of every change `git status` sees, untracked files listed one by one."""
+    entries = git._git("status", "--porcelain", "-z", "--untracked-files=all").stdout.split("\0")
+    out = []
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        if entry[0] in "RC":
+            i += 1
+        out.append((entry[:2], entry[3:]))
+    return out
+
+
+def _undo(had):
+    """Undo what the Test command did: the tree was clean (apart from the untracked files in had) before."""
+    now = _status()
+    if any(code != "??" for code, _ in now):
+        git._git("reset", "-q", "--hard")
+    made = [path for code, path in now if code == "??" and path not in had]
+    if made:
+        git._git("clean", "-fdq", "--", *made)
 
 
 def _red(sha, test_command, timeout, remember):
     """Run the Test command with HEAD detached at sha, then go back. True when it failed (not a timeout)."""
     result = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False)
     value = result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else git.head()
+    before = _status()
+    if any(code != "??" for code, _ in before):
+        raise GitError("the working copy has uncommitted changes to tracked files (%s), so the red run cannot "
+                       "be undone safely. commit or stash them and run again"
+                       % " ".join(path for code, path in before if code != "??")[:200])
+    had = {path for _, path in before}
     remember(value)
     try:
         try:
@@ -171,6 +231,7 @@ def _red(sha, test_command, timeout, remember):
             with tempfile.TemporaryFile() as log:
                 args, use_shell = gate.shell(test_command)
                 code, timed_out = proc.run(args, use_shell, log, timeout)
+            _undo(had)
         finally:
             os.chdir(here)
     finally:
@@ -190,7 +251,9 @@ def test_first(base, test_command, plan_dir, timeout, remember):
     found = _candidates(base, plan_dir)
     if not found:
         return False, ("no commit between base and HEAD changes only test files. Commit the failing test "
-                       "alone first, then the code. " + RECOVER)
+                       "alone first, then the code. A test commit does not count when earlier commits already changed "
+                       "production files. "
+                       + RECOVER)
     for sha in found:
         if _red(sha, test_command, timeout, remember):
             return True, "the conductor saw %s fail the Test command before the code" % sha[:10]

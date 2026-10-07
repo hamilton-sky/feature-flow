@@ -290,7 +290,7 @@ class TestFirst(unittest.TestCase):
         self.resolve_with("work.txt")
         rc, out = self.repo.flow("next")
         self.assertSentBack(out)
-        self.assertIn("passes without the production change", self.findings())
+        self.assertIn("earlier commits already changed production files", self.findings())
         self.assertIn("TESTFIRST-FAIL", self.repo.log())
 
     def test_no_test_only_commit_is_sent_back(self):
@@ -419,6 +419,129 @@ class TestFirst(unittest.TestCase):
         self.assertIn("boom", out)
         self.assertIn("git checkout %s" % branch, out)
         self.assertEqual(self.repo.state()["restore"], branch)  # the next `next` still puts it right
+
+
+class chdir:
+    def __init__(self, path):
+        self.path = str(path)
+
+    def __enter__(self):
+        self.here = os.getcwd()
+        os.chdir(self.path)
+
+    def __exit__(self, *exc):
+        os.chdir(self.here)
+
+
+class ReviewFixes(unittest.TestCase):
+    def setUp(self):
+        self.repo = helpers.Repo()
+        self.base = self.repo.head()
+
+    def tearDown(self):
+        self.repo.close()
+
+    def test_an_absolute_plan_dir_still_filters_the_plan_files(self):
+        self.repo.path("tests").mkdir()
+        self.repo.path("tests/t.txt").write_text("x\n", encoding="utf-8")
+        self.repo.set_status(T1, "resolved")
+        self.repo.commit("test plus ticket status")
+        sha = self.repo.head()
+        with chdir(self.repo.dir):
+            found = proof._candidates(self.base, self.repo.path("plans/f").resolve())
+        self.assertEqual(found, [sha])
+
+    def conductor(self):
+        c = conductor.Conductor.__new__(conductor.Conductor)
+        c.st = {"base": self.base, "ticket": str(self.repo.path(T1).resolve())}
+        return c
+
+    def test_ticket_at_base_with_an_absolute_path_reads_the_base_blob(self):
+        original = self.repo.path(T1).read_text(encoding="utf-8")
+        self.repo.path(T1).write_text(original.replace("- x\n", "- y\n"), encoding="utf-8")
+        with chdir(self.repo.dir):
+            self.assertEqual(self.conductor().ticket_at_base(), original)
+
+    def test_ticket_at_base_falls_back_only_when_the_blob_is_absent(self):
+        new = self.repo.path("plans/f/tasks/09-new.md")
+        new.write_text("# N\n\n## Done when\n\n- z\n\n## Answer\nbuilt\n", encoding="utf-8")
+        c = self.conductor()
+        c.st["ticket"] = str(new.resolve())
+        with chdir(self.repo.dir):
+            self.assertEqual(c.ticket_at_base(), "# N\n\n## Done when\n\n- z\n")
+            c.st["base"] = "no-such-revision"
+            with self.assertRaises(conductor.Stop):
+                c.ticket_at_base()
+
+    def test_the_red_run_leaves_a_clean_tree_and_the_branch(self):
+        self.repo.path("tests").mkdir()
+        self.repo.path("tests/t.txt").write_text("x\n", encoding="utf-8")
+        self.repo.commit("test")
+        sha = self.repo.head()
+        branch = self.repo.git("symbolic-ref", "--short", "HEAD")
+        cmd = py("open('junk.txt','w').write('j'); open('plans/f/spec.md','a').write('more'); raise SystemExit(1)")
+        with chdir(self.repo.dir):
+            self.assertTrue(proof._red(sha, cmd, 1, lambda v: None))
+        self.assertEqual(self.repo.porcelain(), "")
+        self.assertEqual(self.repo.git("symbolic-ref", "--short", "HEAD"), branch)
+
+    def test_the_red_run_refuses_a_dirty_tree(self):
+        self.repo.path("tests").mkdir()
+        self.repo.path("tests/t.txt").write_text("x\n", encoding="utf-8")
+        self.repo.commit("test")
+        self.repo.path("plans/f/spec.md").write_text("dirty\n", encoding="utf-8")
+        with chdir(self.repo.dir):
+            with self.assertRaises(proof.GitError):
+                proof._red(self.repo.head(), py("pass"), 1, lambda v: None)
+        self.assertEqual(self.repo.path("plans/f/spec.md").read_text(encoding="utf-8"), "dirty\n")
+
+    def test_a_check_runs_from_the_repo_root(self):
+        self.repo.path("rootfile.txt").write_text("x", encoding="utf-8")
+        self.repo.path("sub").mkdir()
+        with chdir(self.repo.path("sub")):
+            ok, report = proof.run_checks([proof.Check(py("import os; raise SystemExit(0 if os.path.exists('rootfile.txt') else 1)"))], 1)
+            self.assertEqual(os.path.realpath(os.getcwd()), os.path.realpath(str(self.repo.path("sub"))))
+        self.assertEqual((ok, report), (True, ""))
+
+    def test_non_utf8_output_gives_a_report_that_can_be_written(self):
+        ok, report = proof.run_checks(
+            [proof.Check(py("import sys; sys.stdout.buffer.write(bytes([255, 254])); raise SystemExit(1)"))], 1)
+        self.assertFalse(ok)
+        report.encode("utf-8")
+        self.assertIn("exit 1", report)
+
+
+class CodeBeforeTest(unittest.TestCase):
+    setUp = Conducted.setUp
+    tearDown = Conducted.tearDown
+    plan = Conducted.plan
+    prepare = TestFirst.prepare
+    write = TestFirst.write
+    resolve_with = TestFirst.resolve_with
+    findings = TestFirst.findings
+    assertSentBack = TestFirst.assertSentBack
+
+    """A test-only commit that sits on top of production changes does not count."""
+    def test_a_test_commit_on_top_of_code_is_sent_back(self):
+        self.prepare(test_cmd=py("import os,sys; sys.exit(0 if os.path.exists('code.txt') and os.path.exists('code2.txt') else 1)"))
+        self.write("code.txt", "code")
+        self.write("tests/t.txt", "test")
+        self.resolve_with("code2.txt")
+        rc, out = self.repo.flow("next")
+        self.assertSentBack(out)
+        self.assertIn("earlier commits already changed production files", self.findings())
+        self.assertIn("TESTFIRST-FAIL", self.repo.log())
+
+
+class CodexAdapterNames(unittest.TestCase):
+    def test_each_codex_spawn_has_a_unique_task_name(self):
+        for rel in ("adapters/codex/feature-flow/SKILL.md", ".agents/skills/feature-flow/SKILL.md"):
+            text = (helpers.ROOT / rel).read_text(encoding="utf-8")
+            self.assertNotIn('task_name="ticket_reviewer"', text)
+            self.assertNotIn('task_name="ticket_builder"', text)
+            self.assertIn("ticket_reviewer_<NN>_spec", text)
+            self.assertIn("ticket_reviewer_<NN>_quality", text)
+            self.assertIn("ticket_builder_<NN>_<round>", text)
 
 
 if __name__ == "__main__":
