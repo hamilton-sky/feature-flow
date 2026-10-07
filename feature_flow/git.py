@@ -13,6 +13,14 @@ def _git(*args, check=True):
     return result
 
 
+def show_text(revision_path):
+    """`git show <rev>:<path>` decoded as UTF-8 (the platform's default encoding is not what a ticket is written in)."""
+    result = subprocess.run(["git", "show", revision_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        raise RuntimeError("git show %s failed: %s" % (revision_path, result.stderr.decode("utf-8", "replace").strip()))
+    return result.stdout.decode("utf-8", "replace").replace("\r\n", "\n")
+
+
 def git_dir():
     result = _git("rev-parse", "--absolute-git-dir", check=False)
     if result.returncode != 0:

@@ -266,7 +266,7 @@ class Conductor:
         if listed.returncode != 0:
             raise Stop("cannot read %s at the base commit: %s" % (rel, listed.stderr.strip()))
         if listed.stdout.strip():
-            return git._git("show", "%s:%s" % (self.get("base"), rel)).stdout
+            return git.show_text("%s:%s" % (self.get("base"), rel))
         text = Path(self.ticket()).read_text(encoding="utf-8")
         return text.split("\n## Answer", 1)[0]
 
