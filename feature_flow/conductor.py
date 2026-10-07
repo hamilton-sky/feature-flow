@@ -438,7 +438,8 @@ class Conductor:
             if phase == "review" and self.get("review_pass") == "quality":
                 phase = "review-quality"
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
-                                 [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase != "build" else ())
+                                 [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase != "build" else (),
+                                 retry=self.num("round") > 0)
         except FileNotFoundError as err:
             raise Stop(str(err))
 

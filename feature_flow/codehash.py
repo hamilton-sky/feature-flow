@@ -18,6 +18,10 @@ def _files(scripts):
                 found.append(prompts.find_file(scripts, folder, names[phase]).resolve())
             except FileNotFoundError:
                 pass
+    try:
+        found.append(prompts.find_file(scripts, "guides", "debug.md").resolve())
+    except FileNotFoundError:
+        pass
     return sorted(set(found))
 
 

@@ -811,7 +811,7 @@ unset FLOW_SESSION FLOW_RELAY
 cd "$ROOT" || exit 1
 
 echo "flow.py, guides and prompt"
-for g in build review plan show brief plan-review; do
+for g in build review plan show brief plan-review debug; do
   if [ -f "$ROOT/guides/$g.md" ]; then ok "guides/$g.md exists"; else bad "guides/$g.md exists"; fi
   n="$(grep -cE '\$ARGUMENTS|(^|[^$])/feature-flow|\$feature-flow' "$ROOT/guides/$g.md")"
   expect_rc "guides/$g.md names no runtime's skill invocation" 0 "$n"

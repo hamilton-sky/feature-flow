@@ -32,7 +32,7 @@ def _body(path):
     return text.strip("\n")
 
 
-def build(phase, scripts, feature, ticket, num, sha, notes=()):
+def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
     role = _body(find_file(scripts, "agents", ROLES[phase]))
     guide = _body(find_file(scripts, "guides", GUIDES[phase]))
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
@@ -54,7 +54,11 @@ def build(phase, scripts, feature, ticket, num, sha, notes=()):
         for note in notes:
             task += "\nThe conductor notes: %s" % note
         intro = "The review guide follows. Follow it exactly."
-    return "\n\n".join([role, "---", intro, guide, "---", task]) + "\n"
+    parts = [role, "---", intro, guide, "---", task]
+    if retry and phase == "build":
+        parts += ["The debugging guide follows. Follow it before you change any code.",
+                  _body(find_file(scripts, "guides", "debug.md"))]
+    return "\n\n".join(parts) + "\n"
 
 
 def plan(phase, scripts, feature, draft, brief, findings=""):

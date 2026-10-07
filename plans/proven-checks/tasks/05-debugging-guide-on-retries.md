@@ -1,7 +1,7 @@
 # Add a debugging guide to the build prompt after a send-back
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -27,3 +27,16 @@ In `feature_flow/prompts.py` give `build` a `retry=False` argument: when it is t
 
 ## Answer
 
+
+**Built**: `guides/debug.md` (32 lines, no skill invocation); `feature_flow/prompts.py` (`build(..., retry=False)` appends the intro line and the `debug.md` body after the task when `retry` and phase is `build`); `feature_flow/conductor.py` (`prompt` passes `retry=self.num("round") > 0`); `feature_flow/codehash.py` (`debug.md` in `_files`); `tests/run.sh` (`debug` added to the guide list); `tests/py/test_debug.py` (new).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -k debug`: 2 tests, OK. Before the code, the retry test failed with `'The debugging guide follows' not found in ...` (right reason); the first-build test passed.
+- `bash tests/run.sh`: `ok guides/debug.md exists`, `ok guides/debug.md names no runtime's skill invocation`; 446 passed, 0 failed.
+- `python3 -m unittest discover -s tests/py && bash tests/run.sh`: 219 tests OK, then 446 passed 0 failed, both exit 0.
+
+**Decisions**: the guide follows the task block at the end of the prompt, so it is the last thing read. The retry test drives a real failing gate (`FAILING` file with a Test command), as the ticket says. `retry` applies only to phase `build`, so reviewer prompts never get it.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: ticket 06 may reference `guides/debug.md` from `guides/build.md`; build.md's Failure handling already says to stop after two failed fixes. Ticket 08 (README) can list `guides/debug.md`.

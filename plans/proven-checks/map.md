@@ -40,3 +40,4 @@ The conductor runs each ticket's `check` block from Done when and, for `Test fir
 
 - Running this plan from this checkout instead of a pinned 0.2.0 conductor would need `Floor: allow flow-edit` on tickets 01 to 08 (they edit `feature_flow/` or the guides the tripwire watches). The brief does not grant it, so the tickets carry no `Floor:` line; the user decides if that changes.
 - Whether `flow-status.py --check` should later validate `check` blocks (left out: planner-flow change).
+- 05 — `prompts.build(..., retry=False)` appends `guides/debug.md` after the task when the phase is build and `round` > 0 (`Conductor.prompt` passes it); `debug.md` is in the `codehash` fingerprint and the no-skill-invocation check.
