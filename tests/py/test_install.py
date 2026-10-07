@@ -121,7 +121,7 @@ class RunTests(unittest.TestCase):
             _, out, _ = self.run_install("--user")
         finally:
             del os.environ["CLAUDE_HOME"]
-        self.assertIn("  update  %s" % skill.as_posix().replace(home.as_posix(), str(home)), out)
+        self.assertIn("  update  %s/skills/feature-flow/SKILL.md" % (home / ".claude"), out)
         self.assertNotIn(b"earlier version", skill.read_bytes())
         self.assertNotIn("skills/feature-flow", (self.target / ".feature-flow" / "installed.txt").read_text())
 
