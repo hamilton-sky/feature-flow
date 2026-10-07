@@ -34,6 +34,8 @@ uvx feature-flow-cli install /path/to/your/repo --agent all   # or: pipx run fea
 
 The package puts a `feature-flow` command on your PATH with `install`, `status <feature>` and `view <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
 
+The installer lists what it wrote in `.feature-flow/installed.txt`. Commit those files (`git add --pathspec-from-file=.feature-flow/installed.txt`); until you do, the flow does not count them as uncommitted changes.
+
 Then, in your repo, in the agent:
 
 | | Claude Code | Codex |
