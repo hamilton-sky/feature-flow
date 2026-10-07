@@ -246,7 +246,7 @@ echo "planning roles"
 tools_of() { sed -n '/^tools:/,/^[a-z]/p' "$1" | grep '^- ' | tr -d ' -' | tr '\n' ' '; }
 PT="$(tools_of "$ROOT/agents/feature-planner.md")"; RT="$(tools_of "$ROOT/agents/plan-reviewer.md")"
 expect_has "the planner can research the web" "WebSearch" "$PT"
-expect_lacks "the planner cannot edit files" "Edit" "$PT"
+expect_has "the planner may change only its draft" "only inside the draft folder" "$(cat "$ROOT/agents/feature-planner.md")"
 expect_lacks "the plan reviewer cannot edit files" "Edit" "$RT"
 expect_lacks "the plan reviewer cannot write files" "Write" "$RT"
 expect_has "the planner ends with a plan verdict" "PLAN: READY" "$(cat "$ROOT/agents/feature-planner.md")"

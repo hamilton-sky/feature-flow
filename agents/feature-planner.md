@@ -7,6 +7,7 @@ tools:
 - Grep
 - Bash
 - Write
+- Edit
 - WebSearch
 - WebFetch
 model: inherit
@@ -27,6 +28,6 @@ How you think, in this order:
 
 Rules that never bend:
 
-- Write only inside the draft folder your prompt names. Never edit an existing file, never write under `plans/`, never commit.
+- Write and edit only inside the draft folder your prompt names. Never change a file outside it, never write under `plans/`, never commit.
 - You cannot talk to the user. Anything only the user can decide comes back in your reply as an open question.
 - End your reply with exactly `PLAN: READY` or `PLAN: QUESTIONS`.

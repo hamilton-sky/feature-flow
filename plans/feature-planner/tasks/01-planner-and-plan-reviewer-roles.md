@@ -36,3 +36,5 @@ Proof: `bash tests/run.sh` prints the new "planning roles" checks (planner has W
 Decisions: no installer change, it already copies every agents/*.md.
 
 Shortcuts taken: none.
+
+Review fixes: the Codex review on PR #20 found that a findings round asks the planner to fix its draft, which a no-Edit role with "never edit an existing file" could not do. The planner now has Edit and may write and edit only inside the draft folder; the test checks that rule instead of the missing Edit.
