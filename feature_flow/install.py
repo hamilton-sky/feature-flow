@@ -39,6 +39,9 @@ BUNDLE = "_bundle"
 
 # the skills this installs
 SKILLS = ("feature-flow", "architect-review", "automation-design")
+# the in-repo files an install wrote, one path per line, relative to the target. The conductor does not
+# count them as a dirty tree while they are untracked, and `git add --pathspec-from-file` commits them.
+INSTALLED = ".feature-flow/installed.txt"
 
 # an old skill that runs the ticket script (the bash one or the Python one) or ends a review with a verdict
 LEFTOVER = re.compile(rb"scripts/flow-status\.(?:sh|py)|REVIEW: PASS")
@@ -169,6 +172,7 @@ class Installer:
             package = os.path.dirname(os.path.abspath(__file__))
         self.package = package
         self.added = self.updated = self.same = self.kept = 0
+        self.written = []
 
     def place(self, file, dest, data=None):
         """One file: add it, replace it (--force), leave it alone (same) or keep the user's version.
@@ -177,14 +181,17 @@ class Installer:
         if not os.path.exists(dest):
             self.out("  add     " + dest)
             self.added += 1
+            self.written.append(dest)
             if not self.dry:
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 self._copy(file, dest, data)
         elif new is not None and _read(dest) == new:
             self.same += 1
+            self.written.append(dest)
         elif self.force:
             self.out("  update  " + dest)
             self.updated += 1
+            self.written.append(dest)
             if not self.dry:
                 self._copy(file, dest, data)
         else:
@@ -235,6 +242,23 @@ class Installer:
             self.place(file, self.target + "/.agents/flow-roles/" + name,
                        role_body(data if data is not None else b""))
 
+    def write_installed(self):
+        """Add this run's in-repo files to the list, keeping the earlier runs' files that still exist."""
+        path = self.target + "/" + INSTALLED
+        names = set()
+        try:
+            with open(path, encoding="utf-8") as old:
+                names.update(line.strip() for line in old)
+        except OSError:
+            pass
+        names = set(n for n in names if n and os.path.isfile(self.target + "/" + n))
+        prefix = self.target + "/"
+        names.update(dest[len(prefix):] for dest in self.written if dest.startswith(prefix))
+        names.add(INSTALLED)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as new:
+            new.write("".join(n + "\n" for n in sorted(names)))
+
     def report_leftovers(self, dirs):
         """A skill folder this installer does not own but that drives the flow (it runs the ticket
         scripts or ends a review with a verdict) is left from an earlier version: named once, never deleted."""
@@ -270,6 +294,8 @@ class Installer:
         self.copy_tree(here + "/guides", self.target + "/.feature-flow/guides")
         self.copy_tree(here + "/agents", self.target + "/.feature-flow/agents")
         self.copy_tree(self.package, self.target + "/.feature-flow/feature_flow", skip=BUNDLE)
+        if not self.dry:
+            self.write_installed()
 
         self.out("")
         verb = "would add" if self.dry else "added"
@@ -285,6 +311,12 @@ class Installer:
                 git = 127
             if git != 0:
                 self.out("note: %s is not a git repository, and the flow needs one" % self.target)
+            elif self.added or self.updated:
+                git_c = ""
+                if os.path.realpath(self.target) != os.path.realpath(os.getcwd()):
+                    git_c = '-C "%s" ' % self.target if " " in self.target else "-C %s " % self.target
+                self.out('next: commit the installed files: git %sadd --pathspec-from-file=%s'
+                         ' && git %scommit -m "chore: install feature-flow"' % (git_c, INSTALLED, git_c))
             if not shutil.which("python3"):
                 self.out("note: install python3 (3.9 or later): scripts/flow.py needs it")
             if agent in ("claude", "all"):

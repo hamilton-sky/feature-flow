@@ -161,8 +161,10 @@ class Conductor:
         check = checks.flow_status(self.scripts, self.feature, "--check")
         if not check.ok:
             raise Stop("ticket check failed, fix the tickets first")
-        if not git.is_clean():
-            raise Stop("working tree is not clean, commit or stash first")
+        dirty = git.changes()
+        if dirty:
+            raise Stop("working tree is not clean, commit or stash first: %s%s"
+                       % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
         nxt = checks.flow_status(self.scripts, self.feature, "--next")
         if nxt.code == 10:
             done = self.num("done")
