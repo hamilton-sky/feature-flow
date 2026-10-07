@@ -5,3 +5,4 @@ graft guides
 graft adapters/codex
 include scripts/*.py scripts/*.html
 include LICENSE README.md install.py install.sh
+global-exclude .DS_Store
