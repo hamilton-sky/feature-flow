@@ -876,6 +876,13 @@ relay="$(grep -c 'FLOW_RELAY=1' "$CX_SKILL")"
 if { [ "$mode" = subagents ] && [ "$relay" = 0 ]; } || { [ "$mode" = relay ] && [ "$relay" -ge 1 ]; }; then ok "its mode matches ticket 02 ($mode)"; else bad "its mode matches ticket 02 ($mode)"; fi
 for n in Claude Codex; do
   s="$CS_SKILL"; [ "$n" = Claude ] || s="$CX_SKILL"
+  for w in plan-prompt plan-review-prompt plan-accept feature-planner plan-reviewer guides/brief.md; do
+    if grep -q -- "$w" "$s"; then ok "the $n skill plans with $w"; else bad "the $n skill plans with $w"; fi
+  done
+done
+expect_has "the Codex planner never sees the conversation" 'task_name="feature_planner", fork_turns="none"' "$(cat "$CX_SKILL")"
+for n in Claude Codex; do
+  s="$CS_SKILL"; [ "$n" = Claude ] || s="$CX_SKILL"
   expect_rc "the $n skill writes nothing under .git" 0 "$(grep -cE '(>|-o) *\.git/' "$s")"
   if grep -q 'verdict \.feature-flow/state/flow-review-<feature>\.txt' "$s"; then ok "the $n skill saves the review reply in .feature-flow/state/"; else bad "the $n skill saves the review reply in .feature-flow/state/"; fi
 done
