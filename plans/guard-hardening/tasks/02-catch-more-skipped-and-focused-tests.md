@@ -1,7 +1,7 @@
 # Catch focused and skipped tests the guard misses
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Floor: allow skip, suppress, threshold
@@ -26,3 +26,16 @@ In `feature_flow/floorguard.py` extend the `skip` category. Add `self.skipTest(`
 
 ## Answer
 
+
+**Built**: `feature_flow/floorguard.py` (SKIP extended with `self.skipTest(`, `pytest.importorskip`, `@unittest.expectedFailure`, `t.Skipf(`, `t.SkipNow(`, `#[ignore = `, appended after the old alternatives; new `FOCUSED` regex; `diff_findings` reports `skip` for a FOCUSED hit only when the file path matches `DELETED_TEST`). `tests/py/test_floorguard.py` (new `MoreSkipTests`: caught and look-alike tests per pattern).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -k floorguard`: Ran 26 tests, OK (the 4 new tests loop over every new pattern with subTests, caught and clean). Before the code change the new tests failed (12 subtest failures).
+- `diff_findings` run directly: `self.skipTest("x")` gives `skip: a.py: ...`; `it.only(` in `a.test.js` gives `skip:`; `fit('x')` in `a.spec.js` gives `skip:`; `model.fit(x)` in `train.py` gives `b''`.
+- Full `python3 -m unittest discover -s tests/py`: 143 tests OK. `bash tests/run.sh`: 441 passed, 0 failed.
+
+**Decisions**: `fit(`/`fdescribe(` use lookbehinds `(?<!def )(?<![A-Za-z0-9_.])`; `.only(` covers it/describe/test.only. A line matching both SKIP and FOCUSED is reported once. `pytest.importorskip` is a prefix match as the ticket wrote it (no paren).
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the first run.sh after the change showed 440 passed, 1 failed, and a rerun after fixing my own look-alike test showed 441/0; I did not identify which check failed the first time. Ticket 05 (mawk removal) can ignore the mawk comparison for the new patterns: mawk does not support lookbehind, so the bash version never had them.

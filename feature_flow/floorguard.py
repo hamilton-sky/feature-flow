@@ -24,7 +24,9 @@ import sys
 USAGE = "usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit]"
 
 SKIP = re.compile(rb"@pytest\.mark\.(skip|xfail)|pytest\.skip\(|(^|[^A-Za-z_])(it|test|describe)\.(skip|todo)\("
-                  rb"|(^|[^A-Za-z_])(xit|xdescribe|xtest)\(|@Disabled|t\.Skip\(|#\[ignore\]|unittest\.skip")
+                  rb"|(^|[^A-Za-z_])(xit|xdescribe|xtest)\(|@Disabled|t\.Skip\(|#\[ignore\]|unittest\.skip"
+                  rb"|self\.skipTest\(|pytest\.importorskip|@unittest\.expectedFailure|t\.Skipf\(|t\.SkipNow\(|#\[ignore = ")
+FOCUSED = re.compile(rb"\.only\(|(?<!def )(?<![A-Za-z0-9_.])(fit|fdescribe)\(")
 SUPPRESS = re.compile(rb"# noqa|# type: ignore|# pylint: disable|# pragma: no cover|# fmt: off|# ruff: noqa"
                       rb"|eslint-disable|@ts-ignore|@ts-expect-error|// nolint|#\[allow\(|--no-verify")
 EMPTY_CATCH = re.compile(rb"except[^:]*:[ \t]*pass[ \t]*$|catch[ \t]*(\([^)]*\))?[ \t]*\{[ \t]*\}")
@@ -133,7 +135,7 @@ def diff_findings(diff, allow):
             continue
         if record.startswith(b"+"):
             line = record[1:]
-            if SKIP.search(line):
+            if SKIP.search(line) or (FOCUSED.search(line) and DELETED_TEST.search(_text(file))):
                 report(b"skip", line)
             if SUPPRESS.search(line):
                 report(b"suppress", line)

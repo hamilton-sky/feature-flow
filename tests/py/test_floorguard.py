@@ -66,6 +66,41 @@ class DiffFindingsTests(unittest.TestCase):
         self.assertEqual(floorguard.diff_findings(b"+++ b/a.py\n-@pytest.mark.skip\n", b""), b"")
 
 
+class MoreSkipTests(unittest.TestCase):
+    def found(self, path, line):
+        return floorguard.diff_findings(diff((path, [line])), b"")
+
+    def test_new_skip_patterns_are_caught(self):
+        for path, line in [(b"t.py", b'self.skipTest("x")'), (b"t.py", b"pytest.importorskip('numpy')"),
+                           (b"t.py", b"@unittest.expectedFailure"), (b"a_test.go", b't.Skipf("x %d", 1)'),
+                           (b"a_test.go", b"t.SkipNow()"), (b"a.rs", b'#[ignore = "slow"]')]:
+            with self.subTest(line=line):
+                self.assertEqual(self.found(path, line), b"skip: " + path + b": " + line + b"\n")
+
+    def test_skip_look_alikes_are_clean(self):
+        for path, line in [(b"t.py", b"self.skipTestCase = 1"), (b"t.py", b"importorskip_later = 1"),
+                           (b"t.py", b"expectedFailures = []"), (b"a_test.go", b"t.Skipfoo(x)"),
+                           (b"a_test.go", b"t.SkipNowhere()"), (b"a.rs", b"#[ignore_me = 1]")]:
+            with self.subTest(line=line):
+                self.assertEqual(self.found(path, line), b"")
+
+    def test_focused_patterns_are_caught_on_test_paths(self):
+        for path, line in [(b"a.test.js", b"it.only('x', f)"), (b"a.test.js", b"describe.only('x', f)"),
+                           (b"a.test.js", b"test.only('x', f)"), (b"a.spec.js", b"fit('x', f)"),
+                           (b"a.spec.js", b"  fdescribe('x', f)"), (b"tests/a.js", b"x; fit('x', f)")]:
+            with self.subTest(line=line):
+                self.assertEqual(self.found(path, line), b"skip: " + path + b": " + line.strip() + b"\n")
+
+    def test_focused_look_alikes_are_clean(self):
+        for path, line in [(b"train.py", b"model.fit(x)"), (b"a.spec.js", b"model.fit(x)"),
+                           (b"test_a.py", b"def fit(self):"), (b"a.spec.js", b"outfit(x)"),
+                           (b"a.spec.js", b"outfdescribe(x)"), (b"a.spec.js", b"x.fdescribe(y)"),
+                           (b"a.test.js", b"it.onlyChild(x)"), (b"app/models.py", b'qs.only("a")'),
+                           (b"app/models.py", b"fit(x)"), (b"app/models.py", b"fdescribe(x)")]:
+            with self.subTest(path=path, line=line):
+                self.assertEqual(self.found(path, line), b"")
+
+
 class FrozenTests(unittest.TestCase):
     def test_status_and_answer_are_left_out(self):
         text = b"# A\nStatus: open\nbody\n## Answer\nanything\n"

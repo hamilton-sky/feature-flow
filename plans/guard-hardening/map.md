@@ -26,3 +26,4 @@ The conductor notices when a build changes the code it runs; the floor guard cov
 
 - Version (decided 2026-10-07, user): release as 0.2.0. The old bash-era `v0.2.0` tag on origin is deleted by the user before they push the new one.
 - Whether `FLOW_GATE_TIMEOUT` should also bound the planner's `Smoke` run in `commands.md`: assumed yes, it is the same smoke call.
+02 — skip category gained skipTest, importorskip, expectedFailure, t.Skipf/SkipNow, #[ignore = ; focused .only( / fit( / fdescribe( are skips only on test-looking paths (DELETED_TEST) and not after a word char, '.' or 'def '.
