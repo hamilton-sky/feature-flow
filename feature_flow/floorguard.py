@@ -16,6 +16,7 @@ diff is handled here as bytes too: the patterns, the 100 byte cut and the lower-
 like mawk's. Text is decoded with surrogateescape so any byte comes back out unchanged.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -32,9 +33,20 @@ SUPPRESS = re.compile(rb"# noqa|# type: ignore|# pylint: disable|# pragma: no co
 EMPTY_CATCH = re.compile(rb"except[^:]*:[ \t]*pass[ \t]*$|catch[ \t]*(\([^)]*\))?[ \t]*\{[ \t]*\}")
 THRESHOLD = re.compile(rb"fail_under|fail-under|coverageThreshold|cov-fail-under")
 DELETED_TEST = re.compile(r"(^|/)(test_[^/]*\.py|[^/]*_test\.[a-z]+|[^/]*\.(test|spec)\.[a-z]+|tests?/|__tests__/)")
+# Makefile is judged by content, not name: a Makefile change only counts when the plan's commands.md has a
+# Build, Test, Lint or Smoke command that starts with make, so a build that does not run make may edit it.
 CONFIG = re.compile(r"(^|/)(\.eslintrc[^/]*|eslint\.config\.[a-z]+|ruff\.toml|\.ruff\.toml|mypy\.ini|pytest\.ini"
                     r"|tox\.ini|tsconfig[^/]*\.json|jest\.config\.[a-z]+|vitest\.config\.[a-z]+"
-                    r"|\.pre-commit-config\.yaml|\.github/workflows/[^/]*|\.azure/.*)$")
+                    r"|\.pre-commit-config\.yaml|\.github/workflows/[^/]*|\.azure/.*"
+                    r"|\.coveragerc|\.flake8|\.pylintrc|\.golangci\.ya?ml|karma\.conf\.[^/]*"
+                    r"|playwright\.config\.[^/]*|cypress\.config\.[^/]*|codecov\.yml|\.nycrc[^/]*)$")
+PYPROJECT_SECTIONS = re.compile(r"tool\.(pytest|coverage|ruff|pylint)(\..*)?$|tool\.(mypy|pyright|black|isort)(\..*)?$")
+SETUP_SECTIONS = re.compile(r"tool:pytest|flake8|mypy|coverage:")
+SECTION_HEADER = re.compile(r"^\s*\[\[?\s*([A-Za-z0-9_.:\-\"' ]+?)\s*\]\]?\s*(#.*)?$")
+HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+PACKAGE_KEYS = ("jest", "scripts", "eslintConfig", "nyc", "c8", "mocha", "ava")
+CONFTEST_WORDS = ("collect_ignore", "pytest_collection_modifyitems", "deselect", "skip")
+MAKE_COMMAND = re.compile(r"^\s*(Build|Test|Lint|Smoke):\s*`?make\b", re.M)
 ASSERT_REMOVED = re.compile(rb"^-.*(assert|expect\()")
 ASSERT_ADDED = re.compile(rb"^\+.*(assert|expect\()")
 FIELDS = re.compile(rb"[ \t\n]+")
@@ -245,6 +257,7 @@ def run(argv, out, err, environ=None):
         findings += "\n" + "\n".join("test-delete: " + p for p in deleted)
 
     touched = _git_lines(g, CONFIG, "diff", "--name-only", base, "HEAD", *outside)
+    touched += _content_config(g, base, "%s/%s/commands.md" % (root, feature), outside)
     if touched and not allows("config"):
         findings += "\n" + "\n".join("config: " + p for p in touched)
 
@@ -314,6 +327,78 @@ def run(argv, out, err, environ=None):
 def _git_lines(g, pattern, *args):
     """git ... | grep -E pattern, as a list of lines."""
     return [line for line in (_text(r) for r in _records(g.git(*args)[1])) if pattern.search(line)]
+
+
+def _section_of(lines, number, name_pattern):
+    """The last [section] header at or above a 1-based line number, and whether it is a guarded one."""
+    for line in reversed(lines[:number]):
+        m = SECTION_HEADER.match(line)
+        if m:
+            return bool(name_pattern.match(m.group(1)))
+    return False
+
+
+def _guarded_toml(g, base, path, pattern):
+    """Does any changed line of a pyproject.toml or setup.cfg sit in a guarded section?"""
+    old = _text(g.git("show", "%s:%s" % (base, path), quiet=True)[1]).split("\n")
+    new = _text(g.git("show", "HEAD:%s" % path, quiet=True)[1]).split("\n")
+    diff = _text(g.git("diff", "--no-color", "--unified=0", base, "HEAD", "--", path)[1])
+    for line in diff.split("\n"):
+        m = HUNK.match(line)
+        if not m:
+            continue
+        old_start, old_len = int(m.group(1)), int(m.group(2) or 1)
+        new_start, new_len = int(m.group(3)), int(m.group(4) or 1)
+        for n in range(old_start, old_start + old_len):
+            if _section_of(old, n, pattern):
+                return True
+        for n in range(new_start, new_start + new_len):
+            if _section_of(new, n, pattern):
+                return True
+    return False
+
+
+def _package_json_changed(g, base, path):
+    def load(rev):
+        data = g.git("show", "%s:%s" % (rev, path), quiet=True)[1]
+        try:
+            return data, json.loads(_text(data))
+        except ValueError:
+            return data, None
+    old, old_json = load(base)
+    new, new_json = load("HEAD")
+    if old_json is None or new_json is None:
+        return old != new
+    if not isinstance(old_json, dict) or not isinstance(new_json, dict):
+        return old_json != new_json
+    return any(old_json.get(k) != new_json.get(k) for k in PACKAGE_KEYS)
+
+
+def _content_config(g, base, commands, outside):
+    """config findings for files judged by what changed in them, not by their name."""
+    found = []
+    changed = [_text(r) for r in _records(g.git("diff", "--name-only", base, "HEAD", *outside)[1])]
+    for path in changed:
+        name = path.rsplit("/", 1)[-1]
+        if name == "pyproject.toml" and _guarded_toml(g, base, path, PYPROJECT_SECTIONS):
+            found.append("config: " + path)
+        elif name == "setup.cfg" and _guarded_toml(g, base, path, SETUP_SECTIONS):
+            found.append("config: " + path)
+        elif name == "package.json" and _package_json_changed(g, base, path):
+            found.append("config: " + path)
+        elif name == "conftest.py":
+            diff = _text(g.git("diff", "--no-color", "--unified=0", base, "HEAD", "--", path)[1])
+            added = [l for l in diff.split("\n") if l.startswith("+") and not l.startswith("+++")]
+            if any(w in l for l in added for w in CONFTEST_WORDS):
+                found.append("config: " + path)
+        elif name == "Makefile":
+            try:
+                with open(commands, encoding="utf-8", errors="surrogateescape") as f:
+                    if MAKE_COMMAND.search(f.read()):
+                        found.append("config: " + path)
+            except OSError:
+                pass
+    return found
 
 
 def _name_status(data):

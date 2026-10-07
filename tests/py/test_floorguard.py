@@ -122,6 +122,100 @@ class RemovedLinesTests(unittest.TestCase):
         self.assertEqual(floorguard.count_removed_real_lines(b"-## Decisions so far\n-real\n"), 2)
 
 
+class ConfigTests(unittest.TestCase):
+    def setUp(self):
+        self.repo = helpers.Repo()
+        self.cwd = os.getcwd()
+        os.chdir(str(self.repo.dir))
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+        self.repo.close()
+
+    def write(self, rel, text):
+        path = self.repo.path(rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def change(self, rel, before, after, allow=""):
+        """Commit `before`, then `after`; returns the guard result for the second commit."""
+        ticket = self.repo.path("plans/f/tasks/01-a.md")
+        text = ticket.read_text(encoding="utf-8")
+        text = "".join(l for l in text.splitlines(True) if not l.startswith("Floor:"))
+        if allow:
+            text = text.replace("Test first: no\n", "Test first: no\nFloor: allow %s\n" % allow)
+        ticket.write_text(text, encoding="utf-8")
+        self.write(rel, before)
+        self.repo.git("add", "-A")
+        self.repo.git("commit", "--allow-empty", "-qm", "before")
+        base = self.repo.head()
+        self.write(rel, after)
+        self.repo.commit("after")
+        out, err = [], []
+        code = floorguard.run(["f", "01", base], out.append, err.append, {})
+        return code, "".join(out)
+
+    def assertCaught(self, rel, before, after, allow="config"):
+        code, out = self.change(rel, before, after)
+        self.assertEqual(code, 1, out)
+        self.assertIn("config: %s\n" % rel, out)
+        code, out = self.change(rel, after, before, allow=allow)
+        self.assertEqual((code, out), (0, "floor guard: clean\n"))
+
+    def assertClean(self, rel, before, after):
+        code, out = self.change(rel, before, after)
+        self.assertEqual((code, out), (0, "floor guard: clean\n"))
+
+    def test_whole_file_configs_are_caught(self):
+        for rel in (".coveragerc", ".flake8", ".pylintrc", ".golangci.yml", ".golangci.yaml", "karma.conf.js",
+                    "playwright.config.ts", "cypress.config.js", "codecov.yml", ".nycrc", ".nycrc.json"):
+            with self.subTest(rel=rel):
+                self.assertCaught(rel, "a\n", "b\n")
+
+    def test_a_similar_name_is_clean(self):
+        self.assertClean("notcodecov.yml.txt", "a\n", "b\n")
+
+    def test_pyproject_coverage_threshold_is_caught(self):
+        before = "[project]\nversion = '1'\n\n[tool.coverage.report]\nfail_under = 90\n"
+        self.assertCaught("pyproject.toml", before, before.replace("90", "10"), allow="config, threshold")
+
+    def test_pyproject_poetry_dependency_is_clean(self):
+        before = "[tool.poetry.dependencies]\nrequests = '1'\n\n[tool.coverage.report]\nx = 1\n"
+        self.assertClean("pyproject.toml", before, before.replace("'1'", "'2'"))
+
+    def test_pyproject_project_version_is_clean(self):
+        self.assertClean("pyproject.toml", "[project]\nversion = '1'\n", "[project]\nversion = '2'\n")
+
+    def test_pyproject_deleted_lines_and_headers_count(self):
+        before = "[tool.ruff]\nline-length = 80\n\n[tool.poetry]\nname = 'x'\n"
+        self.assertCaught("pyproject.toml", before, before.replace("line-length = 80\n", ""))
+        self.assertCaught("pyproject.toml", before, before.replace("[tool.ruff]\nline-length = 80\n\n", ""))
+
+    def test_setup_cfg_sections(self):
+        before = "[metadata]\nversion = 1\n\n[flake8]\nmax-line-length = 80\n"
+        self.assertCaught("setup.cfg", before, before.replace("80", "200"))
+        self.assertClean("setup.cfg", before, before.replace("version = 1", "version = 2"))
+
+    def test_package_json_scripts_are_caught_and_version_is_clean(self):
+        before = '{"version": "1", "scripts": {"test": "jest"}, "dependencies": {"a": "1"}}'
+        self.assertCaught("package.json", before, before.replace('"jest"', '"true"'))
+        self.assertClean("package.json", before, before.replace('"version": "1"', '"version": "2"')
+                         .replace('"a": "1"', '"a": "2"'))
+
+    def test_package_json_not_valid_json_is_judged_by_bytes(self):
+        self.assertCaught("package.json", "{", "{ ")
+
+    def test_conftest_only_collection_changes_are_caught(self):
+        self.assertClean("conftest.py", "import pytest\n", "import pytest\n\n@pytest.fixture\ndef x():\n    return 1\n")
+        self.assertCaught("conftest.py", "import pytest\n", 'import pytest\ncollect_ignore = ["x"]\n')
+
+    def test_makefile_depends_on_commands_md(self):
+        self.assertClean("Makefile", "test:\n\ttrue\n", "test:\n\tfalse\n")
+        self.write("plans/f/commands.md", "# Commands: f\n\nTest: `make test`\n")
+        self.repo.commit("commands")
+        self.assertCaught("Makefile", "test:\n\ttrue\n", "test:\n\tfalse\n")
+
+
 class RunTests(unittest.TestCase):
     def setUp(self):
         self.repo = helpers.Repo()

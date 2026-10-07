@@ -1,7 +1,7 @@
 # Guard more test and lint config, section aware
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Floor: allow skip, suppress, threshold, config
@@ -34,3 +34,16 @@ Tests in `tests/py/test_floorguard.py`, one caught and one look-alike per item, 
 
 ## Answer
 
+
+**Built**: `feature_flow/floorguard.py` (nine whole-file entries added to `CONFIG`; new `_content_config` with `_guarded_toml` and `_package_json_changed` for pyproject.toml, setup.cfg, package.json, conftest.py, Makefile; comment above `CONFIG` explains the Makefile rule); `tests/py/test_floorguard.py` (new `ConfigTests`, 11 tests, real two-commit repos).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -k floorguard`: Ran 37 tests, OK. ConfigTests cover each item caught and look-alike: coverage `fail_under` under `[tool.coverage.report]` caught, `[tool.poetry.dependencies]` clean; `scripts.test` caught, `version`/`dependencies` clean; `collect_ignore = ["x"]` caught, new fixture clean; Makefile caught with `Test: `make test``, clean with the default commands.md; every caught case is silenced by `Floor: allow config` in the base ticket (the coverage case needs `threshold` too, as `fail_under` is also a threshold line).
+- Tests were first run before the code and failed (18 failures, nothing flagged).
+- `python3 -m unittest discover -s tests/py`: Ran 154 tests, OK. `bash tests/run.sh`: 441 passed, 0 failed.
+
+**Decisions**: non-starred pyproject sections (`tool.mypy`, `tool.pyright`, `tool.black`, `tool.isort`) also match their sub-tables (`tool.mypy.overrides`); otherwise `[[tool.mypy.overrides]]` would escape. setup.cfg `flake8` and `mypy*` etc. match by prefix. A changed line is judged by the section above it in the new text, a deleted line by the section in the base text; a changed header line counts as in its own section. A package.json that is new or deleted counts as differing.
+
+**Shortcuts taken**: toml section headers are found by a line regex, not a parser, so a multi-line array whose continuation line looks like `[name]` is read as a header. Worth upgrading only if that shows up in a real repo. The Makefile check reads only the first-token `make` in commands.md lines `Build|Test|Lint|Smoke:`.
+
+**For later tickets**: ticket 05 (plain Python gate and floorguard) and 08 (committed copies under `.feature-flow/` and `scripts/`) should pick up the changed `floorguard.py`; the committed `.feature-flow/feature_flow/floorguard.py` was not synced here.
