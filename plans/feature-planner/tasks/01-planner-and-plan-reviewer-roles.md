@@ -1,7 +1,7 @@
 # Add the feature-planner and plan-reviewer roles
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -35,12 +35,14 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 - Added `agents/plan-reviewer.md` as a fresh read-only reviewer that checks the draft against the approved brief and emits the required verdict.
 - Added focused role-permission and Claude/Codex installation checks to `tests/run.sh`.
 - Made the conductor fixture use its running Python interpreter so the full suite does not depend on a separate `python` executable being installed.
+- Made `tests/run.sh` clear an inherited `FLOW_INVOKE`, so its default-invocation assertions are stable when the conductor runs it as the gate.
 
 **Proof**
 
 - `bash tests/run.sh` printed `ok` for `the feature planner lists WebSearch`, `the feature planner has no Edit tool`, `the plan reviewer has no Edit tool`, and `the plan reviewer has no Write tool`.
 - The same fresh run printed `ok` for `Claude installs both planning roles` and `Codex installs both planning roles`.
-- The same exact run completed with `418 passed, 0 failed`; no PATH shim or command substitution was used. The repository smoke command also exited 0.
+- The same exact run completed with `418 passed, 0 failed`; no PATH shim or command substitution was used. A gate-shaped run with inherited `FLOW_SESSION` and `FLOW_INVOKE='$feature-flow'` also completed with `418 passed, 0 failed`.
+- `python3 -c "import ast,pathlib; [ast.parse(p.read_text(), str(p)) for d in ('feature_flow', 'scripts') for p in pathlib.Path(d).rglob('*.py')]"` exited 0.
 
 **Decisions**
 
@@ -54,6 +56,7 @@ Add two role files beside `agents/ticket-builder.md` and `agents/ticket-reviewer
 **Review fixes**
 
 - The gate reported that the exact `bash tests/run.sh` command failed because the fixture embedded `python -c` while this host provides only `python3`. Updated `tests/py/test_fixture_drive.py` to build its fixture commands from the quoted `sys.executable`; the focused regression passes and the exact full command now reports `418 passed, 0 failed`.
+- Round 2's three failures were reproduced by running the suite with the conductor's inherited `FLOW_INVOKE='$feature-flow'`: the variable changed three handoff assertions that intentionally check the default `/feature-flow` invocation. `tests/run.sh` now clears that caller-specific variable at startup; both the reproduction and the exact ticket command report `418 passed, 0 failed`.
 
 **For later tickets**
 

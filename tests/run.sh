@@ -4,6 +4,7 @@
 # exit code is the number of failed checks, capped at 1.
 
 set -uo pipefail
+unset FLOW_INVOKE
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"

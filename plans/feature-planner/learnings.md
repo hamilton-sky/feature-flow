@@ -7,3 +7,4 @@ ticket number. Never edit or delete another line. Keep it short; a human prunes 
 - (NN) <what you found, and what to do about it>
 - (01) This host has `python3` but no `python`; tests/py/test_fixture_drive.py invokes `python`, so prepend a temporary `python` alias to `python3` when running the suite here.
 - (01) Correction: the fixture now uses its running interpreter, so run `bash tests/run.sh` exactly; no PATH alias is needed.
+- (01) The conductor gate inherits `FLOW_INVOKE`; `tests/run.sh` must clear it so its default-invocation assertions stay hermetic.
