@@ -1,0 +1,63 @@
+name: release
+
+# Publishes feature-flow-cli to PyPI when a version tag (v0.1.1, v0.2.0, ...) is pushed.
+# PyPI trusts this workflow through a trusted publisher (owner hamilton-sky, repository
+# feature-flow, workflow release.yml, environment pypi), so no token is stored anywhere.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and test the package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Check that the tag matches the package version
+        run: |
+          version="$(python -c 'import feature_flow; print(feature_flow.__version__)')"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match __version__ ${version} in feature_flow/__init__.py"
+            exit 1
+          fi
+
+      - name: Build the wheel and the sdist
+        run: |
+          python -m pip install build
+          python -m build --outdir dist
+
+      - name: Install the wheel in a fresh virtual environment and run it
+        run: python tests/package_smoke.py dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/feature-flow-cli/
+    permissions:
+      id-token: write  # the trusted publisher login
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

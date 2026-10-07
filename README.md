@@ -263,7 +263,15 @@ The installer never deletes the old skill folders, but it names any it finds. De
 
 ## Releasing to PyPI
 
-The package is `feature-flow-cli` (the shorter `feature-flow` is likely refused by PyPI as too close to the existing `featureflow`). Its version is `__version__` in `feature_flow/__init__.py`. To release: bump it, then `python3 -m build` and `python3 -m twine upload dist/*` with a PyPI API token, or publish from a GitHub Actions workflow set up as a PyPI trusted publisher. Nothing in this repo uploads on its own.
+The package is [`feature-flow-cli`](https://pypi.org/project/feature-flow-cli/) (the shorter `feature-flow` is likely refused by PyPI as too close to the existing `featureflow`). Its version is `__version__` in `feature_flow/__init__.py`.
+
+To release, bump `__version__`, merge it to `main`, then tag that commit and push the tag:
+
+```bash
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+`.github/workflows/release.yml` checks that the tag matches `__version__`, builds the wheel and the sdist, runs `tests/package_smoke.py` on them and publishes them to PyPI. PyPI trusts the workflow as a trusted publisher (owner `hamilton-sky`, repository `feature-flow`, workflow `release.yml`, environment `pypi`), so no token is stored. PyPI never accepts the same version twice.
 
 ## Caution
 
