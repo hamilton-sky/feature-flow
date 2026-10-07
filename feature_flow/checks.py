@@ -64,7 +64,8 @@ def gate(scripts, feature):
     """The gate, run in process. stderr is folded into the output as the subprocess call did."""
     chunks = []
     code = gate_module.run(str(feature), chunks.append, chunks.append)
-    out = b"".join(chunks).decode("utf-8", "replace").replace("\r\n", "\n").replace("\r", "\n")
+    out = "".join(chunks).encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+    out = out.replace("\r\n", "\n").replace("\r", "\n")
     return Result(code, out)
 
 

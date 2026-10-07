@@ -210,7 +210,7 @@ class Conductor:
             return False
         if source.returncode != 0:
             return False
-        return b"flow-edit" in floorguard.allow_line(source.stdout.encode("utf-8")).split()
+        return "flow-edit" in floorguard.allow_line(source.stdout).split()
 
     def judge_build(self):
         self.check_code(self.flow_edit_allowed())

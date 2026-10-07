@@ -21,24 +21,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: ubuntu with mawk
+          - name: ubuntu
             os: ubuntu-latest
-            awk: mawk
-          - name: ubuntu with gawk
-            os: ubuntu-latest
-            awk: gawk
-          - name: macos with the system awk
+          - name: macos
             os: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Select the awk under test
-        if: matrix.awk
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q ${{ matrix.awk }}
-          sudo update-alternatives --set awk /usr/bin/${{ matrix.awk }}
-          readlink -f "$(command -v awk)"
 
       - name: Make sure jq is installed
         run: |

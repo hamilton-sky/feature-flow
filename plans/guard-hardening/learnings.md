@@ -5,3 +5,4 @@ Append one line per lesson: `- (NN) what you found`. Never rewrite existing line
 - (02) lookbehind in floorguard regexes is fine now (no mawk); 'pytest.importorskip' is matched as a prefix, so don't use it as a look-alike.
 - (03) in a shared helpers.Repo test, a 'Floor: allow' line committed in one step leaks into later steps; rewrite the ticket's Floor line before each base commit. Use commit --allow-empty when a step may not change anything.
 - (04) a conductor test that needs prompts must copy agents/ and guides/ into helpers.Repo; a verdict file must live outside the repo or the next pick sees a dirty tree.
+- (05) tests/run.sh takes ~2 minutes with the unit tests; run it in the background or with a long timeout.

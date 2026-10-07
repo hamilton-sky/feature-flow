@@ -29,3 +29,4 @@ The conductor notices when a build changes the code it runs; the floor guard cov
 02 — skip category gained skipTest, importorskip, expectedFailure, t.Skipf/SkipNow, #[ignore = ; focused .only( / fit( / fdescribe( are skips only on test-looking paths (DELETED_TEST) and not after a word char, '.' or 'def '.
 03 — config guard: nine whole-file names added; pyproject.toml/setup.cfg judged by section of each changed line, package.json by key values, conftest.py by added words, Makefile only if commands.md uses make; all reported as 'config: <path>', allowed by Floor: allow config.
 04 — a passing floor guard's assertion warning (test paths only) is saved as guard_warning and added to the reviewer's task as 'The floor guard warns: ...'; cleared on the next pick; never a finding.
+05 — floorguard.py and gate.py are plain str Python (allow_line and gate.run/command/tail take and return str); whole-diff git call runs once; CI awk matrix removed.

@@ -118,9 +118,8 @@ out="$(guard f 01 "$B1" 2>&1)"; rc=$?
 expect_rc "a worker cannot excuse itself by adding Floor: allow" 1 $rc
 expect_has "and the edit to its own header is reported" "ticket-edit: plans/f/tasks/01-a.md" "$out"
 guard f 99 "$B1" > /dev/null 2>&1; expect_rc "a missing ticket exits 2" 2 $?
-# more fixtures: other languages, config files, odd arguments. ASCII only: mawk cuts a finding at 100
-# bytes and gawk at 100 characters, so a non-ASCII line has no single answer in an awk-based check;
-# tests/py/test_floorguard.py pins the byte cut.
+# more fixtures: other languages, config files, odd arguments. ASCII only here;
+# tests/py/test_floorguard.py pins the 100 character cut.
 ticket plans/f/tasks/04-d.md D open "02, 03" "Floor: skip, Config"
 git add -A; git commit -qm extras-base; B2="$(git rev-parse HEAD)"
 long="$(printf 'x%.0s' $(seq 1 120))"
