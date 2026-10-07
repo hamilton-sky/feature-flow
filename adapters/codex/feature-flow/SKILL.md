@@ -23,7 +23,7 @@ When `plans/<feature>/` does not exist, or you are planning from the conversatio
 - `plan-review-prompt`: start a new reviewer the same way, with `task_name="plan_reviewer"` and `fork_turns="none"`, never with the planner's reply. Get its final reply with `wait_agent` and save it with the shell into `.feature-flow/state/plan-review-<feature>.txt`.
 - `plan-accept`: writes `plans/<feature>/` from the draft, only after the second yes.
 
-Then run `python3 scripts/flow-status.py <feature> --check` and list the files `plan-accept` wrote. The second yes also approves committing the plan, so commit that folder and nothing else: `git add -- plans/<feature> && git commit -m "docs(<feature>): plan" -- plans/<feature>` (the folder `plan-accept` printed). If the commit fails, report why and stop. Then go straight on to building it below, unless the user asked to stop after planning.
+Then run `python3 scripts/flow-status.py <feature> --check` and list the files `plan-accept` wrote. The second yes also approves committing the plan, so commit the folder `plan-accept` printed (`OK <folder>`, `plans/<feature>` unless `FLOW_DIR` is set) and nothing else: `git add -- <folder> && git commit -m "docs(<feature>): plan" -- <folder>`. If the commit fails, report why and stop. Then go straight on to building it below, unless the user asked to stop after planning.
 
 To add tickets to a plan that exists, edit it by hand following the ticket rules in `.feature-flow/guides/plan.md`.
 
