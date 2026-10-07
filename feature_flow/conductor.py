@@ -10,9 +10,10 @@ import secrets
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, gate, git, prompts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, gate, git, prompts, proof, state, suggest, tickets
 
 
+NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
 
 
@@ -190,7 +191,7 @@ class Conductor:
         path = nxt.out.strip().splitlines()[-1]
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
-                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "guard_warning": ""})
+                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": ""})
         self.snapshot_code()
         self.run_smoke()
         return self.hand_out_build()
@@ -242,8 +243,44 @@ class Conductor:
         if not result.ok:
             return self.send_back("floor guard", result.out)
         warnings = [l for l in result.out.splitlines() if l.startswith("warning:")]
-        self.st["guard_warning"] = warnings[0] if warnings else ""
+        notes = warnings[:1]
+        if self.gate_on:
+            report, note = self.run_done_when()
+            if report is not None:
+                return self.send_back("done when", report)
+            notes.append(note)
+        self.st["review_notes"] = NOTE_SEP.join(notes)
         return self.hand_out_review()
+
+    def ticket_at_base(self):
+        """The ticket text as it was at the base commit, so a builder cannot change what is checked."""
+        try:
+            source = git._git("show", "%s:%s" % (self.get("base"), Path(self.ticket()).as_posix()), check=False)
+        except OSError:
+            source = None
+        if source is not None and source.returncode == 0:
+            return source.stdout
+        text = Path(self.ticket()).read_text(encoding="utf-8")
+        return text.split("\n## Answer", 1)[0]
+
+    def run_done_when(self):
+        """Run the ticket's check block. Returns (failure report or None, note for the reviewer)."""
+        try:
+            found = proof.checks_in(self.ticket_at_base())
+        except proof.ParseError as err:
+            raise Stop("%s has a check block the conductor cannot read: %s" % (self.ticket_name(), err))
+        if not found:
+            self.log("DONEWHEN-SKIP")
+            return None, "the conductor ran no Done when checks: the ticket has no check block"
+        ok, report = proof.run_checks(found, self.gate_timeout)
+        dirty = git.changes()
+        if dirty:
+            raise Stop("a Done when check of %s changed the working tree: %s. a check command must not change it"
+                       % (self.ticket_name(), " ".join(dirty[:5])))
+        self.log("DONEWHEN-PASS" if ok else "DONEWHEN-FAIL")
+        if not ok:
+            return report, ""
+        return None, "the conductor ran %d Done when check(s) and all passed" % len(found)
 
     # ---- commands ------------------------------------------------------
 
@@ -359,7 +396,7 @@ class Conductor:
             raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
         try:
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
-                                 self.get("guard_warning") if phase == "review" else "")
+                                 [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase == "review" else ())
         except FileNotFoundError as err:
             raise Stop(str(err))
 

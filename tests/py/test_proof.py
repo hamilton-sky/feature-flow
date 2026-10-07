@@ -1,3 +1,4 @@
+import shutil
 import sys
 import unittest
 
@@ -94,6 +95,109 @@ class ParseErrors(unittest.TestCase):
 
     def test_unclosed_fence_at_end_of_text(self):
         self.assertParseError("# T\n\n## Done when\n\n" + FENCE + "check\n$ a\n", FENCE + "check")
+
+
+T1 = "plans/f/tasks/01-a.md"
+PY = '"%s"' % sys.executable
+
+
+def py(code):
+    return '%s -c "%s"' % (PY, code)
+
+
+class RunChecks(unittest.TestCase):
+    def test_a_check_that_sleeps_past_the_timeout_is_reported_as_timed_out(self):
+        ok, report = proof.run_checks([proof.Check(py("import time; time.sleep(30)"))], 0.02)
+        self.assertFalse(ok)
+        self.assertIn("timed out after 0.02 minutes", report)
+
+    def test_every_failure_is_reported_with_want_and_got(self):
+        found = [proof.Check(py("print('hi'); raise SystemExit(1)"), 0, ("zzz",)),
+                 proof.Check(py("pass"), "nonzero"),
+                 proof.Check(py("print('ok')"), 0, ("ok",))]
+        ok, report = proof.run_checks(found, 1)
+        self.assertFalse(ok)
+        self.assertIn("raise SystemExit(1)", report)
+        self.assertIn("exit 1", report)
+        self.assertIn("zzz", report)
+        self.assertIn("hi", report)
+        self.assertEqual(report.count("$ "), 2)
+
+    def test_passing_checks(self):
+        found = [proof.Check(py("raise SystemExit(3)"), 3), proof.Check(py("raise SystemExit(2)"), "nonzero"),
+                 proof.Check(py("print('a')"), 0, ("a",))]
+        self.assertEqual(proof.run_checks(found, 1), (True, ""))
+
+
+class Conducted(unittest.TestCase):
+    def setUp(self):
+        self.repo = helpers.Repo()
+        for folder in ("agents", "guides"):
+            shutil.copytree(str(helpers.ROOT / folder), str(self.repo.path(folder)))
+        self.repo.path("plans/f/commands.md").write_text(
+            "# Commands: f\n\nTest: `%s`\nSmoke: `<the quickest command>`\n" % py("pass"), encoding="utf-8")
+        self.repo.commit("setup")
+
+    def tearDown(self):
+        self.repo.close()
+
+    def plan(self, done_when=""):
+        path = self.repo.path(T1)
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace("- x\n", "- x\n\n" + done_when), encoding="utf-8")
+        self.repo.commit("plan")
+
+    def build(self, **env):
+        rc, out = self.repo.flow("next", **env)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        self.repo.resolve(T1)
+        return self.repo.flow("next", **env)
+
+    def test_a_failing_check_is_sent_back_before_review(self):
+        self.plan(block("$ " + py("raise SystemExit(1)")))
+        rc, out = self.build()
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        self.assertIn("## Review findings (round 1, done when)", self.repo.path(T1).read_text(encoding="utf-8"))
+        self.assertIn("raise SystemExit(1)", self.repo.path(T1).read_text(encoding="utf-8"))
+        self.assertIn("DONEWHEN-FAIL", self.repo.log())
+        self.assertNotIn("REVIEW", self.repo.log())
+
+    def test_a_passing_check_reaches_review(self):
+        self.plan(block("$ " + py("print('hello')"), "prints hello"))
+        rc, out = self.build()
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertIn("DONEWHEN-PASS", self.repo.log())
+        self.assertIn("The conductor notes: the conductor ran 1 Done when check(s) and all passed",
+                      self.repo.flow("prompt")[1])
+
+    def test_no_block_reaches_review_with_a_note(self):
+        rc, out = self.build()
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertIn("DONEWHEN-SKIP", self.repo.log())
+        self.assertIn("ran no Done when checks", self.repo.flow("prompt")[1])
+
+    def test_a_block_the_parser_rejects_is_a_single_stop_line(self):
+        self.plan(block("$ " + py("pass"), "exit x"))
+        rc, out = self.build()
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(out.splitlines()), 1, out)
+        self.assertTrue(out.startswith("STOP "), out)
+        self.assertIn("cannot read", out)
+
+    def test_a_check_that_writes_a_file_is_a_stop_naming_it(self):
+        self.plan(block("$ " + py("open('made-by-check.txt', 'w').write('x')")))
+        rc, out = self.build()
+        self.assertEqual(rc, 1)
+        self.assertTrue(out.startswith("STOP "), out)
+        self.assertIn("made-by-check.txt", out)
+
+    def test_gate_off_skips_the_checks(self):
+        self.plan(block("$ " + py("raise SystemExit(1)")))
+        rc, out = self.build(FLOW_GATE="off")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertNotIn("DONEWHEN-", self.repo.log())
 
 
 if __name__ == "__main__":

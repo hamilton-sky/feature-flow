@@ -32,6 +32,7 @@ The conductor runs each ticket's `check` block from Done when and, for `Test fir
   - `git worktree add` is used only by the person running this plan, to pin the 0.2.0 conductor (spec.md § How this plan is built), not by any ticket's code. docs: https://git-scm.com/docs/git-worktree
 - (plan) Apart from the git pages above, no outside sources: every other decision here comes from the repository.
 - 01 — `proof.checks_in(text)` parses ```check blocks in Done when into frozen `Check(command, exit, prints)` dataclasses (`exit` int or "nonzero", `prints` tuple); broken blocks raise `ParseError` quoting the line.
+- 02 — `proof.run_checks` runs every check after the floor guard (gate on only); fail is sent back as `done when`, a broken block or a dirty tree is a STOP; `guard_warning` is now `review_notes` (tab separated, printed as `The conductor notes: ...`).
 
 ## Open questions
 

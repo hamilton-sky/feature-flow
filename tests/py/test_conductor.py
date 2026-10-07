@@ -187,20 +187,20 @@ class GuardWarning(unittest.TestCase):
 
     def test_a_removed_assertion_reaches_the_reviewer_as_a_warning(self):
         prompt = self.build("def test_x():\n    pass\n")
-        self.assertIn("The floor guard warns: warning: 1 assertion line(s) removed, 0 added.", prompt)
+        self.assertIn("The conductor notes: warning: 1 assertion line(s) removed, 0 added.", prompt)
         self.assertIn("GUARD-PASS", self.repo.log())
-        self.assertEqual(self.repo.state()["guard_warning"].count("warning:"), 1)
+        self.assertEqual(self.repo.state()["review_notes"].count("warning:"), 1)
 
     def test_no_removed_assertion_no_warning_text(self):
         prompt = self.build("def test_x():\n    assert 1\n    assert 2\n")
-        self.assertNotIn("The floor guard warns", prompt)
+        self.assertNotIn("warning:", prompt)
 
     def test_the_warning_is_cleared_when_the_next_ticket_is_picked(self):
         self.build("def test_x():\n    pass\n")
         self.repo.flow("verdict", self.write_verdict())
         rc, out = self.repo.flow("next")
         self.assertTrue(out.startswith("BUILD %s 02 " % T2), out)
-        self.assertEqual(self.repo.state().get("guard_warning", ""), "")
+        self.assertEqual(self.repo.state().get("review_notes", ""), "")
 
     def write_verdict(self):
         path = self.repo.dir.parent / (self.repo.dir.name + "-verdict.txt")

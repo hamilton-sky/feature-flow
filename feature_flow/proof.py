@@ -1,7 +1,10 @@
 """The conductor's own proof of a ticket: the check block in its Done when."""
 
 import re
+import tempfile
 from dataclasses import dataclass
+
+from feature_flow import gate, proc
 
 FENCE = "```"
 OPEN = FENCE + "check"
@@ -86,3 +89,31 @@ def checks_in(text):
     if fence == OPEN:
         raise ParseError("check block: %r is never closed by a %s line" % (fence, FENCE))
     return checks
+
+
+def _wanted(check):
+    want = "exit nonzero" if check.exit == "nonzero" else "exit %d" % check.exit
+    return want + "".join(" and output containing %r" % text for text in check.prints)
+
+
+def run_checks(checks, timeout):
+    """Run every check (none is skipped after a failure). timeout is minutes, a float is fine, 0 for none.
+    Returns (ok, report); the report names each failing command, what was wanted, what happened and the
+    last lines of its output."""
+    failures = []
+    for check in checks:
+        with tempfile.TemporaryFile() as log:
+            args, use_shell = gate.shell(check.command)
+            code, timed_out = proc.run(args, use_shell, log, timeout)
+            log.seek(0)
+            output = log.read().decode("utf-8", "surrogateescape").replace("\r\n", "\n")
+        if timed_out:
+            got = "timed out after %s minutes" % format(timeout, "g")
+        else:
+            code_ok = code != 0 if check.exit == "nonzero" else code == check.exit
+            if code_ok and all(text in output for text in check.prints):
+                continue
+            got = "exit %d" % code
+        failures.append("$ %s\n  wanted: %s\n  got: %s\n  the last lines of its output:\n%s"
+                        % (check.command, _wanted(check), got, gate.tail(output)))
+    return not failures, "\n".join(failures)
