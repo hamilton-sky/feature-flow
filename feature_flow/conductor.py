@@ -10,7 +10,7 @@ import secrets
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, git, prompts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, git, prompts, state, suggest, tickets
 
 
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
@@ -182,10 +182,38 @@ class Conductor:
         path = nxt.out.strip().splitlines()[-1]
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                         "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": ""})
+        self.snapshot_code()
         self.run_smoke()
         return self.hand_out_build()
 
+    def snapshot_code(self):
+        whole, each = codehash.flow_code(self.scripts)
+        self.st["code_sha"] = whole
+        self.st["code_files"] = codehash.dump(each)
+
+    def check_code(self, allowed=False):
+        """Stop when the files the conductor runs from changed since the ticket was picked."""
+        whole, each = codehash.flow_code(self.scripts)
+        if whole == self.get("code_sha"):
+            return
+        if allowed:
+            self.snapshot_code()
+            return
+        names = codehash.changed(codehash.load(self.get("code_files")), each)
+        raise Stop("flow code changed while building %s: %s. if intended, the ticket needs a line: "
+                   "Floor: allow flow-edit" % (self.ticket_name(), ", ".join(names)))
+
+    def flow_edit_allowed(self):
+        try:
+            source = git._git("show", "%s:%s" % (self.get("base"), Path(self.ticket()).as_posix()), check=False)
+        except OSError:
+            return False
+        if source.returncode != 0:
+            return False
+        return b"flow-edit" in floorguard.allow_line(source.stdout.encode("utf-8")).split()
+
     def judge_build(self):
+        self.check_code(self.flow_edit_allowed())
         status = tickets.status(self.ticket())
         if status not in tickets.DONE:
             if status in tickets.RESET:
@@ -294,6 +322,7 @@ class Conductor:
         return "OK %s. run %s %s" % (", ".join(done), self.invoke, self.feature)
 
     def judge_review(self):
+        self.check_code()
         if not git.tracked_clean() or git.head() != self.get("review_sha"):
             raise Stop("the reviewer changed tracked files, which a reviewer must never do")
         verdict = self.get("verdict")

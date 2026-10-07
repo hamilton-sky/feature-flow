@@ -20,6 +20,8 @@ The conductor notices when a build changes the code it runs; the floor guard cov
 
 ## Decisions so far
 
+01 — the conductor hashes its own package, scripts and build/review prompt files at pick time and stops on any change (`Floor: allow flow-edit` in the ticket at base allows it); see `feature_flow/codehash.py`.
+
 ## Open questions
 
 - Version (decided 2026-10-07, user): release as 0.2.0. The old bash-era `v0.2.0` tag on origin is deleted by the user before they push the new one.
