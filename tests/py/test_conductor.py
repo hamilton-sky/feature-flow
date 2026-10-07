@@ -76,6 +76,60 @@ class BuildAndChecks(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
 
+    def test_an_upgrade_of_a_committed_install_is_not_a_dirty_tree_until_a_file_is_edited(self):
+        import hashlib
+        skill = self.repo.path(".agents/skills/feature-flow/SKILL.md")
+        skill.parent.mkdir(parents=True)
+        skill.write_text("old\n", encoding="utf-8")
+        self.repo.commit("install feature-flow")
+        # the upgrade rewrites the skill and leaves its two record files untracked
+        skill.write_bytes(b"new\n")
+        self.repo.path(".feature-flow").mkdir()
+        self.repo.path(".feature-flow/installed.txt").write_text(
+            ".agents/skills/feature-flow/SKILL.md\n.feature-flow/installed.sha256\n.feature-flow/installed.txt\n",
+            encoding="utf-8")
+        self.repo.path(".feature-flow/installed.sha256").write_text(
+            "%s  .agents/skills/feature-flow/SKILL.md\n" % hashlib.sha256(b"new\n").hexdigest(), encoding="utf-8")
+        skill.write_bytes(b"edited\n")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (1, "STOP working tree is not clean, commit or stash first: "
+                                        ".agents/skills/feature-flow/SKILL.md"))
+        # a staged version differs from the installed one in the worktree
+        self.repo.git("add", ".agents/skills/feature-flow/SKILL.md")
+        skill.write_bytes(b"new\n")
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 1)
+        self.repo.git("reset", "-q", "--", ".agents/skills/feature-flow/SKILL.md")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
+
+    def test_an_edited_install_file_is_a_change_even_while_untracked(self):
+        import hashlib
+        skill = self.repo.path(".agents/skills/feature-flow/SKILL.md")
+        skill.parent.mkdir(parents=True)
+        skill.write_bytes(b"edited\n")
+        self.repo.path(".feature-flow").mkdir()
+        self.repo.path(".feature-flow/installed.txt").write_text(
+            ".agents/skills/feature-flow/SKILL.md\n", encoding="utf-8")
+        self.repo.path(".feature-flow/installed.sha256").write_text(
+            "%s  .agents/skills/feature-flow/SKILL.md\n" % hashlib.sha256(b"new\n").hexdigest(), encoding="utf-8")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (1, "STOP working tree is not clean, commit or stash first: "
+                                        ".agents/skills/feature-flow/SKILL.md"))
+
+    def test_the_install_records_are_never_a_dirty_tree(self):
+        self.repo.path(".feature-flow").mkdir()
+        self.repo.path(".feature-flow/installed.txt").write_text("scripts/flow.py\n", encoding="utf-8")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
+        # committed, then rewritten by the next install
+        self.repo.path(".feature-flow/state").mkdir(exist_ok=True)
+        self.repo.commit("install feature-flow")
+        self.repo.flow("next")
+        self.repo.path(".feature-flow/installed.txt").write_text(
+            ".feature-flow/installed.sha256\n.feature-flow/installed.txt\nscripts/flow.py\n", encoding="utf-8")
+        self.repo.path(".feature-flow/installed.sha256").write_text("", encoding="utf-8")
+        self.repo.path(".feature-flow/state/flow-f.state").unlink()
     def test_untracked_python_bytecode_is_not_a_dirty_tree_but_other_files_are(self):
         self.repo.path("pkg/__pycache__").mkdir(parents=True)
         self.repo.path("pkg/__pycache__/m.cpython-312.pyc").write_bytes(b"\0")

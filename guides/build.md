@@ -12,7 +12,7 @@ Follow the repo's documented ticket location if it has one. Otherwise they are i
 
 ## Step 2: Pre-flight
 
-Run `git status --porcelain`. Untracked files listed in `.feature-flow/installed.txt` are feature-flow's own install and do not count, and neither does untracked Python bytecode (`__pycache__/`, `*.pyc`).
+Run `git status --porcelain`. Files listed in `.feature-flow/installed.txt`, and that list itself, are feature-flow's own install and do not count, and neither does untracked Python bytecode (`__pycache__/`, `*.pyc`).
 
 - Clean: continue.
 - Dirty, manual: show the files and offer to commit, stash, or continue anyway.

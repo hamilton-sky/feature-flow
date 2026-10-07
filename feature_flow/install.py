@@ -2,7 +2,8 @@
 
 usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--force] [--dry-run]
 copies the feature-flow skill, its roles, scripts and guides into a repo so the flow works there.
-a file that already exists and differs is kept and reported, unless --force is given.
+a file that already exists and differs is kept and reported, unless --force is given or nobody
+edited it since an earlier feature-flow install wrote it (then it is updated).
 nothing is ever deleted. CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrides ~/.agents for --user.
 
 Files are compared and written as bytes, and the two text transforms (the Codex skill header and
@@ -11,11 +12,14 @@ so the installed tree is the same byte for byte. Files are listed in byte order,
 with LC_ALL=C.
 """
 
+import hashlib
 import os
 import re
 import shutil
 import subprocess
 import sys
+
+from feature_flow.released import RELEASED
 
 # the help text
 USAGE = """\
@@ -30,7 +34,8 @@ copies the feature-flow skill, its roles, scripts and guides into a repo so the 
   --agent all does both.
   scripts go to <target>/scripts/ and guides, roles and the Python package to <target>/.feature-flow/
     (always: the skill and scripts/flow.py read them from the repo)
-a file that already exists and differs is kept and reported, unless --force is given.
+a file that already exists and differs is kept and reported, unless --force is given or it is
+  still exactly what an earlier feature-flow install wrote (then it is updated).
 nothing is ever deleted. CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrides ~/.agents for --user.
 """
 
@@ -42,6 +47,16 @@ SKILLS = ("feature-flow", "architect-review", "automation-design")
 # the in-repo files an install wrote, one path per line, relative to the target. The conductor does not
 # count them as a dirty tree while they are untracked, and `git add --pathspec-from-file` commits them.
 INSTALLED = ".feature-flow/installed.txt"
+# the sha256 of each of those files as the install wrote it, `<sha256>  <path>` per line. A later install
+# replaces a file that still has its recorded bytes: nobody edited it, so it is not the user's version.
+HASHES = ".feature-flow/installed.sha256"
+# the same record for a --user install, in ~/.claude and ~/.agents, paths relative to that folder
+USER_HASHES = "feature-flow.sha256"
+
+
+def _sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
 
 # an old skill that runs the ticket script (the bash one or the Python one) or ends a review with a verdict
 LEFTOVER = re.compile(rb"scripts/flow-status\.(?:sh|py)|REVIEW: PASS")
@@ -172,7 +187,14 @@ class Installer:
             package = os.path.dirname(os.path.abspath(__file__))
         self.package = package
         self.added = self.updated = self.same = self.kept = 0
-        self.written = []
+        self.written = {}
+        # each folder this installs into, with its hash record; the target's own comes first
+        self.records = [(target, HASHES)]
+        if user_level and agent in ("claude", "all"):
+            self.records.append((self.claude_dir, USER_HASHES))
+        if user_level and agent in ("codex", "all"):
+            self.records.append((self.agents_dir, USER_HASHES))
+        self.recorded = dict((root, self._read_hashes(root + "/" + record)) for root, record in self.records)
 
     def place(self, file, dest, data=None):
         """One file: add it, replace it (--force), leave it alone (same) or keep the user's version.
@@ -181,22 +203,54 @@ class Installer:
         if not os.path.exists(dest):
             self.out("  add     " + dest)
             self.added += 1
-            self.written.append(dest)
+            self.written[dest] = new
             if not self.dry:
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 self._copy(file, dest, data)
         elif new is not None and _read(dest) == new:
             self.same += 1
-            self.written.append(dest)
-        elif self.force:
+            self.written[dest] = new
+        elif self.force or self.untouched(dest):
             self.out("  update  " + dest)
             self.updated += 1
-            self.written.append(dest)
+            self.written[dest] = new
             if not self.dry:
                 self._copy(file, dest, data)
         else:
             self.out("  kept    " + dest + " (differs from this version, use --force to replace it)")
             self.kept += 1
+
+    def locate(self, dest):
+        """The install folder dest is in and dest relative to it, or (None, None)."""
+        for root, _ in sorted(self.records, key=lambda r: -len(r[0])):
+            if dest.startswith(root + "/"):
+                return root, dest[len(root) + 1:]
+        return None, None
+
+    @staticmethod
+    def _read_hashes(path):
+        recorded = {}
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    digest, _, name = line.rstrip("\n").partition("  ")
+                    if name:
+                        recorded[name] = digest
+        except (OSError, UnicodeDecodeError):
+            pass
+        return recorded
+
+    def untouched(self, dest):
+        """dest still holds the bytes an earlier feature-flow install wrote there. Never a symlink or a
+        file with other hard links: writing through it would change the file it shares bytes with."""
+        if os.path.islink(dest) or os.stat(dest).st_nlink > 1:
+            return False
+        old = _read(dest)
+        if old is None:
+            return False
+        digest = _sha256(old)
+        root, rel = self.locate(dest)
+        return digest in RELEASED or self.recorded.get(root, {}).get(rel) == digest
 
     @staticmethod
     def _copy(file, dest, data):
@@ -243,21 +297,48 @@ class Installer:
                        role_body(data if data is not None else b""))
 
     def write_installed(self):
-        """Add this run's in-repo files to the list, keeping the earlier runs' files that still exist."""
-        path = self.target + "/" + INSTALLED
+        """Add this run's in-repo files to the list, and every file's hash to its folder's record, keeping
+        the earlier runs' entries for files that still exist. True when the target's list or record changed."""
         names = set()
         try:
-            with open(path, encoding="utf-8") as old:
+            with open(self.target + "/" + INSTALLED, encoding="utf-8") as old:
                 names.update(line.strip() for line in old)
         except OSError:
             pass
-        names = set(n for n in names if n and os.path.isfile(self.target + "/" + n))
-        prefix = self.target + "/"
-        names.update(dest[len(prefix):] for dest in self.written if dest.startswith(prefix))
-        names.add(INSTALLED)
+        hashes = dict((root, dict(self.recorded[root])) for root, _ in self.records)
+        for dest, data in self.written.items():
+            root, rel = self.locate(dest)
+            if root == self.target:
+                names.add(rel)
+            if root is not None and data is not None:
+                hashes[root][rel] = _sha256(data)
+        names.update((INSTALLED, HASHES))
+        names = sorted(n for n in names
+                       if n in (INSTALLED, HASHES) or (n and os.path.isfile(self.target + "/" + n)))
+        changed = self._write(self.target + "/" + INSTALLED, "".join(n + "\n" for n in names))
+        for root, record in self.records:
+            kept = names if root == self.target else sorted(
+                n for n in hashes[root] if os.path.isfile(root + "/" + n))
+            text = "".join("%s  %s\n" % (hashes[root][n], n) for n in kept if n in hashes[root])
+            if self._write(root + "/" + record, text) and root == self.target:
+                changed = True
+        return changed
+
+    @staticmethod
+    def _write(path, text):
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                if f.read() == text:
+                    return False
+        except (OSError, UnicodeDecodeError):
+            pass
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8", newline="\n") as new:
-            new.write("".join(n + "\n" for n in sorted(names)))
+        # a new file moved into place: a link at the path is replaced, never written through
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        os.replace(tmp, path)
+        return True
 
     def report_leftovers(self, dirs):
         """A skill folder this installer does not own but that drives the flow (it runs the ticket
@@ -294,8 +375,7 @@ class Installer:
         self.copy_tree(here + "/guides", self.target + "/.feature-flow/guides")
         self.copy_tree(here + "/agents", self.target + "/.feature-flow/agents")
         self.copy_tree(self.package, self.target + "/.feature-flow/feature_flow", skip=BUNDLE)
-        if not self.dry:
-            self.write_installed()
+        listed = not self.dry and self.write_installed()
 
         self.out("")
         verb = "would add" if self.dry else "added"
@@ -311,7 +391,7 @@ class Installer:
                 git = 127
             if git != 0:
                 self.out("note: %s is not a git repository, and the flow needs one" % self.target)
-            elif self.added or self.updated:
+            elif self.added or self.updated or listed:
                 git_c = ""
                 if os.path.realpath(self.target) != os.path.realpath(os.getcwd()):
                     git_c = '-C "%s" ' % self.target if " " in self.target else "-C %s " % self.target

@@ -1,5 +1,6 @@
 """The few git calls the conductor needs, each one an argument list, never a shell string."""
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -30,17 +31,30 @@ def head():
     return _git("rev-parse", "HEAD").stdout.strip()
 
 
+# the installer's record of what it wrote: the paths, and the sha256 of each as it wrote it
+INSTALLED = Path(".feature-flow") / "installed.txt"
+HASHES = Path(".feature-flow") / "installed.sha256"
+
+
+def _read_lines(path):
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+
+
 def changes():
     """Every changed path, untracked files included, as `git status --porcelain` sees them, except
-    the untracked files feature-flow's installer wrote (an install not committed yet is not a change)
-    and untracked Python bytecode, which the flow's own Python runs leave behind."""
-    installed = set()
+    feature-flow's own install: a file still exactly as the installer wrote it, an untracked file it
+    lists without a hash (an install from before it kept hashes), and its two record files, which every
+    install rewrites; and untracked Python bytecode, which the flow's own Python runs leave behind."""
+    listed, hashes = set(), {}
     top = toplevel()
     if top is not None:
-        try:
-            installed = set((top / ".feature-flow" / "installed.txt").read_text(encoding="utf-8").splitlines())
-        except (OSError, UnicodeDecodeError):
-            pass
+        listed = set(_read_lines(top / INSTALLED))
+        for line in _read_lines(top / HASHES):
+            digest, _, name = line.partition("  ")
+            hashes[name] = digest
     entries = _git("status", "--porcelain", "-z", "-uall").stdout.split("\0")
     found = []
     i = 0
@@ -52,10 +66,24 @@ def changes():
         code, path = entry[:2], entry[3:]
         if code[0] in "RC":
             i += 1  # the rename's source path follows
-        if code == "??" and (path in installed or _bytecode(path)):
+        if path in (INSTALLED.as_posix(), HASHES.as_posix()):
+            continue
+        if path in hashes:
+            # only a worktree change: a staged version would ride along in the next commit
+            if (code[0] in " ?" and code[1] != "T" and top is not None and not (top / path).is_symlink()
+                    and _sha256(top / path) == hashes[path]):
+                continue
+        elif code == "??" and (path in listed or _bytecode(path)):
             continue
         found.append(path)
     return found
+
+
+def _sha256(path):
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def _bytecode(path):

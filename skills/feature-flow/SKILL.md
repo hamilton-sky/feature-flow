@@ -31,7 +31,7 @@ To add tickets to a plan that exists, edit it by hand following the ticket rules
 
 With a plan present, check these before `start`, and stop at the first that fails:
 
-- `git status --porcelain` is empty, apart from untracked Python bytecode (`__pycache__/`, `*.pyc`) and untracked files listed in `.feature-flow/installed.txt`: those are feature-flow's own install, so never stop for them. Suggest committing them (`git add --pathspec-from-file=.feature-flow/installed.txt && git commit -m "chore: install feature-flow"`) and carry on.
+- `git status --porcelain` is empty, apart from untracked Python bytecode (`__pycache__/`, `*.pyc`) and files listed in `.feature-flow/installed.txt` and that list itself: those are feature-flow's own install or upgrade, so never stop for them (`next` still stops if one of them was edited). Suggest committing them (`git add --pathspec-from-file=.feature-flow/installed.txt && git commit -m "chore: install feature-flow"`) and carry on.
 - `python3 scripts/flow-status.py <feature> --check` prints `OK`.
 - `ticket-builder.md` and `ticket-reviewer.md` are in `.claude/agents/`, `~/.claude/agents/`, or `$CLAUDE_HOME/agents/` when `CLAUDE_HOME` is set. If not, say to run `uvx feature-flow-cli install .` in this repo (or `python3 install.py <repo>` from a feature-flow clone).
 

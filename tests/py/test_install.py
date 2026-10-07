@@ -77,6 +77,102 @@ class RunTests(unittest.TestCase):
         files = sorted(p.relative_to(self.target).as_posix() for p in self.target.rglob("*") if p.is_file())
         self.assertEqual(sorted(listed), files)
 
+    def test_an_upgrade_replaces_files_nobody_edited_and_keeps_edited_ones(self):
+        self.run_install("--agent", "all")
+        skill = self.target / ".agents" / "skills" / "feature-flow" / "SKILL.md"
+        guide = self.target / ".feature-flow" / "guides" / "build.md"
+        role = self.target / ".claude" / "agents" / "ticket-builder.md"
+        # an earlier version wrote this skill and recorded its hash
+        skill.write_bytes(b"skill from an earlier version\n")
+        hashes = self.target / ".feature-flow" / "installed.sha256"
+        lines = [l for l in hashes.read_text(encoding="utf-8").splitlines()
+                 if not l.endswith("  .agents/skills/feature-flow/SKILL.md")]
+        lines.append("%s  .agents/skills/feature-flow/SKILL.md" % install._sha256(b"skill from an earlier version\n"))
+        hashes.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # 0.1.1 kept no record: its files are known by the released hashes
+        guide.write_bytes(b"guide from 0.1.1\n")
+        role.write_bytes(role.read_bytes() + b"my own edit\n")
+        released = install.RELEASED
+        install.RELEASED = frozenset([install._sha256(b"guide from 0.1.1\n")])
+        try:
+            code, out, _ = self.run_install("--agent", "all")
+        finally:
+            install.RELEASED = released
+        self.assertEqual(code, 0)
+        self.assertIn("  update  %s/.agents/skills/feature-flow/SKILL.md" % self.target, out)
+        self.assertNotIn(b"earlier version", skill.read_bytes())
+        self.assertNotIn(b"0.1.1", guide.read_bytes())
+        self.assertIn(b"my own edit", role.read_bytes())
+        self.assertIn("kept    %s/.claude/agents/ticket-builder.md" % self.target, out)
+        recorded = dict(reversed(l.split("  ", 1)) for l in hashes.read_text(encoding="utf-8").splitlines())
+        self.assertEqual(recorded[".agents/skills/feature-flow/SKILL.md"], install._sha256(skill.read_bytes()))
+
+    def test_a_user_level_upgrade_replaces_a_skill_nobody_edited(self):
+        home = Path(self.tmp.name) / "home"
+        os.environ["CLAUDE_HOME"] = str(home / ".claude")
+        os.environ["AGENTS_HOME"] = str(home / ".agents")
+        try:
+            self.run_install("--user")
+            record = home / ".claude" / "feature-flow.sha256"
+            skill = home / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+            self.assertIn("  skills/feature-flow/SKILL.md\n", record.read_text(encoding="utf-8"))
+            skill.write_bytes(b"skill from an earlier version\n")
+            record.write_text("%s  skills/feature-flow/SKILL.md\n" % install._sha256(skill.read_bytes()),
+                              encoding="utf-8")
+            _, out, _ = self.run_install("--user")
+        finally:
+            del os.environ["CLAUDE_HOME"]
+            del os.environ["AGENTS_HOME"]
+        self.assertIn("  update  %s/skills/feature-flow/SKILL.md" % (home / ".claude"), out)
+        self.assertNotIn(b"earlier version", skill.read_bytes())
+        self.assertNotIn("skills/feature-flow", (self.target / ".feature-flow" / "installed.txt").read_text())
+        self.assertFalse((home / ".agents").exists())
+
+    @unittest.skipIf(sys.platform == "win32", "symlinks need extra rights on Windows")
+    def test_an_upgrade_never_writes_through_a_symlink(self):
+        self.run_install()
+        skill = self.target / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+        shared = self.target / "shared-skill.md"
+        shared.write_bytes(b"skill from 0.1.1\n")
+        skill.unlink()
+        skill.symlink_to(shared)
+        released = install.RELEASED
+        install.RELEASED = frozenset([install._sha256(b"skill from 0.1.1\n")])
+        try:
+            _, out, _ = self.run_install()
+        finally:
+            install.RELEASED = released
+        self.assertIn("kept    %s/.claude/skills/feature-flow/SKILL.md" % self.target, out)
+        self.assertEqual(shared.read_bytes(), b"skill from 0.1.1\n")
+
+    def test_an_upgrade_never_writes_through_a_hard_link(self):
+        self.run_install()
+        skill = self.target / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+        shared = self.target / "shared-skill.md"
+        shared.write_bytes(b"skill from 0.1.1\n")
+        skill.unlink()
+        os.link(str(shared), str(skill))
+        released = install.RELEASED
+        install.RELEASED = frozenset([install._sha256(b"skill from 0.1.1\n")])
+        try:
+            _, out, _ = self.run_install()
+        finally:
+            install.RELEASED = released
+        self.assertIn("kept    %s/.claude/skills/feature-flow/SKILL.md" % self.target, out)
+        self.assertEqual(shared.read_bytes(), b"skill from 0.1.1\n")
+
+    def test_the_hash_record_is_never_written_through_a_link(self):
+        self.run_install()
+        record = self.target / ".feature-flow" / "installed.sha256"
+        shared = self.target / "shared.sha256"
+        shared.write_text("keep\n", encoding="utf-8")
+        record.unlink()
+        os.link(str(shared), str(record))
+        self.run_install()
+        self.assertEqual(shared.read_text(encoding="utf-8"), "keep\n")
+        self.assertIn("  .claude/skills/feature-flow/SKILL.md", record.read_text(encoding="utf-8"))
+        self.assertFalse((self.target / ".feature-flow" / "installed.sha256.tmp").exists())
+
     def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
         helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         _, out, _ = self.run_install()
