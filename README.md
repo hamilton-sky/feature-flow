@@ -26,7 +26,7 @@ python3 install.py /path/to/your/repo --agent all      # both, side by side
 # `bash install.sh ...` still works on Linux and macOS: it only runs install.py
 ```
 
-Without a clone, once the package is on PyPI (it is not published yet), the same installer runs from it:
+Without a clone, the same installer runs from [PyPI](https://pypi.org/project/feature-flow-cli/):
 
 ```bash
 uvx feature-flow-cli install /path/to/your/repo --agent all   # or: pipx run feature-flow-cli install ...
