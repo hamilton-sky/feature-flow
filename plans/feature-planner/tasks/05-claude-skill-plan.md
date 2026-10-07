@@ -1,7 +1,7 @@
 # Send the Claude skill's Plan section through the brief and the planner
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 02, 03, 04
 Test first: no
 
@@ -22,9 +22,3 @@ Rewrite the Plan section of `skills/feature-flow/SKILL.md`: with no feature give
 - skills/feature-flow/SKILL.md, guides/brief.md
 
 ## Answer
-
-Built: skills/feature-flow/SKILL.md: no feature plus a conversation that describes work now plans from it; the Plan section follows guides/brief.md, spawns feature-planner and plan-reviewer subagents with plan-prompt and plan-review-prompt, saves the review reply in the state folder, and writes the plan only through plan-accept after the second yes. Existing plans are extended by hand under the ticket rules. The description mentions planning from the conversation.
-
-Proof: `bash tests/run.sh` prints ok for the six new "the Claude skill plans with" checks and "it is under 90 lines" (66 lines); 442 passed, 0 failed.
-
-Shortcuts taken: none.

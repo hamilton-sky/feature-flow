@@ -1,7 +1,7 @@
 # Send the Codex skill's Plan section through the brief and the planner
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 02, 03, 04
 Test first: no
 
@@ -21,9 +21,3 @@ The Claude skill's new Plan section (spec.md § Design), ported to `adapters/cod
 - adapters/codex/feature-flow/SKILL.md, guides/brief.md
 
 ## Answer
-
-Built: adapters/codex/feature-flow/SKILL.md gets the same Plan section, spawning with spawn_agent(task_name="feature_planner" / "plan_reviewer", fork_turns="none") and wait_agent, roles from .agents/flow-roles/, a note that the child cannot be limited to the draft folder so plan-accept contains it, and that without web search it plans from the codebase.
-
-Proof: `bash tests/run.sh` prints ok for the six "the Codex skill plans with" checks, "the Codex planner never sees the conversation", and the existing "it never says /feature-flow or $ARGUMENTS"; 442 passed.
-
-Shortcuts taken: not run in Codex (no tokens), as spec.md § Scope says.
