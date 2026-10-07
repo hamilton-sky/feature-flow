@@ -71,6 +71,18 @@ class ChecksIn(unittest.TestCase):
         self.assertEqual(proof.checks_in("# T\n\nno sections at all\n"), [])
 
 
+class TemplateExample(unittest.TestCase):
+    def test_the_ticket_template_block_parses(self):
+        for name in ("guides/templates/ticket.md", "guides/plan.md"):
+            with open(os.path.join(str(helpers.ROOT), name), encoding="utf-8") as f:
+                text = f.read()
+            if name.endswith("plan.md"):
+                text = "## Done when\n" + text[text.index(FENCE + "check"):]
+            checks = proof.checks_in(text)
+            self.assertGreaterEqual(len(checks), 1, name)
+            self.assertTrue(all(c.command for c in checks), name)
+
+
 class ParseErrors(unittest.TestCase):
     def assertParseError(self, text, quoted):
         with self.assertRaises(proof.ParseError) as caught:

@@ -60,7 +60,7 @@ Proceed?
 - Follow the ticket and the project's conventions (the project's agent instructions file, CLAUDE.md or AGENTS.md, and any rules it points to).
 - Stay inside the ticket. **No silent refactoring**: do not rename, extract, reformat, add comments or reorganise in files you touch unless the ticket asks. Messy neighbouring code stays as it is.
 - **Lazy about the solution, never about reading.** Read every file you will touch first. Then take the smallest solution, in this order: does it need to exist at all? is it already in the codebase? the standard library? a native feature of the platform? a dependency that is already installed? one line? Only then write new code. Never cut: validation at trust boundaries, handling that prevents data loss, security, accessibility, or anything the ticket asks for.
-- **`Test first: yes`**: write the failing test first, run it, and see it fail for the right reason. Then write the code. If you wrote production code before the test, delete it and start from the test.
+- **`Test first: yes`**: write the failing test first. Commit the new or changed test files alone first (message `test(<feature>): NN failing test`, no other files), and see the Test command fail for the right reason. Then write the code and commit as Step 10 says. The conductor checks this: it runs the Test command at that commit and sends the ticket back if it passed or if no test-only commit exists. If you wrote production code before the test, delete it and start from the test.
 - **Never weaken the bar to pass it.** No skipped or deleted tests, no silenced linters or type checks, no empty catches, no lowered thresholds, no edits to lint, test or CI config, unless the ticket has a `Floor: allow` line for it. If the bar cannot be met, stop and go to Failure handling.
 - **Do not edit the flow's own code**: `feature_flow/`, `scripts/`, the guides and the roles, unless the ticket has `Floor: allow flow-edit`. The conductor stops the run if they change.
 - Focused tests (`.only(`, `fit(`, `fdescribe(`) and skipped tests are findings.
@@ -78,6 +78,8 @@ For every bullet in **Done when**, in this order:
 5. Only then write the claim.
 
 "Should", "probably", "seems" and "looks right" mean you have not proved it. Reading the code is not running it. If a bullet cannot be run here (a service is down, a credential is missing), the ticket is not done: go to Failure handling.
+
+The conductor also runs the ticket's `check` block (the `$` commands in Done when) before review, so run that block yourself first.
 
 Fix failures that are inside the ticket. If a fix needs changes outside it, go to Failure handling.
 
@@ -116,7 +118,7 @@ If you learned something a fresh worker would waste time rediscovering (a comman
 
 You wrote this change, so you are the wrong one to judge it.
 
-- **Auto**: do not review your own work. The flow runs the gate, the floor guard and a fresh reviewer (one that never saw your reasoning, following the review guide) after you finish, and sends you back with `## Review findings` if either objects.
+- **Auto**: do not review your own work. The flow runs the gate, the floor guard and two fresh reviewers (neither saw your reasoning): first a spec review, then a quality review, each following its own guide. Findings from either come back as `## Review findings`.
 - **Manual**: after the commit, offer to run the independent review now. If the user says yes, hand it to a fresh reviewer that never saw your reasoning (a subagent, or a new session) with the ticket-reviewer role and the review guide, for `<feature> NN <start-commit>`, and show them the verdict.
 
   Use the commit you noted in Step 5. Never review it in this conversation yourself.

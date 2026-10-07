@@ -56,11 +56,18 @@ Then a lazy pass over your draft. For each ticket ask, in order: does the bar st
    - `task`: normal work.
    - `settle`: a decision that later tickets depend on. The Answer is the decision. Use it when two tickets would otherwise decide the same thing differently.
    - `convert`: migrating data, code or a format. It must be a script that gives the same result when run twice, list every transform, leave anything that does not match unchanged and print it, state expected counts in Done when ("reports N converted, M left alone"), include a test that no old shape survives, and change the writer or generator so new output is already the new shape.
-4. **Done when must be checkable by a stranger**: the command and the result it prints. Never hard code the count of existing tests; "all existing tests still pass" is enough. A measured invariant is fine ("24 of 24 files round trip").
+4. **Done when must be checkable by a stranger**: the command and the result it prints. Never hard code the count of existing tests; "all existing tests still pass" is enough. A measured invariant is fine ("24 of 24 files round trip"). Every bullet that names a command also goes into the ticket's `check` block, which the conductor runs before review. The grammar is three lines: `$ <command>`, `exit <N>|nonzero` (default `exit 0`) and `prints <text>` (the output must contain it). Commands must be read-only and must run from the repo's top folder on the plan's platforms. A bullet that cannot be checked by a command stays prose for the reviewer. Example, placed after the bullets:
+
+```check
+# The conductor runs this block before review.
+$ python3 -m unittest discover -s tests
+exit 0
+prints OK
+```
 5. **Not in this ticket** names the nearest thing a reader would assume is included, and where it lives instead.
 6. **Survive code drift**: no line numbers. Name functions and classes, and give a search hint for insertion points ("after the call to `parseConfig()`").
 7. **Tests ride with the code they cover**: every ticket adds its own. Frontend tickets come after the API shape is stable.
-8. **Set `Test first:`** on every ticket. `yes` for anything that adds or changes logic (the worker writes the failing test before the code), `no` for config, docs, renames and migrations that a command already proves.
+8. **Set `Test first:`** on every ticket. `yes` for anything that adds or changes logic (the builder must commit a failing test alone first, and the conductor checks it), `no` for config, docs, renames and migrations that a command already proves. Do not set `yes` on a ticket whose test cannot fail before the code.
 9. **The last ticket is the acceptance ticket**: it runs the map's bar end to end and is blocked by every ticket that leaves the bar unproven.
 10. **Number from 01 and never renumber.** Tickets added later get the next number.
 11. **More than about 12 tickets?** Plan in rounds: `plans/<feature>/` first, then `plans/<feature>-round-two/` with its own map that links back.

@@ -1,7 +1,7 @@
 # Teach planners and builders the check block, the test commit and the two reviews
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 03, 04
 Test first: no
 
@@ -31,3 +31,19 @@ Update the wording only, matching what tickets 03 and 04 built (read their Answe
 
 ## Answer
 
+
+Built: `guides/templates/ticket.md` (check example under Done when), `guides/plan.md` (rule 4 grammar and a fenced ```check example, rule 8 Test first wording), `guides/build.md` (Step 7 test-only commit, Step 8 check block, Independent review two reviewers), `tests/py/test_proof.py` (new `TemplateExample` test).
+
+Proof:
+- `grep -c '```check' guides/templates/ticket.md guides/plan.md`: 1 for each file.
+- `grep -c "failing test" guides/build.md`: 1; `grep -c "quality" guides/build.md`: 1.
+- `python3 -m unittest discover -s tests/py -k proof`: 40 tests, OK (after the last edit); includes `test_the_ticket_template_block_parses`, which runs `proof.checks_in` on the template and on the example block in `guides/plan.md`.
+- `python3 -m unittest discover -s tests/py`: 220 tests OK; `bash tests/run.sh`: 446 passed, 0 failed.
+
+Decisions:
+- The ticket text asked for a check example in the template only, but its Done when also counts one in `guides/plan.md`, so `plan.md` rule 4 carries a fenced example (reviewer note: keep Done when and guides consistent). The test parses both, so neither can drift from the parser.
+- The template's `$` line is a placeholder in angle brackets; it parses as a command, which is all the test needs.
+
+Shortcuts taken: none.
+
+For later tickets: ticket 08 (README) can point to `guides/plan.md` rule 4 for the grammar.
