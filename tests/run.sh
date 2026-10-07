@@ -242,12 +242,22 @@ out="$(python3 "$G" nofeature 2>&1)"; rc=$?
 expect_rc "a feature without commands.md is not an error" 0 $rc
 python3 "$G" > /dev/null 2>&1; expect_rc "no feature is a usage error" 2 $?
 
+echo "planning roles"
+tools_of() { sed -n '/^tools:/,/^[a-z]/p' "$1" | grep '^- ' | tr -d ' -' | tr '\n' ' '; }
+PT="$(tools_of "$ROOT/agents/feature-planner.md")"; RT="$(tools_of "$ROOT/agents/plan-reviewer.md")"
+expect_has "the planner can research the web" "WebSearch" "$PT"
+expect_has "the planner may change only its draft" "only inside the draft folder" "$(cat "$ROOT/agents/feature-planner.md")"
+expect_lacks "the plan reviewer cannot edit files" "Edit" "$RT"
+expect_lacks "the plan reviewer cannot write files" "Write" "$RT"
+expect_has "the planner ends with a plan verdict" "PLAN: READY" "$(cat "$ROOT/agents/feature-planner.md")"
+expect_has "the plan reviewer ends with a review verdict" "PLAN-REVIEW: PASS" "$(cat "$ROOT/agents/plan-reviewer.md")"
+
 echo "install.py"
 cd "$TMP" || exit 1
 I="$TMP/inst"; mkdir -p "$I/repo" "$I/fresh"
 out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"; rc=$?
 expect_rc "installs into a repo" 0 $rc
-for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md scripts/flow.py scripts/gate.py scripts/floor-guard.py scripts/flow-status.py scripts/flow-view.py scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
+for f in .claude/skills/feature-flow/SKILL.md .claude/skills/architect-review/SKILL.md .claude/skills/automation-design/SKILL.md .claude/agents/ticket-builder.md .claude/agents/ticket-reviewer.md .claude/agents/feature-planner.md .claude/agents/plan-reviewer.md scripts/flow.py scripts/gate.py scripts/floor-guard.py scripts/flow-status.py scripts/flow-view.py scripts/flow-view.html .feature-flow/feature_flow/cli.py .feature-flow/guides/build.md .feature-flow/guides/templates/ticket.md .feature-flow/agents/ticket-reviewer.md; do
   if [ -f "$I/repo/$f" ]; then ok "installed $f"; else bad "installed $f"; fi
 done
 n="$(find "$I/repo/scripts" -name '*.sh' | wc -l | tr -d ' ')"; expect_rc "no bash script is installed under scripts/" 0 "$n"
@@ -350,6 +360,9 @@ expect_has "the builder role keeps its rules" "You are the builder." "$RB"
 expect_has "the reviewer role keeps its rules" "You are the reviewer, not the author." "$RR"
 expect_lacks "a role file has no frontmatter" "tools:" "$RR"
 [ "$(head -1 "$C/repo/.agents/flow-roles/ticket-reviewer.md")" = "You are the reviewer, not the author. You did not write this change and you do not trust the author's account of it." ] && ok "a role file starts with its first sentence" || bad "a role file starts with its first sentence"
+for r in feature-planner plan-reviewer; do
+  if [ -f "$C/repo/.agents/flow-roles/$r.md" ]; then ok "the Codex install puts the $r role in .agents/flow-roles/"; else bad "the Codex install puts the $r role in .agents/flow-roles/"; fi
+done
 out="$(python3 "$ROOT/install.py" "$C/repo" --agent codex 2>&1)"
 expect_has "a second codex run adds nothing" "added 0, updated 0" "$out"
 echo "my own edit" >> "$CS/architect-review/SKILL.md"
@@ -787,11 +800,14 @@ unset FLOW_SESSION FLOW_RELAY
 cd "$ROOT" || exit 1
 
 echo "flow.py, guides and prompt"
-for g in build review plan show; do
+for g in build review plan show brief plan-review; do
   if [ -f "$ROOT/guides/$g.md" ]; then ok "guides/$g.md exists"; else bad "guides/$g.md exists"; fi
   n="$(grep -cE '\$ARGUMENTS|(^|[^$])/feature-flow|\$feature-flow' "$ROOT/guides/$g.md")"
   expect_rc "guides/$g.md names no runtime's skill invocation" 0 "$n"
 done
+expect_has "the plan guide ends with a plan verdict" "PLAN: READY" "$(cat "$ROOT/guides/plan.md")"
+expect_has "the plan review guide ends with a review verdict" "PLAN-REVIEW: PASS" "$(cat "$ROOT/guides/plan-review.md")"
+expect_has "the plan guide writes into the draft folder" ".feature-flow/state/draft/" "$(cat "$ROOT/guides/plan.md")"
 if [ -f "$ROOT/guides/templates/ticket.md" ]; then ok "guides/templates/ticket.md exists"; else bad "guides/templates/ticket.md exists"; fi
 D="$(flowrepo pyflow_prompt)"
 cd "$D" || exit 1
@@ -858,6 +874,13 @@ expect_rc "it never says /feature-flow or \$ARGUMENTS" 0 "$(grep -cE '(^|[^$])/f
 mode="$(grep -E '^Codex mode: (subagents|relay)$' "$ROOT/plans/interactive-flow/tasks/02-probe-codex-sessions.md" | sed 's/^Codex mode: //')"
 relay="$(grep -c 'FLOW_RELAY=1' "$CX_SKILL")"
 if { [ "$mode" = subagents ] && [ "$relay" = 0 ]; } || { [ "$mode" = relay ] && [ "$relay" -ge 1 ]; }; then ok "its mode matches ticket 02 ($mode)"; else bad "its mode matches ticket 02 ($mode)"; fi
+for n in Claude Codex; do
+  s="$CS_SKILL"; [ "$n" = Claude ] || s="$CX_SKILL"
+  for w in plan-prompt plan-review-prompt plan-accept feature-planner plan-reviewer guides/brief.md; do
+    if grep -q -- "$w" "$s"; then ok "the $n skill plans with $w"; else bad "the $n skill plans with $w"; fi
+  done
+done
+expect_has "the Codex planner never sees the conversation" 'task_name="feature_planner", fork_turns="none"' "$(cat "$CX_SKILL")"
 for n in Claude Codex; do
   s="$CS_SKILL"; [ "$n" = Claude ] || s="$CX_SKILL"
   expect_rc "the $n skill writes nothing under .git" 0 "$(grep -cE '(>|-o) *\.git/' "$s")"
