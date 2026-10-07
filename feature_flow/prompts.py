@@ -5,9 +5,9 @@ The text is runtime neutral: any agent that can read a prompt can follow it.
 
 from pathlib import Path
 
-ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md",
+ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
          "plan": "feature-planner.md", "plan-review": "plan-reviewer.md"}
-GUIDES = {"build": "build.md", "review": "review.md", "plan": "plan.md", "plan-review": "plan-review.md"}
+GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md", "plan": "plan.md", "plan-review": "plan-review.md"}
 
 
 def find_file(scripts, folder, name):
@@ -46,9 +46,11 @@ def build(phase, scripts, feature, ticket, num, sha, notes=()):
                 "commit. Do not review your own work." % (num, feature, feature, num, ticket, sha, fresh))
         intro = "The build guide follows. Follow it exactly."
     else:
-        task = ("Your task: review ticket %s of the feature `%s` (`%s %s %s`). The ticket is `%s`, and the work "
-                "started at commit `%s`.\n%s\nDo not edit any file or create a commit. Your final reply must end "
-                "with exactly `REVIEW: PASS` or `REVIEW: FAIL`." % (num, feature, feature, num, sha, ticket, sha, fresh))
+        task = ("Your task: review ticket %s of the feature `%s` (`%s %s %s`) (%s pass). The ticket is `%s`, and the "
+                "work started at commit `%s`.\n%s\nDo not edit any file or create a commit. Your final reply must end "
+                "with exactly `REVIEW: PASS` or `REVIEW: FAIL`."
+                % (num, feature, feature, num, sha, "quality" if phase == "review-quality" else "spec", ticket, sha,
+                   fresh))
         for note in notes:
             task += "\nThe conductor notes: %s" % note
         intro = "The review guide follows. Follow it exactly."

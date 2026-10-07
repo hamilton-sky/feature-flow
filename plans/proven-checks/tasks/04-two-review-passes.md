@@ -1,7 +1,7 @@
 # Review every ticket twice: spec, then quality
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -28,3 +28,15 @@ In `feature_flow/prompts.py` add a `review-quality` entry to `ROLES` (`ticket-re
 
 ## Answer
 
+**Built**: `guides/review.md` (Verdict 2 and the QUALITY output part removed; PASS rule is spec only), new `guides/review-quality.md` (same reading rules, "Verdict 2: is it good?", QUALITY-only output), `feature_flow/prompts.py` (`review-quality` in ROLES and GUIDES; the review task text gets `(spec pass)` or `(quality pass)`), `feature_flow/codehash.py` (fingerprints the review-quality files), `feature_flow/conductor.py` (`review_pass` state, `judge_review`, `send_back`, `pick_ticket`, `prompt`, `run_limit` x3), new `tests/py/test_review_pass.py` (9 tests), and `tests/py/test_conductor.py` and `tests/run.sh` updated to pass twice (none deleted).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -k review_pass`: Ran 9 tests, OK (first run before the code: 9 failures/errors, e.g. `(spec pass)` missing from the prompt and BUILD instead of the second REVIEW).
+- `grep -c "REVIEW: PASS" guides/review.md guides/review-quality.md`: 2 for each file.
+- `python3 -m unittest discover -s tests/py`: Ran 217 tests, OK. `bash tests/run.sh`: 444 passed, 0 failed.
+
+**Decisions**: `hand_out_review` defaults `review_pass` to `spec` when absent; `pick_ticket` and `send_back` set it to `spec`. The send-back source is `spec review` or `quality review` from the pass in state. `prompt` maps phase `review` to `review-quality` in the quality pass (notes still passed). The quality guide keeps the "fresh session" and reading rules but not "Verdict 1".
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the findings heading source is now `spec review` / `quality review` (was `independent review`); anything greping the old text must change. `run_limit` is now 3 phases per round: tests that set a low `limit` need 3 to reach the second REVIEW. Ticket 08 (README) should describe the two passes. `to_quality`-style tests need `agents/` and `guides/` committed in the temp repo (see test_review_pass.py setUp).

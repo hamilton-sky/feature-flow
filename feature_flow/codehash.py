@@ -12,7 +12,7 @@ def _files(scripts):
     package = Path(__file__).resolve().parent
     found = [p for p in package.rglob("*.py") if "__pycache__" not in p.parts]
     found += Path(scripts).resolve().glob("*.py")
-    for phase in ("build", "review"):
+    for phase in ("build", "review", "review-quality"):
         for folder, names in (("agents", prompts.ROLES), ("guides", prompts.GUIDES)):
             try:
                 found.append(prompts.find_file(scripts, folder, names[phase]).resolve())

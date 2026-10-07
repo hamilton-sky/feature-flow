@@ -121,7 +121,7 @@ class Conductor:
         for word in result.out.split():
             if word.startswith("total="):
                 total = int(word[len("total="):])
-        return total * 2 * self.max_retries * (self.max_rounds + 1) + 1
+        return total * 3 * self.max_retries * (self.max_rounds + 1) + 1
 
     def count_run(self):
         runs = self.num("runs") + 1
@@ -143,6 +143,7 @@ class Conductor:
     def hand_out_review(self):
         self.count_run()
         self.st["phase"] = "review"
+        self.st["review_pass"] = self.get("review_pass") or "spec"
         self.st["review_attempt"] = self.num("review_attempt") + 1
         self.st["review_sha"] = git.head()
         self.st["relay_handoff"] = "1" if self.relay else ""
@@ -163,6 +164,7 @@ class Conductor:
                        % (source, self.ticket_name()))
         self.st["attempt"] = 0
         self.st["review_attempt"] = 0
+        self.st["review_pass"] = "spec"
         return self.hand_out_build()
 
     def pick_ticket(self):
@@ -191,7 +193,7 @@ class Conductor:
         path = nxt.out.strip().splitlines()[-1]
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
-                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": ""})
+                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec"})
         self.snapshot_code()
         self.run_smoke()
         return self.hand_out_build()
@@ -408,6 +410,10 @@ class Conductor:
             raise Stop("the reviewer changed tracked files, which a reviewer must never do")
         verdict = self.get("verdict")
         self.st["verdict"] = ""
+        if verdict == "pass" and self.get("review_pass", "spec") != "quality":
+            self.st["review_pass"] = "quality"
+            self.st["review_attempt"] = 0
+            return self.hand_out_review()
         if verdict == "pass":
             self.st["phase"] = ""
             self.st["done"] = self.num("done") + 1
@@ -416,7 +422,8 @@ class Conductor:
             return self.pick_ticket()
         if verdict == "fail":
             findings = self.findings_file.read_text(encoding="utf-8") if self.findings_file.is_file() else ""
-            return self.send_back("independent review", findings)
+            return self.send_back("quality review" if self.get("review_pass") == "quality" else "spec review",
+                                  findings)
         if self.num("review_attempt") >= self.max_retries:
             raise Stop("no review verdict for %s after %d attempt(s)" % (self.ticket_name(), self.max_retries))
         return self.hand_out_review()
@@ -428,8 +435,10 @@ class Conductor:
         if phase not in ("build", "review"):
             raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
         try:
+            if phase == "review" and self.get("review_pass") == "quality":
+                phase = "review-quality"
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
-                                 [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase == "review" else ())
+                                 [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase != "build" else ())
         except FileNotFoundError as err:
             raise Stop(str(err))
 

@@ -34,6 +34,7 @@ The conductor runs each ticket's `check` block from Done when and, for `Test fir
 - 01 — `proof.checks_in(text)` parses ```check blocks in Done when into frozen `Check(command, exit, prints)` dataclasses (`exit` int or "nonzero", `prints` tuple); broken blocks raise `ParseError` quoting the line.
 - 02 — `proof.run_checks` runs every check after the floor guard (gate on only); fail is sent back as `done when`, a broken block or a dirty tree is a STOP; `guard_warning` is now `review_notes` (tab separated, printed as `The conductor notes: ...`).
 - 03 — `proof.test_first` finds test-only commits in `base..HEAD`, runs Test in place at each (state `restore` undone at the top of `next`), sent back as `test first` with a recovery recipe for a combined test+code commit; `TESTFIRST-PASS/FAIL/SKIP` logged.
+- 04 — two review passes: `review_pass` (`spec`/`quality`) in run state; spec PASS hands out the same REVIEW line with `guides/review-quality.md`, quality PASS moves on; send-back sources are `spec review` / `quality review`; run limit is 3 phases per round.
 
 ## Open questions
 
