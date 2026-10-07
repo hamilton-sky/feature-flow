@@ -1,0 +1,6 @@
+interface:
+  display_name: "feature-flow"
+  short_description: "Plan a feature or build its tickets with a fresh builder and reviewer per ticket"
+  default_prompt: "Use $feature-flow [feature] [show] [auto]"
+policy:
+  allow_implicit_invocation: false
