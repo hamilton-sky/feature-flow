@@ -22,5 +22,5 @@ The conductor notices when a build changes the code it runs; the floor guard cov
 
 ## Open questions
 
-- Version: an old bash-era tag `v0.2.0` exists on origin. The user is asked whether to retag, or use 0.3.0 or 0.1.7. Ticket 09 uses 0.2.0 until they answer.
+- Version (decided 2026-10-07, user): release as 0.2.0. The old bash-era `v0.2.0` tag on origin is deleted by the user before they push the new one.
 - Whether `FLOW_GATE_TIMEOUT` should also bound the planner's `Smoke` run in `commands.md`: assumed yes, it is the same smoke call.
