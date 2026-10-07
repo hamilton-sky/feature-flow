@@ -10,3 +10,4 @@ ticket number. Never edit or delete another line. Keep it short; a human prunes 
 - (04) Tests that drive a ticket through REVIEW now need two PASS verdicts (spec, then quality) before the next BUILD; a test that sets state `limit=` needs 3 per round, not 2.
 - (05) A test for a send-back build prompt can use a real failing gate: add a `Test:` command to `commands.md` and commit a `FAILING` file (see `tests/py/test_debug.py`).
 - (06) A fenced ```check example in a guide is parsed by `tests/py/test_proof.py` (TemplateExample): keep its `$` line non-empty and its lines in the grammar.
+- (07) Driving a prepared demo with `scripts/flow.py hello next` needs `start` first and its token exported as `FLOW_SESSION`, or `next` STOPs as owned by another session.

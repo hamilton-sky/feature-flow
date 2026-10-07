@@ -935,6 +935,49 @@ expect_has "and prints the recovery command" "FLOW_TAKEOVER=1 FLOW_TICKETS_PER_S
 expect_rc "and starts no second session" 1 "$(wc -l < "$TMP/silent.calls" | tr -d ' ')"
 expect_has "the session is started as a user would type it" '-p /feature-flow hello auto --allowedTools' "$(cat "$TMP/silent.calls")"
 
+echo "smoke-real.sh, the prepared demo driven through the checks"
+HELLO_TEST=$'import unittest\nfrom hello import greet\n\n\nclass T(unittest.TestCase):\n    def test_greet(self):\n        self.assertEqual(greet("Ada"), "Hello, Ada!")\n'
+HELLO_CODE=$'def greet(name):\n    return "Hello, %s!" % name\n'
+drive_log() { cat .feature-flow/state/flow-hello.log; }
+vreply() { printf 'SPEC\n- checked\n%s\n' "$1" > .git/reply.txt; }
+resolve_hello() { setst resolved plans/hello/tasks/01-greet-function.md; }
+P3="$TMP/drive_ok"
+bash "$SM" --prepare "$P3" > /dev/null 2>&1
+cd "$P3" || exit 1
+OUT="$(python3 scripts/flow.py hello start 2> /dev/null)"; export FLOW_SESSION="${OUT#OK }"
+pyflow hello next
+BASE="$(git rev-parse HEAD)"
+expect_has "the demo drive: next hands out BUILD for 01" "BUILD plans/hello/tasks/01-greet-function.md 01" "$OUT"
+printf '%s' "$HELLO_TEST" > test_hello.py; git add -A; git commit -qm "test: greet"
+printf '%s' "$HELLO_CODE" > hello.py; resolve_hello; git add -A; git commit -qm "feat: greet"
+pyflow hello next
+expect_has "the demo reaches REVIEW with the checks on" "REVIEW plans/hello/tasks/01-greet-function.md 01 $BASE" "$OUT"
+log="$(drive_log)"
+expect_has "and the log has GATE-PASS" ",01,GATE-PASS" "$log"
+expect_has "and GUARD-PASS" ",01,GUARD-PASS" "$log"
+expect_has "and DONEWHEN-PASS" ",01,DONEWHEN-PASS" "$log"
+expect_has "and TESTFIRST-PASS" ",01,TESTFIRST-PASS" "$log"
+vreply "REVIEW: PASS"
+pyflow hello verdict .git/reply.txt; pyflow hello next
+expect_has "after one PASS the demo gets its second REVIEW" "REVIEW plans/hello/tasks/01-greet-function.md 01 $BASE" "$OUT"
+pyflow hello verdict .git/reply.txt; pyflow hello next
+expect_has "after the second PASS it gets BUILD for 02" "BUILD plans/hello/tasks/02-command-line.md 02" "$OUT"
+unset FLOW_SESSION
+cd "$ROOT" || exit 1
+
+P4="$TMP/drive_together"
+bash "$SM" --prepare "$P4" > /dev/null 2>&1
+cd "$P4" || exit 1
+OUT="$(python3 scripts/flow.py hello start 2> /dev/null)"; export FLOW_SESSION="${OUT#OK }"
+pyflow hello next
+printf '%s' "$HELLO_TEST" > test_hello.py; printf '%s' "$HELLO_CODE" > hello.py; resolve_hello; git add -A; git commit -qm "feat: greet with its test"
+pyflow hello next
+expect_has "the demo with test and code in one commit is built again" "BUILD plans/hello/tasks/01-greet-function.md 01" "$OUT"
+expect_has "with a test first finding" "test first" "$(cat plans/hello/tasks/01-greet-function.md)"
+expect_has "and TESTFIRST-FAIL in the log" ",01,TESTFIRST-FAIL" "$(drive_log)"
+unset FLOW_SESSION
+cd "$ROOT" || exit 1
+
 echo
 echo "$PASS passed, $FAILS failed"
 [ "$FAILS" -eq 0 ]
