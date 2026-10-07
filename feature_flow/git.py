@@ -69,7 +69,8 @@ def changes():
         if path in (INSTALLED.as_posix(), HASHES.as_posix()):
             continue
         if path in hashes:
-            if top is not None and _sha256(top / path) == hashes[path]:
+            # only a worktree change: a staged version would ride along in the next commit
+            if code[0] in " ?" and top is not None and _sha256(top / path) == hashes[path]:
                 continue
         elif code == "??" and path in listed:
             continue

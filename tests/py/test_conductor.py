@@ -94,7 +94,12 @@ class BuildAndChecks(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (1, "STOP working tree is not clean, commit or stash first: "
                                         ".agents/skills/feature-flow/SKILL.md"))
+        # a staged version differs from the installed one in the worktree
+        self.repo.git("add", ".agents/skills/feature-flow/SKILL.md")
         skill.write_bytes(b"new\n")
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 1)
+        self.repo.git("reset", "-q", "--", ".agents/skills/feature-flow/SKILL.md")
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
 
