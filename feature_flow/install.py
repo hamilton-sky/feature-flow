@@ -50,6 +50,8 @@ INSTALLED = ".feature-flow/installed.txt"
 # the sha256 of each of those files as the install wrote it, `<sha256>  <path>` per line. A later install
 # replaces a file that still has its recorded bytes: nobody edited it, so it is not the user's version.
 HASHES = ".feature-flow/installed.sha256"
+# the same record for a --user install, in ~/.claude and ~/.agents, paths relative to that folder
+USER_HASHES = "feature-flow.sha256"
 
 
 def _sha256(data):
@@ -186,7 +188,11 @@ class Installer:
         self.package = package
         self.added = self.updated = self.same = self.kept = 0
         self.written = {}
-        self.recorded = self._read_hashes()
+        # each folder this installs into, with its hash record; the target's own comes first
+        self.records = [(target, HASHES)]
+        if user_level:
+            self.records += [(self.claude_dir, USER_HASHES), (self.agents_dir, USER_HASHES)]
+        self.recorded = dict((root, self._read_hashes(root + "/" + record)) for root, record in self.records)
 
     def place(self, file, dest, data=None):
         """One file: add it, replace it (--force), leave it alone (same) or keep the user's version.
@@ -212,15 +218,18 @@ class Installer:
             self.out("  kept    " + dest + " (differs from this version, use --force to replace it)")
             self.kept += 1
 
-    def rel(self, dest):
-        """dest relative to the target, or None outside it (a --user install)."""
-        prefix = self.target + "/"
-        return dest[len(prefix):] if dest.startswith(prefix) else None
+    def locate(self, dest):
+        """The install folder dest is in and dest relative to it, or (None, None)."""
+        for root, _ in sorted(self.records, key=lambda r: -len(r[0])):
+            if dest.startswith(root + "/"):
+                return root, dest[len(root) + 1:]
+        return None, None
 
-    def _read_hashes(self):
+    @staticmethod
+    def _read_hashes(path):
         recorded = {}
         try:
-            with open(self.target + "/" + HASHES, encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 for line in f:
                     digest, _, name = line.rstrip("\n").partition("  ")
                     if name:
@@ -235,7 +244,8 @@ class Installer:
         if old is None:
             return False
         digest = _sha256(old)
-        return digest in RELEASED or self.recorded.get(self.rel(dest)) == digest
+        root, rel = self.locate(dest)
+        return digest in RELEASED or self.recorded.get(root, {}).get(rel) == digest
 
     @staticmethod
     def _copy(file, dest, data):
@@ -282,29 +292,35 @@ class Installer:
                        role_body(data if data is not None else b""))
 
     def write_installed(self):
-        """Add this run's in-repo files to the list and their hashes to the record, keeping the earlier
-        runs' entries for files that still exist. True when either file changed."""
+        """Add this run's in-repo files to the list, and every file's hash to its folder's record, keeping
+        the earlier runs' entries for files that still exist. True when the target's list or record changed."""
         names = set()
         try:
             with open(self.target + "/" + INSTALLED, encoding="utf-8") as old:
                 names.update(line.strip() for line in old)
         except OSError:
             pass
-        hashes = dict(self.recorded)
+        hashes = dict((root, dict(self.recorded[root])) for root, _ in self.records)
         for dest, data in self.written.items():
-            rel = self.rel(dest)
-            if rel is not None:
+            root, rel = self.locate(dest)
+            if root == self.target:
                 names.add(rel)
-                if data is not None:
-                    hashes[rel] = _sha256(data)
+            if root is not None and data is not None:
+                hashes[root][rel] = _sha256(data)
         names.update((INSTALLED, HASHES))
         names = sorted(n for n in names
                        if n in (INSTALLED, HASHES) or (n and os.path.isfile(self.target + "/" + n)))
-        changed = self._write(INSTALLED, "".join(n + "\n" for n in names))
-        return self._write(HASHES, "".join("%s  %s\n" % (hashes[n], n) for n in names if n in hashes)) or changed
+        changed = self._write(self.target + "/" + INSTALLED, "".join(n + "\n" for n in names))
+        for root, record in self.records:
+            kept = names if root == self.target else sorted(
+                n for n in hashes[root] if os.path.isfile(root + "/" + n))
+            text = "".join("%s  %s\n" % (hashes[root][n], n) for n in kept if n in hashes[root])
+            if self._write(root + "/" + record, text) and root == self.target:
+                changed = True
+        return changed
 
-    def _write(self, rel, text):
-        path = self.target + "/" + rel
+    @staticmethod
+    def _write(path, text):
         try:
             with open(path, encoding="utf-8", newline="") as f:
                 if f.read() == text:

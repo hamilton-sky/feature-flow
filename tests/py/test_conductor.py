@@ -98,9 +98,19 @@ class BuildAndChecks(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
 
-    def test_the_install_list_alone_is_not_a_dirty_tree(self):
+    def test_the_install_records_are_never_a_dirty_tree(self):
         self.repo.path(".feature-flow").mkdir()
         self.repo.path(".feature-flow/installed.txt").write_text("scripts/flow.py\n", encoding="utf-8")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
+        # committed, then rewritten by the next install
+        self.repo.path(".feature-flow/state").mkdir(exist_ok=True)
+        self.repo.commit("install feature-flow")
+        self.repo.flow("next")
+        self.repo.path(".feature-flow/installed.txt").write_text(
+            ".feature-flow/installed.sha256\n.feature-flow/installed.txt\nscripts/flow.py\n", encoding="utf-8")
+        self.repo.path(".feature-flow/installed.sha256").write_text("", encoding="utf-8")
+        self.repo.path(".feature-flow/state/flow-f.state").unlink()
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
 

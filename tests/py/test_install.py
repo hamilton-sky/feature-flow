@@ -107,6 +107,24 @@ class RunTests(unittest.TestCase):
         recorded = dict(reversed(l.split("  ", 1)) for l in hashes.read_text(encoding="utf-8").splitlines())
         self.assertEqual(recorded[".agents/skills/feature-flow/SKILL.md"], install._sha256(skill.read_bytes()))
 
+    def test_a_user_level_upgrade_replaces_a_skill_nobody_edited(self):
+        home = Path(self.tmp.name) / "home"
+        os.environ["CLAUDE_HOME"] = str(home / ".claude")
+        try:
+            self.run_install("--user")
+            record = home / ".claude" / "feature-flow.sha256"
+            skill = home / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+            self.assertIn("  skills/feature-flow/SKILL.md\n", record.read_text(encoding="utf-8"))
+            skill.write_bytes(b"skill from an earlier version\n")
+            record.write_text("%s  skills/feature-flow/SKILL.md\n" % install._sha256(skill.read_bytes()),
+                              encoding="utf-8")
+            _, out, _ = self.run_install("--user")
+        finally:
+            del os.environ["CLAUDE_HOME"]
+        self.assertIn("  update  %s" % skill.as_posix().replace(home.as_posix(), str(home)), out)
+        self.assertNotIn(b"earlier version", skill.read_bytes())
+        self.assertNotIn("skills/feature-flow", (self.target / ".feature-flow" / "installed.txt").read_text())
+
     def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
         helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         _, out, _ = self.run_install()
