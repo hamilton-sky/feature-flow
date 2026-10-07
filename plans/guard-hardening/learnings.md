@@ -6,3 +6,4 @@ Append one line per lesson: `- (NN) what you found`. Never rewrite existing line
 - (03) in a shared helpers.Repo test, a 'Floor: allow' line committed in one step leaks into later steps; rewrite the ticket's Floor line before each base commit. Use commit --allow-empty when a step may not change anything.
 - (04) a conductor test that needs prompts must copy agents/ and guides/ into helpers.Repo; a verdict file must live outside the repo or the next pick sees a dirty tree.
 - (05) tests/run.sh takes ~2 minutes with the unit tests; run it in the background or with a long timeout.
+- (06) a test that starts a sleeper must pass the timeout as a float argument (gate.run(..., timeout=0.02)); the env var is whole minutes. Use sys.executable plus a script file in test commands so the same command runs under bash and cmd.exe.

@@ -10,7 +10,7 @@ import secrets
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, git, prompts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, gate, git, prompts, state, suggest, tickets
 
 
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
@@ -41,6 +41,7 @@ class Conductor:
         self.commands = self.plan / "commands.md"
         self.max_retries = _env_int("FLOW_MAX_RETRIES", 2)
         self.max_rounds = _env_int("FLOW_MAX_REVIEW_ROUNDS", 3)
+        self.gate_timeout = _env_int("FLOW_GATE_TIMEOUT", 30)
         self.gate_on = os.environ.get("FLOW_GATE", "on") != "off"
         self.per_session = _env_int("FLOW_TICKETS_PER_SESSION", 4)
         self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
@@ -101,10 +102,17 @@ class Conductor:
         cmd = self.smoke_command()
         if not cmd:
             return
-        result = checks.smoke(cmd)
+        result = checks.smoke(cmd, self.gate_timeout)
         if not result.ok:
-            raise Stop("smoke test failed before %s: the base is already broken. fix it first. command: %s"
-                       % (self.ticket_name(), cmd))
+            log = self.state_file.with_name("%s.smoke.log" % self.feature)
+            text = result.out
+            if result.timed_out:
+                text += "\nsmoke test timed out after %d minutes\n" % self.gate_timeout
+            log.write_text(gate.tail(text), encoding="utf-8")
+            raise Stop("smoke test %s before %s: the base is already broken. fix it first. command: %s. "
+                       "the last %d lines are in %s"
+                       % ("timed out after %d minutes" % self.gate_timeout if result.timed_out else "failed",
+                          self.ticket_name(), cmd, gate.TAIL, log))
 
     def run_limit(self):
         result = checks.flow_status(self.scripts, self.feature, "--counts")
@@ -224,7 +232,7 @@ class Conductor:
         if not git.is_clean():
             raise Stop("working tree is dirty after %s, it should have been committed" % self.ticket_name())
         if self.gate_on:
-            result = checks.gate(self.scripts, self.feature)
+            result = checks.gate(self.scripts, self.feature, self.gate_timeout)
             self.log("GATE-PASS" if result.ok else "GATE-FAIL")
             if not result.ok:
                 return self.send_back("gate", result.out)

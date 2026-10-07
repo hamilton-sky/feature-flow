@@ -6,8 +6,10 @@ in-process call without touching the conductor.
 
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
+from feature_flow import proc
 from feature_flow import status
 from feature_flow import gate as gate_module
 from feature_flow import floorguard
@@ -60,10 +62,11 @@ def flow_status(scripts, feature, mode, root=None):
     return Result(code, out.text())
 
 
-def gate(scripts, feature):
-    """The gate, run in process. stderr is folded into the output as the subprocess call did."""
+def gate(scripts, feature, timeout=None):
+    """The gate, run in process. stderr is folded into the output as the subprocess call did.
+    timeout is minutes, None for FLOW_GATE_TIMEOUT."""
     chunks = []
-    code = gate_module.run(str(feature), chunks.append, chunks.append)
+    code = gate_module.run(str(feature), chunks.append, chunks.append, timeout)
     out = "".join(chunks).encode("utf-8", "surrogateescape").decode("utf-8", "replace")
     out = out.replace("\r\n", "\n").replace("\r", "\n")
     return Result(code, out)
@@ -77,8 +80,13 @@ def floor_guard(scripts, feature, num, base):
     return Result(code, out)
 
 
-def smoke(command):
+def smoke(command, timeout=None):
+    """The smoke command. timeout is minutes, 0 or None for none. Result.timed_out is set when it ran out."""
     args, use_shell = gate_module.shell(command)
-    result = subprocess.run(args, shell=use_shell, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            universal_newlines=True)
-    return Result(result.returncode, result.stdout)
+    with tempfile.TemporaryFile() as log:
+        code, timed_out = proc.run(args, use_shell, log, timeout)
+        log.seek(0)
+        out = log.read().decode("utf-8", "replace").replace("\r\n", "\n")
+    result = Result(1 if timed_out else code, out)
+    result.timed_out = timed_out
+    return result

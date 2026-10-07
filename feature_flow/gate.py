@@ -10,13 +10,15 @@ Text is str (UTF-8 with errors="surrogateescape", so any byte comes back out unc
 """
 
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+from feature_flow import proc
+
 KEYS = ("Build", "Test", "Lint")
 TAIL = 40
+DEFAULT_TIMEOUT = 30
 
 
 def shell(cmd):
@@ -49,11 +51,27 @@ def tail(text, n=TAIL):
     return "\n".join(text.split("\n")[-n:])
 
 
-def run(feature, out, err):
-    """Run the gate for feature. out and err take text. Returns the exit code."""
+def timeout_minutes():
+    """FLOW_GATE_TIMEOUT in minutes (default 30, 0 for none). Raises ValueError naming the variable."""
+    value = os.environ.get("FLOW_GATE_TIMEOUT", "")
+    try:
+        return int(value) if value.strip() else DEFAULT_TIMEOUT
+    except ValueError:
+        raise ValueError("FLOW_GATE_TIMEOUT must be a whole number, not %s" % value)
+
+
+def run(feature, out, err, timeout=None):
+    """Run the gate for feature. out and err take text. timeout is minutes (a float is fine), 0 for none;
+    None reads FLOW_GATE_TIMEOUT. Returns the exit code."""
     if not feature:
         err("usage: python3 scripts/gate.py <feature>\n")
         return 2
+    if timeout is None:
+        try:
+            timeout = timeout_minutes()
+        except ValueError as problem:
+            err("gate: %s\n" % problem)
+            return 2
     path = Path(os.environ.get("FLOW_DIR") or "plans") / feature / "commands.md"
     if not path.is_file():
         out("gate: no commands.md for " + feature + ", nothing to run\n")
@@ -67,7 +85,10 @@ def run(feature, out, err):
         out("gate: " + key + ": " + cmd + "\n")
         with tempfile.TemporaryFile() as log:
             args, use_shell = shell(cmd)
-            code = subprocess.call(args, shell=use_shell, stdout=log, stderr=subprocess.STDOUT)
+            code, timed_out = proc.run(args, use_shell, log, timeout)
+            if timed_out:
+                out("gate: %s timed out after %s minutes, stopped: %s\n" % (key, format(timeout, "g"), cmd))
+                return 1
             if code != 0:
                 log.seek(0)
                 out("gate: " + key + " failed. the last lines of its output:\n")
