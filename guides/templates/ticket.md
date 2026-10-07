@@ -18,6 +18,12 @@ is being converted and what the safe default is for anything that does not match
 - <an observable outcome, with the exact command and the result it should print>
 - <every bullet is checkable by someone who has not read the rest of the plan>
 
+```check
+# The conductor runs this block before review. One `$` line per bullet that names a command.
+$ <the command from a bullet, read-only, run from the repo's top folder>
+prints <text the output must contain>
+```
+
 ## Reference
 
 - spec.md § <section>

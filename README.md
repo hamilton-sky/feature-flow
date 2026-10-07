@@ -85,16 +85,26 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
    plan touched beyond own Status + Answer + appended lines?        │
                                               │ clean               │
                                               ▼                     │
- fresh reviewer subagent: sees only the ticket + diff,              │
- re-runs every Done when                                      FAIL ─┤
+ Done when checks (script): runs every ```check block          fail ─┤
+ test-first check (script): Test first: yes needs a test-only        │
+   commit that failed Test before the code                     fail ─┤
+                                              │ pass                │
+                                              ▼                     │
+ spec review: fresh reviewer subagent, sees only the ticket         │
+ + diff, re-runs every Done when                              FAIL ─┤
+                                              │ PASS                │
+                                              ▼                     │
+ quality review: a second fresh reviewer subagent             FAIL ─┤
                                               │ PASS                ▼
                                               ▼        findings written into the ticket,
-                                     next ticket       reopened, built again (3 rounds max)
+                                     next ticket       reopened, built again (3 rounds max);
+                                                       the builder's prompt then carries
+                                                       a root-cause debugging guide
 ```
 
 `scripts/flow.py` is the conductor. The session asks it `next`, and it answers with one line: `BUILD`, `REVIEW`, `DONE`, `STOP` or `HANDOFF`. It prints the full prompt for each subagent from runtime-neutral guides, so the session never writes one itself.
 
-**What the script checks and what it trusts.** The conductor verifies the build from the repo: the ticket file must say `resolved`, the tree must be clean and committed, and it runs the gate and the floor guard itself. It also checks that the reviewer changed no tracked file and made no commit. The review verdict is different: the reviewer's reply is relayed by the session, which saves it to a file and hands it to `flow.py verdict`. The script reads `REVIEW: PASS` or `REVIEW: FAIL` from that reply; it cannot prove the session passed it on unedited.
+**What the script checks and what it trusts.** The conductor verifies the build from the repo: the ticket file must say `resolved`, the tree must be clean and committed, and it runs the gate and the floor guard itself. It also runs the `check` block under each ticket's Done when and compares the exit code and printed text, and for a `Test first: yes` ticket it proves the red test commit itself: it checks out the test-only commit, runs Test, and requires it to fail before the code. A failure of either goes back to the builder before any reviewer is started. It also checks that the reviewer changed no tracked file and made no commit. The review verdicts are different: each reviewer's reply (spec review, then quality review) is relayed by the session, which saves it to a file and hands it to `flow.py verdict`. The script reads `REVIEW: PASS` or `REVIEW: FAIL` from that reply; it cannot prove the session passed it on unedited. A ticket moves on only after two PASS verdicts.
 
 ## The skill and the roles
 
@@ -134,7 +144,7 @@ plans/
 
 One markdown file per ticket in `plans/<feature>/tasks/NN-slug.md`:
 
-```
+````
 # Add the retry policy to the job runner
 
 Type: task                 task | settle | convert
@@ -147,9 +157,14 @@ Floor: allow config        optional, only when a human decides the guard may let
 
 ## Not in this ticket
 ## Done when                 commands and the results they print
+```check
+$ python3 -m unittest discover -s tests/py
+exit 0
+prints OK
+```
 ## Reference
 ## Answer                    Built, Proof, Decisions, Shortcuts taken, Review fixes, For later tickets
-```
+````
 
 - **Order comes from `Blocked by`**, not from numbers. A ticket is *ready* when it is open and every ticket it is blocked by is resolved. Lowest number wins.
 - **Status lives only in the ticket files.** `map.md` never repeats it.
@@ -221,14 +236,14 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops |
-| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket |
+| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks |
 | `FLOW_GATE_TIMEOUT` | `30` | minutes each gate command and the smoke test may run; `0` means no limit. A failed smoke test writes `.feature-flow/state/<feature>.smoke.log` |
 | `FLOW_SMOKE` | the `Smoke:` line of `commands.md` | command run before every ticket; the run stops if it fails |
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
 | `FLOW_NO_OPEN` | unset | `1` makes `flow-view.py` never open a browser |
 | `FLOW_WATCH_SECONDS` | `3` | how often `flow-view.py --watch` rewrites the page |
 
-The run also stops on its own after a number of phases (`BUILD` and `REVIEW` hand-outs) that grows with the ticket count, recomputed at every pick, so a loop of failures cannot go on forever.
+The run also stops on its own after a number of phases (`BUILD` and `REVIEW` hand-outs, the spec review and the quality review each counting as one) that grows with the ticket count, recomputed at every pick, so a loop of failures cannot go on forever.
 
 ## What is tested
 
@@ -255,7 +270,7 @@ bash tests/run.sh
 python3 -m unittest discover -s tests/py
 ```
 
-Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, and the acceptance harness. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
+Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, the Done when checks, the test-first check, the two reviews and the debugging guide on a send-back, and the acceptance harness. `tests/run.sh` also drives a prepared demo with no model through both checks and both reviews. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
 
 A `package` job builds the wheel and the sdist and runs `tests/package_smoke.py` on Ubuntu (Python 3.9 and the latest), macOS and Windows: it installs the wheel in a fresh virtual environment, runs `feature-flow install`, and checks that the repo gets the same files as from `install.py` in a clone. Run it locally with `python3 -m pip install build && python3 tests/package_smoke.py`.
 

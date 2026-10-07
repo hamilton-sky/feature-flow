@@ -1,6 +1,6 @@
 ---
 name: feature-flow
-description: Use to plan a feature (from the conversation so far, with a fresh planner and plan reviewer subagent) or build its tickets, one fresh builder and one fresh reviewer subagent per ticket, with scripts/flow.py deciding every step. Also draws the ticket graph with show.
+description: Use to plan a feature (from the conversation so far, with a fresh planner and plan reviewer subagent) or build its tickets, a fresh builder subagent per build and a fresh reviewer subagent per review pass, with scripts/flow.py deciding every step. Also draws the ticket graph with show.
 argument-hint: "[feature] [show] [auto]"
 disable-model-invocation: true
 ---
@@ -41,7 +41,7 @@ If `start` prints `STOP` naming another owner, another session may still be work
 
 If the user says the flow is stuck on a ticket or asks for a reset, run `reset` (or `reset <NN>` to redo one ticket): it reopens a half-built ticket, commits that, and clears the run, then run `start` again. It needs `FLOW_TAKEOVER=1` while a session owns the feature, on the same clear yes. Never reset on your own.
 
-Say what will happen: for each ticket, a builder subagent and then a reviewer subagent. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given or you came straight from planning: the plan's yes already covered the build.
+Say what will happen: for each ticket, a builder subagent and then a fresh reviewer subagent for each review pass. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given or you came straight from planning: the plan's yes already covered the build.
 
 ## The loop
 

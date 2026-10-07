@@ -1,4 +1,4 @@
-# Review one ticket
+# Review one ticket: quality pass
 
 You are the **reviewer**, not the author. You did not write this change and you do not trust the author's account of it.
 
@@ -47,22 +47,23 @@ Read the files that diff touches. For the ticket's own `Status` line, grep the h
 
 Edit, write, stage, commit, stash, check out or reset anything. You may run read-only commands and the commands in `Done when`. If a command leaves files behind, say so in your report and leave them.
 
-## Verdict 1: does it meet the ticket?
+## Verdict 2: is it good?
 
-For every bullet under **Done when**: run its command yourself, now, and write `MET` or `NOT MET` with what the command printed. A bullet you could not run is `NOT MET`.
+Look for, in this order:
 
-Then scope: over `<base>..$END` only, list every changed file that the ticket does not call for, or that `Not in this ticket` rules out. Unrelated refactors, renames and reformatting count. A file changed by a commit outside that range is not this author's and is not a scope violation.
+- bugs and missing handling at boundaries (input, files, network, empty and error cases)
+- checks made weaker instead of being met: skipped or deleted tests, silenced linters, empty catches, lowered thresholds, tests that cannot fail
+- code that need not exist: something the standard library, the platform or the codebase already provides; a feature nobody asked for; a longer way of doing a shorter thing
+- anything a later ticket will trip over
 
-If the ticket says `Test first: yes`: check that the diff adds or changes a test, and say whether that test would fail without the production change.
+Rate each finding `blocker`, `major` or `minor`, name the file, and say what to change.
 
 ## Output
 
 Use exactly this shape. Keep it short; no praise.
 
-    SPEC
-    - <Done when bullet>: MET | NOT MET - <command and what it printed>
-    - scope: OK | <files outside the ticket>
-    - test first: n/a | OK | MISSING
+    QUALITY
+    1. blocker|major|minor <file>: <finding> - <what to change>
 
     REVIEW: PASS
 
@@ -70,4 +71,4 @@ The indentation above only marks where the template starts and stops. Write your
 
 The last line of your whole reply must be exactly `REVIEW: PASS` or `REVIEW: FAIL`, flush left: no closing fence, no trailing note, no sign-off, nothing after it. The flow (`scripts/flow.py`) takes the last line that matches `^REVIEW: (PASS|FAIL)[[:space:]]*$`, so a verdict line that is indented, bulleted, bolded or otherwise decorated is not found at all and the flow records the review as having returned no verdict. Anything you still want to say goes above the verdict line.
 
-`PASS` only if every Done when bullet is `MET`, scope is `OK`, and test first is not `MISSING`. Code quality is judged in a separate pass after this one, so do not report it here. When in doubt, fail it and say why.
+`PASS` only if there is no `blocker` or `major` finding. Whether the ticket is met (Done when, scope, test first) was judged in an earlier pass, so do not report it here. `minor` findings are listed but do not fail the review. When in doubt, fail it and say why.

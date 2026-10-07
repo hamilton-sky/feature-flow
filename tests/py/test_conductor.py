@@ -187,20 +187,23 @@ class GuardWarning(unittest.TestCase):
 
     def test_a_removed_assertion_reaches_the_reviewer_as_a_warning(self):
         prompt = self.build("def test_x():\n    pass\n")
-        self.assertIn("The floor guard warns: warning: 1 assertion line(s) removed, 0 added.", prompt)
+        self.assertIn("The conductor notes: warning: 1 assertion line(s) removed, 0 added.", prompt)
         self.assertIn("GUARD-PASS", self.repo.log())
-        self.assertEqual(self.repo.state()["guard_warning"].count("warning:"), 1)
+        self.assertEqual(self.repo.state()["review_notes"].count("warning:"), 1)
 
     def test_no_removed_assertion_no_warning_text(self):
         prompt = self.build("def test_x():\n    assert 1\n    assert 2\n")
-        self.assertNotIn("The floor guard warns", prompt)
+        self.assertNotIn("warning:", prompt)
 
     def test_the_warning_is_cleared_when_the_next_ticket_is_picked(self):
         self.build("def test_x():\n    pass\n")
-        self.repo.flow("verdict", self.write_verdict())
+        verdict = self.write_verdict()
+        self.repo.flow("verdict", verdict)
+        self.assertTrue(self.repo.flow("next")[1].startswith("REVIEW %s 01 " % T1))
+        self.repo.flow("verdict", verdict)
         rc, out = self.repo.flow("next")
         self.assertTrue(out.startswith("BUILD %s 02 " % T2), out)
-        self.assertEqual(self.repo.state().get("guard_warning", ""), "")
+        self.assertEqual(self.repo.state().get("review_notes", ""), "")
 
     def write_verdict(self):
         path = self.repo.dir.parent / (self.repo.dir.name + "-verdict.txt")
@@ -242,6 +245,8 @@ class StateOutsideGit(unittest.TestCase):
         self.assertEqual(self.flow("next", **env)[0], 1, "a call without the owner's token stops")
         self.assertTrue(self.flow("next", FLOW_SESSION=token, **env)[1].startswith("BUILD %s 01 " % T1))
         self.repo.resolve(T1)
+        self.assertTrue(self.flow("next", FLOW_SESSION=token, **env)[1].startswith("REVIEW %s 01 " % T1))
+        self.review_pass(token, **env)
         self.assertTrue(self.flow("next", FLOW_SESSION=token, **env)[1].startswith("REVIEW %s 01 " % T1))
         self.review_pass(token, **env)
         self.assertEqual(self.flow("next", FLOW_SESSION=token, **env), (0, "HANDOFF $feature-flow f"))
@@ -287,13 +292,15 @@ class RunLimit(unittest.TestCase):
         full = int(self.repo.state()["limit"])
         state = self.repo.path(".feature-flow/state/flow-f.state")
         text = state.read_text(encoding="utf-8")
-        state.write_text(text.replace("limit=%d" % full, "limit=2"), encoding="utf-8")
-        self.assertEqual(self.repo.state()["limit"], "2")
+        state.write_text(text.replace("limit=%d" % full, "limit=3"), encoding="utf-8")
+        self.assertEqual(self.repo.state()["limit"], "3")
         self.repo.resolve(T1)
         self.assertEqual(self.repo.flow("next")[1][:6], "REVIEW")
         path = self.repo.dir.parent / (self.repo.dir.name + "-verdict.txt")
         path.write_text("fine\nREVIEW: PASS\n", encoding="utf-8")
         self.addCleanup(path.unlink)
+        self.repo.flow("verdict", str(path))
+        self.assertEqual(self.repo.flow("next")[1][:6], "REVIEW")
         self.repo.flow("verdict", str(path))
         rc, out = self.repo.flow("next")
         self.assertTrue(out.startswith("BUILD %s 02 " % T2), out)

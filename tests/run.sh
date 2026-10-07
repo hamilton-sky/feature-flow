@@ -645,11 +645,14 @@ pyflow f verdict .git/reply.txt
 expect_has "a PASS reply is recorded" "OK" "$OUT"
 expect_has "and logged" "VERDICT-PASS" "$(cat .feature-flow/state/flow-f.log)"
 pyflow f next
-expect_has "after PASS next hands out the next ticket" "BUILD plans/f/tasks/02-b.md 02" "$OUT"
+expect_has "after the spec PASS next hands out the quality review" "REVIEW plans/f/tasks/01-a.md 01" "$OUT"
+pyflow f verdict .git/reply.txt
+pyflow f next
+expect_has "after the quality PASS next hands out the next ticket" "BUILD plans/f/tasks/02-b.md 02" "$OUT"
 pyflow f verdict .git/reply.txt
 expect_rc "verdict after the review was judged exits 2" 2 "$RC"
 for t in 02-b 03-c 04-d; do
-  resolve "plans/f/tasks/$t.md"; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next
+  resolve "plans/f/tasks/$t.md"; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next
 done
 expect_rc "on the last ticket next exits 0" 0 "$RC"
 expect_has "and prints DONE" "DONE f is complete" "$OUT"
@@ -664,14 +667,14 @@ REVIEW: FAIL"
   pyflow f verdict .git/reply.txt; pyflow f next
   if [ "$r" = 1 ]; then
     expect_has "a FAIL reply builds the ticket again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
-    expect_has "with the reply under its findings heading" "## Review findings (round 1, independent review)" "$(cat plans/f/tasks/01-a.md)"
+    expect_has "with the reply under its findings heading" "## Review findings (round 1, spec review)" "$(cat plans/f/tasks/01-a.md)"
     expect_has "and the reviewer's text" "major x.py: a bug round 1" "$(cat plans/f/tasks/01-a.md)"
     expect_has "committed" "chore(f): 01 review findings, round 1" "$(git log -1 --format=%s)"
     expect_has "and logged" "VERDICT-FAIL" "$(cat .feature-flow/state/flow-f.log)"
   fi
 done
 expect_rc "the 4th review failure exits 1" 1 "$RC"
-expect_has "and stops after 3 rounds" "STOP 01-a still fails the independent review after 3 round(s)" "$OUT"
+expect_has "and stops after 3 rounds" "STOP 01-a still fails the spec review after 3 round(s)" "$OUT"
 
 D="$(flowrepo pyflow_noverdict)"
 cd "$D" || exit 1
@@ -702,10 +705,10 @@ expect_has "and stops" "STOP the reviewer changed tracked files, which a reviewe
 D="$(flowrepo pyflow_runlimit)"
 cd "$D" || exit 1
 pyflow f next; resolve plans/f/tasks/01-a.md
-sed 's/^runs=.*/runs=65/' .feature-flow/state/flow-f.state > .feature-flow/state/flow-f.state.new && mv .feature-flow/state/flow-f.state.new .feature-flow/state/flow-f.state
+sed 's/^runs=.*/runs=97/' .feature-flow/state/flow-f.state > .feature-flow/state/flow-f.state.new && mv .feature-flow/state/flow-f.state.new .feature-flow/state/flow-f.state
 pyflow f next
 expect_rc "passing the run limit exits 1" 1 "$RC"
-expect_has "and stops" "STOP run limit of 65 phases reached, stopping" "$OUT"
+expect_has "and stops" "STOP run limit of 97 phases reached, stopping" "$OUT"
 
 D="$(flowrepo pyflow_noreview)"
 cd "$D" || exit 1
@@ -756,6 +759,7 @@ export FLOW_TICKETS_PER_SESSION=1
 pyflow f start; export FLOW_SESSION="${OUT#OK }"
 pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
 printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
+pyflow f next; pyflow f verdict .git/reply.txt
 pyflow f next
 expect_rc "after FLOW_TICKETS_PER_SESSION tickets next exits 0" 0 "$RC"
 expect_has "and hands off" "HANDOFF /feature-flow f" "$OUT"
@@ -764,7 +768,7 @@ expect_rc "the owner is cleared" 1 "$(grep -cx "owner=" .feature-flow/state/flow
 pyflow f start; export FLOW_SESSION="${OUT#OK }"
 pyflow f next
 expect_has "the next session gets the held-back BUILD" "BUILD plans/f/tasks/02-b.md 02 $(git rev-parse HEAD)" "$OUT"
-resolve plans/f/tasks/02-b.md; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next
+resolve plans/f/tasks/02-b.md; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next
 expect_has "on the last ticket it is DONE, not HANDOFF" "DONE f is complete" "$OUT"
 expect_rc "and DONE clears the owner" 1 "$(grep -cx "owner=" .feature-flow/state/flow-f.state)"
 unset FLOW_SESSION FLOW_TICKETS_PER_SESSION
@@ -773,6 +777,7 @@ D="$(flowrepo pyflow_invoke)"
 cd "$D" || exit 1
 pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
 printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
+pyflow f next; pyflow f verdict .git/reply.txt
 OUT="$(FLOW_TICKETS_PER_SESSION=1 FLOW_INVOKE='$feature-flow' python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "FLOW_INVOKE sets the line to type" 'HANDOFF $feature-flow f' "$OUT"
 
@@ -795,12 +800,18 @@ seq="$(cut -d, -f3 .feature-flow/state/flow-f.log | grep -E '^(BUILD|REVIEW|HAND
 expect_has "relay: the log shows BUILD, HANDOFF, REVIEW, HANDOFF" "BUILD HANDOFF REVIEW HANDOFF " "$seq"
 pyflow f start; export FLOW_SESSION="${OUT#OK }"
 pyflow f next
-expect_has "relay: the third session gets the next ticket" "BUILD plans/f/tasks/02-b.md 02" "$OUT"
+expect_has "relay: the third session gets the quality REVIEW" "REVIEW plans/f/tasks/01-a.md 01" "$OUT"
+pyflow f verdict .git/reply.txt
+pyflow f next
+expect_has "relay: after the quality REVIEW it hands off" "HANDOFF /feature-flow f" "$OUT"
+pyflow f start; export FLOW_SESSION="${OUT#OK }"
+pyflow f next
+expect_has "relay: the fourth session gets the next ticket" "BUILD plans/f/tasks/02-b.md 02" "$OUT"
 unset FLOW_SESSION FLOW_RELAY
 cd "$ROOT" || exit 1
 
 echo "flow.py, guides and prompt"
-for g in build review plan show brief plan-review; do
+for g in build review plan show brief plan-review debug; do
   if [ -f "$ROOT/guides/$g.md" ]; then ok "guides/$g.md exists"; else bad "guides/$g.md exists"; fi
   n="$(grep -cE '\$ARGUMENTS|(^|[^$])/feature-flow|\$feature-flow' "$ROOT/guides/$g.md")"
   expect_rc "guides/$g.md names no runtime's skill invocation" 0 "$n"
@@ -833,7 +844,8 @@ expect_has "and the review guide" "Verdict 1: does it meet the ticket?" "$OUT"
 expect_has "and the base sha" "$SHA" "$OUT"
 for ph in '<ticket>' '<NN>' '<sha>'; do expect_lacks "no $ph placeholder is left in the review prompt" "$ph" "$OUT"; done
 printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
-for t in 02-b 03-c 04-d; do pyflow f next; resolve "plans/f/tasks/$t.md"; pyflow f next; pyflow f verdict .git/reply.txt; done
+pyflow f next; pyflow f verdict .git/reply.txt
+for t in 02-b 03-c 04-d; do pyflow f next; resolve "plans/f/tasks/$t.md"; pyflow f next; pyflow f verdict .git/reply.txt; pyflow f next; pyflow f verdict .git/reply.txt; done
 pyflow f next
 expect_has "the run finishes" "DONE" "$OUT"
 pyflow f prompt
@@ -922,6 +934,49 @@ expect_has "and says so" "  FAIL  session 1 ended without HANDOFF, DONE or STOP"
 expect_has "and prints the recovery command" "FLOW_TAKEOVER=1 FLOW_TICKETS_PER_SESSION=1 claude " "$out"
 expect_rc "and starts no second session" 1 "$(wc -l < "$TMP/silent.calls" | tr -d ' ')"
 expect_has "the session is started as a user would type it" '-p /feature-flow hello auto --allowedTools' "$(cat "$TMP/silent.calls")"
+
+echo "smoke-real.sh, the prepared demo driven through the checks"
+HELLO_TEST=$'import unittest\nfrom hello import greet\n\n\nclass T(unittest.TestCase):\n    def test_greet(self):\n        self.assertEqual(greet("Ada"), "Hello, Ada!")\n'
+HELLO_CODE=$'def greet(name):\n    return "Hello, %s!" % name\n'
+drive_log() { cat .feature-flow/state/flow-hello.log; }
+vreply() { printf 'SPEC\n- checked\n%s\n' "$1" > .git/reply.txt; }
+resolve_hello() { setst resolved plans/hello/tasks/01-greet-function.md; }
+P3="$TMP/drive_ok"
+bash "$SM" --prepare "$P3" > /dev/null 2>&1
+cd "$P3" || exit 1
+OUT="$(python3 scripts/flow.py hello start 2> /dev/null)"; export FLOW_SESSION="${OUT#OK }"
+pyflow hello next
+BASE="$(git rev-parse HEAD)"
+expect_has "the demo drive: next hands out BUILD for 01" "BUILD plans/hello/tasks/01-greet-function.md 01" "$OUT"
+printf '%s' "$HELLO_TEST" > test_hello.py; git add -A; git commit -qm "test: greet"
+printf '%s' "$HELLO_CODE" > hello.py; resolve_hello; git add -A; git commit -qm "feat: greet"
+pyflow hello next
+expect_has "the demo reaches REVIEW with the checks on" "REVIEW plans/hello/tasks/01-greet-function.md 01 $BASE" "$OUT"
+log="$(drive_log)"
+expect_has "and the log has GATE-PASS" ",01,GATE-PASS" "$log"
+expect_has "and GUARD-PASS" ",01,GUARD-PASS" "$log"
+expect_has "and DONEWHEN-PASS" ",01,DONEWHEN-PASS" "$log"
+expect_has "and TESTFIRST-PASS" ",01,TESTFIRST-PASS" "$log"
+vreply "REVIEW: PASS"
+pyflow hello verdict .git/reply.txt; pyflow hello next
+expect_has "after one PASS the demo gets its second REVIEW" "REVIEW plans/hello/tasks/01-greet-function.md 01 $BASE" "$OUT"
+pyflow hello verdict .git/reply.txt; pyflow hello next
+expect_has "after the second PASS it gets BUILD for 02" "BUILD plans/hello/tasks/02-command-line.md 02" "$OUT"
+unset FLOW_SESSION
+cd "$ROOT" || exit 1
+
+P4="$TMP/drive_together"
+bash "$SM" --prepare "$P4" > /dev/null 2>&1
+cd "$P4" || exit 1
+OUT="$(python3 scripts/flow.py hello start 2> /dev/null)"; export FLOW_SESSION="${OUT#OK }"
+pyflow hello next
+printf '%s' "$HELLO_TEST" > test_hello.py; printf '%s' "$HELLO_CODE" > hello.py; resolve_hello; git add -A; git commit -qm "feat: greet with its test"
+pyflow hello next
+expect_has "the demo with test and code in one commit is built again" "BUILD plans/hello/tasks/01-greet-function.md 01" "$OUT"
+expect_has "with a test first finding" "test first" "$(cat plans/hello/tasks/01-greet-function.md)"
+expect_has "and TESTFIRST-FAIL in the log" ",01,TESTFIRST-FAIL" "$(drive_log)"
+unset FLOW_SESSION
+cd "$ROOT" || exit 1
 
 echo
 echo "$PASS passed, $FAILS failed"

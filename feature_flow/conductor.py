@@ -10,9 +10,10 @@ import secrets
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, gate, git, prompts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, gate, git, prompts, proof, state, suggest, tickets
 
 
+NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
 
 
@@ -120,7 +121,7 @@ class Conductor:
         for word in result.out.split():
             if word.startswith("total="):
                 total = int(word[len("total="):])
-        return total * 2 * self.max_retries * (self.max_rounds + 1) + 1
+        return total * 3 * self.max_retries * (self.max_rounds + 1) + 1
 
     def count_run(self):
         runs = self.num("runs") + 1
@@ -142,6 +143,7 @@ class Conductor:
     def hand_out_review(self):
         self.count_run()
         self.st["phase"] = "review"
+        self.st["review_pass"] = self.get("review_pass") or "spec"
         self.st["review_attempt"] = self.num("review_attempt") + 1
         self.st["review_sha"] = git.head()
         self.st["relay_handoff"] = "1" if self.relay else ""
@@ -162,6 +164,7 @@ class Conductor:
                        % (source, self.ticket_name()))
         self.st["attempt"] = 0
         self.st["review_attempt"] = 0
+        self.st["review_pass"] = "spec"
         return self.hand_out_build()
 
     def pick_ticket(self):
@@ -190,7 +193,7 @@ class Conductor:
         path = nxt.out.strip().splitlines()[-1]
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
-                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "guard_warning": ""})
+                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec"})
         self.snapshot_code()
         self.run_smoke()
         return self.hand_out_build()
@@ -242,8 +245,69 @@ class Conductor:
         if not result.ok:
             return self.send_back("floor guard", result.out)
         warnings = [l for l in result.out.splitlines() if l.startswith("warning:")]
-        self.st["guard_warning"] = warnings[0] if warnings else ""
+        notes = warnings[:1]
+        if self.gate_on:
+            report, note = self.run_done_when()
+            if report is not None:
+                return self.send_back("done when", report)
+            notes.append(note)
+            report, note = self.run_test_first()
+            if report is not None:
+                return self.send_back("test first", report)
+            if note:
+                notes.append(note)
+        self.st["review_notes"] = NOTE_SEP.join(notes)
         return self.hand_out_review()
+
+    def ticket_at_base(self):
+        """The ticket text as it was at the base commit, so a builder cannot change what is checked."""
+        rel = proof.repo_relative(self.ticket())
+        listed = git._git("ls-tree", "--name-only", self.get("base"), "--", rel, check=False)
+        if listed.returncode != 0:
+            raise Stop("cannot read %s at the base commit: %s" % (rel, listed.stderr.strip()))
+        if listed.stdout.strip():
+            return git.show_text("%s:%s" % (self.get("base"), rel))
+        text = Path(self.ticket()).read_text(encoding="utf-8")
+        return text.split("\n## Answer", 1)[0]
+
+    def run_done_when(self):
+        """Run the ticket's check block. Returns (failure report or None, note for the reviewer)."""
+        try:
+            found = proof.checks_in(self.ticket_at_base())
+        except proof.ParseError as err:
+            raise Stop("%s has a check block the conductor cannot read: %s" % (self.ticket_name(), err))
+        if not found:
+            self.log("DONEWHEN-SKIP")
+            return None, "the conductor ran no Done when checks: the ticket has no check block"
+        ok, report = proof.run_checks(found, self.gate_timeout)
+        dirty = git.changes()
+        if dirty:
+            raise Stop("a Done when check of %s changed the working tree: %s. a check command must not change it"
+                       % (self.ticket_name(), " ".join(dirty[:5])))
+        self.log("DONEWHEN-PASS" if ok else "DONEWHEN-FAIL")
+        if not ok:
+            return report, ""
+        return None, "the conductor ran %d Done when check(s) and all passed" % len(found)
+
+    def run_test_first(self):
+        """For a `Test first: yes` ticket, prove a test-only commit failed the Test command.
+        Returns (failure report or None, note for the reviewer or "")."""
+        if not proof.wants_test_first(self.ticket_at_base()):
+            return None, ""
+        test = tickets.commands_value(self.commands, "Test")
+        if not test:
+            self.log("TESTFIRST-SKIP")
+            return None, "the conductor did not check test first: commands.md has no Test command"
+
+        def remember(value):
+            self.st["restore"] = value
+            self.save()
+        try:
+            ok, text = proof.test_first(self.get("base"), test, self.plan, self.gate_timeout, remember)
+        except proof.GitError as err:
+            raise Stop("test first check of %s: %s" % (self.ticket_name(), err))
+        self.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")
+        return (None, text) if ok else (text, "")
 
     # ---- commands ------------------------------------------------------
 
@@ -278,6 +342,14 @@ class Conductor:
 
     def next(self):
         self.check_owner()
+        if self.get("restore"):
+            try:
+                git._git("checkout", "-q", self.get("restore"))
+            except RuntimeError as err:
+                raise Stop("cannot put the working copy back after the test first check: %s. run `git checkout %s` "
+                           "by hand" % (err, self.get("restore")))
+            self.st["restore"] = ""
+            self.save()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
         if self.get("relay_handoff") == "1":
@@ -338,6 +410,10 @@ class Conductor:
             raise Stop("the reviewer changed tracked files, which a reviewer must never do")
         verdict = self.get("verdict")
         self.st["verdict"] = ""
+        if verdict == "pass" and self.get("review_pass", "spec") != "quality":
+            self.st["review_pass"] = "quality"
+            self.st["review_attempt"] = 0
+            return self.hand_out_review()
         if verdict == "pass":
             self.st["phase"] = ""
             self.st["done"] = self.num("done") + 1
@@ -346,7 +422,8 @@ class Conductor:
             return self.pick_ticket()
         if verdict == "fail":
             findings = self.findings_file.read_text(encoding="utf-8") if self.findings_file.is_file() else ""
-            return self.send_back("independent review", findings)
+            return self.send_back("quality review" if self.get("review_pass") == "quality" else "spec review",
+                                  findings)
         if self.num("review_attempt") >= self.max_retries:
             raise Stop("no review verdict for %s after %d attempt(s)" % (self.ticket_name(), self.max_retries))
         return self.hand_out_review()
@@ -358,8 +435,11 @@ class Conductor:
         if phase not in ("build", "review"):
             raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
         try:
+            if phase == "review" and self.get("review_pass") == "quality":
+                phase = "review-quality"
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
-                                 self.get("guard_warning") if phase == "review" else "")
+                                 [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase != "build" else (),
+                                 retry=self.num("round") > 0)
         except FileNotFoundError as err:
             raise Stop(str(err))
 

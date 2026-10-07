@@ -111,6 +111,11 @@ Create `hello.py` in the repo root with a function `greet(name)` that returns `H
 - `python3 -m unittest test_hello` exits 0 and prints OK.
 - `python3 -c "from hello import greet; assert greet('Ada') == 'Hello, Ada!'"` exits 0.
 
+```check
+$ python3 -m unittest test_hello
+$ python3 -c "from hello import greet; assert greet('Ada') == 'Hello, Ada!'"
+```
+
 ## Reference
 
 - spec.md
@@ -137,6 +142,12 @@ Make `python3 hello.py <name>` print the greeting, using `greet`.
 
 - `python3 hello.py Ada` prints exactly `Hello, Ada!`.
 - `python3 -m unittest test_hello` still exits 0.
+
+```check
+$ python3 hello.py Ada
+prints Hello, Ada!
+$ python3 -m unittest test_hello
+```
 
 ## Reference
 
@@ -193,8 +204,9 @@ check "both tickets are resolved" 'python3 scripts/flow-status.py hello --next; 
 check "the tree is clean" '[ -z "$(git status --porcelain)" ]'
 check "each ticket landed as a commit" '[ "$(git rev-list --count HEAD)" -ge 3 ]'
 for t in 01 02; do
-  for e in BUILD GATE-PASS GUARD-PASS REVIEW VERDICT-PASS; do check "ticket $t: the log has $e" "has $t $e"; done
+  for e in BUILD GATE-PASS GUARD-PASS DONEWHEN-PASS REVIEW VERDICT-PASS; do check "ticket $t: the log has $e" "has $t $e"; done
 done
+check "ticket 01: the log has TESTFIRST-PASS" "has 01 TESTFIRST-PASS"
 check "the first session handed off once, between the tickets" '[ "$(grep -c ",HANDOFF$" .feature-flow/state/flow-hello.log)" = 1 ] && [ "$(grep -n ",HANDOFF$" .feature-flow/state/flow-hello.log | cut -d: -f1)" -lt "$(grep -n ",02,BUILD$" .feature-flow/state/flow-hello.log | head -1 | cut -d: -f1)" ]'
 echo
 cat .feature-flow/state/flow-hello.log
