@@ -21,6 +21,8 @@
 
 01 - feature-planner and plan-reviewer role files added; the installer picks them up unchanged.
 02 - guides/brief.md (session), guides/plan.md (planner, draft folder) and guides/plan-review.md (reviewer) written; ticket rules unchanged apart from rule 12's wording.
+03 - plan-prompt and plan-review-prompt serve the planner and reviewer prompts; the brief is saved in the state folder, the draft is .feature-flow/state/draft/<feature>/.
+04 - plan-accept copies a checked draft into the plan folder, never overwriting and never committing.
 
 ## Open questions
 
