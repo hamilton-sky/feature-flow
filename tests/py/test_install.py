@@ -110,6 +110,7 @@ class RunTests(unittest.TestCase):
     def test_a_user_level_upgrade_replaces_a_skill_nobody_edited(self):
         home = Path(self.tmp.name) / "home"
         os.environ["CLAUDE_HOME"] = str(home / ".claude")
+        os.environ["AGENTS_HOME"] = str(home / ".agents")
         try:
             self.run_install("--user")
             record = home / ".claude" / "feature-flow.sha256"
@@ -121,9 +122,11 @@ class RunTests(unittest.TestCase):
             _, out, _ = self.run_install("--user")
         finally:
             del os.environ["CLAUDE_HOME"]
+            del os.environ["AGENTS_HOME"]
         self.assertIn("  update  %s/skills/feature-flow/SKILL.md" % (home / ".claude"), out)
         self.assertNotIn(b"earlier version", skill.read_bytes())
         self.assertNotIn("skills/feature-flow", (self.target / ".feature-flow" / "installed.txt").read_text())
+        self.assertFalse((home / ".agents").exists())
 
     def test_an_install_into_a_git_repo_says_how_to_commit_it(self):
         helpers.subprocess.run(["git", "init", "-q", str(self.target)], check=True)

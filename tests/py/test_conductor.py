@@ -98,6 +98,20 @@ class BuildAndChecks(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual((rc, out), (0, "BUILD %s 01 %s" % (T1, self.repo.head())))
 
+    def test_an_edited_install_file_is_a_change_even_while_untracked(self):
+        import hashlib
+        skill = self.repo.path(".agents/skills/feature-flow/SKILL.md")
+        skill.parent.mkdir(parents=True)
+        skill.write_bytes(b"edited\n")
+        self.repo.path(".feature-flow").mkdir()
+        self.repo.path(".feature-flow/installed.txt").write_text(
+            ".agents/skills/feature-flow/SKILL.md\n", encoding="utf-8")
+        self.repo.path(".feature-flow/installed.sha256").write_text(
+            "%s  .agents/skills/feature-flow/SKILL.md\n" % hashlib.sha256(b"new\n").hexdigest(), encoding="utf-8")
+        rc, out = self.repo.flow("next")
+        self.assertEqual((rc, out), (1, "STOP working tree is not clean, commit or stash first: "
+                                        ".agents/skills/feature-flow/SKILL.md"))
+
     def test_the_install_records_are_never_a_dirty_tree(self):
         self.repo.path(".feature-flow").mkdir()
         self.repo.path(".feature-flow/installed.txt").write_text("scripts/flow.py\n", encoding="utf-8")

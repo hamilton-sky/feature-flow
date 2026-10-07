@@ -46,7 +46,8 @@ def _read_lines(path):
 def changes():
     """Every changed path, untracked files included, as `git status --porcelain` sees them, except
     feature-flow's own install: a file still exactly as the installer wrote it, an untracked file it
-    lists (an install from before it kept hashes), and its two record files, which every install rewrites."""
+    lists without a hash (an install from before it kept hashes), and its two record files, which every
+    install rewrites."""
     listed, hashes = set(), {}
     top = toplevel()
     if top is not None:
@@ -65,9 +66,12 @@ def changes():
         code, path = entry[:2], entry[3:]
         if code[0] in "RC":
             i += 1  # the rename's source path follows
-        if path in (INSTALLED.as_posix(), HASHES.as_posix()) or (code == "??" and path in listed):
+        if path in (INSTALLED.as_posix(), HASHES.as_posix()):
             continue
-        if path in hashes and top is not None and _sha256(top / path) == hashes[path]:
+        if path in hashes:
+            if top is not None and _sha256(top / path) == hashes[path]:
+                continue
+        elif code == "??" and path in listed:
             continue
         found.append(path)
     return found

@@ -190,8 +190,10 @@ class Installer:
         self.written = {}
         # each folder this installs into, with its hash record; the target's own comes first
         self.records = [(target, HASHES)]
-        if user_level:
-            self.records += [(self.claude_dir, USER_HASHES), (self.agents_dir, USER_HASHES)]
+        if user_level and agent in ("claude", "all"):
+            self.records.append((self.claude_dir, USER_HASHES))
+        if user_level and agent in ("codex", "all"):
+            self.records.append((self.agents_dir, USER_HASHES))
         self.recorded = dict((root, self._read_hashes(root + "/" + record)) for root, record in self.records)
 
     def place(self, file, dest, data=None):
