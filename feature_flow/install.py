@@ -114,14 +114,15 @@ def role_body(data):
     out = []
     fm = skip = False
     for nr, line in enumerate(_lines(data), 1):
-        if nr == 1 and line == b"---":
+        bare = line.rstrip(b"\r")  # a Windows checkout ends its lines with \r\n
+        if nr == 1 and bare == b"---":
             fm = True
-        elif fm and line == b"---":
+        elif fm and bare == b"---":
             fm = False
             skip = True
         elif fm:
             continue
-        elif skip and line == b"":
+        elif skip and bare == b"":
             continue
         else:
             skip = False
