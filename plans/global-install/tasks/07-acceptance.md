@@ -1,7 +1,7 @@
 # Acceptance: the user install runs the flow in a fresh repo and uninstalls clean
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01, 02, 03, 04, 05, 06
 Test first: no
 
@@ -32,3 +32,13 @@ exit 0
 
 ## Answer
 
+
+**Built**: `tests/run.sh` gained an "acceptance" section after the Codex `--user` checks (7 checks, all in a temp home with HOME, CLAUDE_HOME, AGENTS_HOME, FEATURE_FLOW_HOME under it).
+
+**Proof**: `bash tests/run.sh` printed `464 passed, 0 failed`, exit 0, with the acceptance checks all `ok`: user install exit 0; `demo start` first line (`PLAN`) equal from the home conductor and from a repo-installed `scripts/flow.py`; the user repo has no `scripts/`, `.feature-flow/installed.txt` or `.claude`; `uninstall --user` exit 0, `find $HOME -type f` empty, `~/.feature-flow` gone; `python3 -m feature_flow --version` has `feature-flow 0.4.0`. `python3 -m unittest discover -s tests/py` printed `Ran 263 tests ... OK`.
+
+**Decisions**: the uninstall runs from `$ROOT` with the env set, since `-m feature_flow` needs the package on the path. The first line compared is `PLAN`, so the check is weak on content but is what the ticket asked for.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: none. Side effect: an empty stray file `/ins.txt` was created by a mistaken shell command of mine and the safety check refused to let me delete it; a human can remove it.

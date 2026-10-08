@@ -380,6 +380,23 @@ mkdir -p "$C/repo2"
 FEATURE_FLOW_HOME="$C/home/.feature-flow" AGENTS_HOME="$C/home/.agents" python3 "$ROOT/install.py" "$C/repo2" --agent codex --user > /dev/null 2>&1
 if [ -f "$C/home/.agents/skills/feature-flow/SKILL.md" ] && [ -f "$C/home/.agents/skills/feature-flow/agents/openai.yaml" ]; then ok "--user puts the Codex skills in the user folder"; else bad "--user puts the Codex skills in the user folder"; fi
 if [ -f "$C/home/.feature-flow/agents/ticket-reviewer.md" ] && [ -f "$C/home/.feature-flow/scripts/flow.py" ] && [ ! -e "$C/repo2/.agents" ] && [ ! -e "$C/repo2/scripts" ]; then ok "--user keeps roles and scripts in the home folder"; else bad "--user keeps roles and scripts in the home folder"; fi
+
+echo
+echo "acceptance: the user install runs the flow in a fresh repo and uninstalls clean"
+BAR="$TMP/bar"; mkdir -p "$BAR/home" "$BAR/a" "$BAR/b"
+git -C "$BAR/a" init -q; git -C "$BAR/b" init -q
+barenv() { env HOME="$BAR/home" CLAUDE_HOME="$BAR/home/.claude" AGENTS_HOME="$BAR/home/.agents" FEATURE_FLOW_HOME="$BAR/home/.feature-flow" "$@"; }
+barenv python3 "$ROOT/install.py" --user --agent all > /dev/null 2>&1; expect_rc "the user install succeeds" 0 $?
+FIRST_USER="$(cd "$BAR/a" && barenv python3 "$BAR/home/.feature-flow/scripts/flow.py" demo start 2> /dev/null | head -n 1)"
+(cd "$BAR/b" && python3 "$ROOT/install.py" . > /dev/null 2>&1)
+FIRST_REPO="$(cd "$BAR/b" && python3 scripts/flow.py demo start 2> /dev/null | head -n 1)"
+if [ -n "$FIRST_USER" ] && [ "$FIRST_USER" = "$FIRST_REPO" ]; then ok "demo start prints the same first line from the home conductor and the repo one"; else bad "demo start prints the same first line from the home conductor and the repo one" "'$FIRST_USER' vs '$FIRST_REPO'"; fi
+if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] && [ ! -e "$BAR/a/.claude" ]; then ok "the user-installed repo has no scripts, installed.txt or .claude"; else bad "the user-installed repo has no scripts, installed.txt or .claude"; fi
+(cd "$ROOT" && barenv python3 -m feature_flow uninstall --user > /dev/null 2>&1); expect_rc "the user uninstall succeeds" 0 $?
+LEFT="$(find "$BAR/home" -type f)"
+if [ -z "$LEFT" ]; then ok "the user uninstall leaves no files in the home"; else bad "the user uninstall leaves no files in the home" "$LEFT"; fi
+if [ ! -e "$BAR/home/.feature-flow" ]; then ok "and ~/.feature-flow is gone"; else bad "and ~/.feature-flow is gone"; fi
+expect_has "--version prints the version" "feature-flow 0.4.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"

@@ -30,3 +30,4 @@
 - 04 — the home conductor runs from a repo and the code-hash tripwire already covers the home files (no code change); `Repo(local=False)` + `repo.script` for tests.
 - 05 — both skills prefer the repo's `scripts/flow.py`, else `${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/scripts/flow.py`; install-check lines also offer `install --user`.
 - 06 — version 0.4.0; README documents `install --user` vs `install <repo>`, `FEATURE_FLOW_HOME`, and uninstall of `~/.feature-flow`.
+- 07 — acceptance section in tests/run.sh: user install and repo install give the same demo first line, user repo stays clean, uninstall --user leaves the home empty, version is 0.4.0
