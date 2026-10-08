@@ -434,18 +434,19 @@ class KilledInProcess(Base):
         return code, out.buffer.getvalue().decode("utf-8"), err.buffer.getvalue().decode("utf-8")
 
     def test_a_negative_return_code_is_a_stop_with_exit_1(self):
-        result = types.SimpleNamespace(returncode=-9, stdout=b"OK abc\n", stderr=b"oops\nflow-state f none\n")
+        """A killed conductor cannot vouch for the state it left: the STOP takes the TRUST line's place."""
+        result = types.SimpleNamespace(returncode=-9, stdout=b"OK abc\n", stderr=b"oops\n")
         code, out, err = self.run_main(result)
         self.assertEqual(code, 1, (out, err))
         lines = out.splitlines()
-        self.assertRegex(lines[0], TRUST)
-        self.assertEqual(lines[1], "OK abc")
-        self.assertEqual(lines[-1], "STOP the conductor was killed by signal 9")
+        self.assertEqual(lines[0], "STOP the conductor was killed by signal 9")
+        self.assertEqual(lines[1:], ["OK abc"])
+        self.assertNotIn("TRUST", out)
         self.assertEqual(err, "oops\n")
-        self.assertTrue(self.repo.path(".feature-flow/state/flow-f.trust").is_file())
+        self.assertFalse(self.repo.path(".feature-flow/state/flow-f.trust").exists())
 
     def test_a_normal_return_code_is_passed_through(self):
-        result = types.SimpleNamespace(returncode=3, stdout=b"STOP x\n", stderr=b"flow-state f none\n")
+        result = types.SimpleNamespace(returncode=3, stdout=b"STOP x\n", stderr=b"flow-state none none\n")
         code, out, err = self.run_main(result)
         self.assertEqual(code, 3, (out, err))
         self.assertNotIn("killed", out)
@@ -533,6 +534,223 @@ class LinkedFolders(unittest.TestCase):
         found, each = self.walk(self.fs({"feature_flow/loop": "feature_flow"}))
         self.assertEqual(found, ["feature_flow/conductor.py", "feature_flow/loop"])
         self.assertIn("feature_flow/loop", each)
+
+
+# Double quotes, which both bash -c and cmd.exe read.
+PYTHON = '"%s"' % sys.executable
+DURING = "STOP flow code changed during %s: %s"
+STATE_CHANGED = "STOP the run state was changed by something other than the conductor during %s"
+
+
+class HoleC(Base):
+    """Hole (c): the gate's Test command runs the builder's t.py inside `next`, and t.py edits
+    feature_flow/conductor.py. The code must be the same after the call as before it."""
+
+    def prepare(self):
+        self.write(self.repo.path("plans/f/commands.md"), "# Commands: f\n\nTest: `%s t.py`\n" % PYTHON)
+
+    def test_a_test_command_that_edits_the_conductor_stops(self):
+        self.begin()
+        self.write(self.repo.path("t.py"),
+                   "with open('feature_flow/conductor.py', 'ab') as handle:\n"
+                   "    handle.write(b'\\n# edited by t.py\\n')\n")
+        self.repo.resolve(T1)
+        before = self.repo.path("feature_flow/conductor.py").read_bytes()
+        rc, out, err = self.call("next")
+        self.assertNotEqual(self.repo.path("feature_flow/conductor.py").read_bytes(), before, "t.py did not run")
+        self.assertEqual(rc, 1, (out, err))
+        self.assertEqual(out.splitlines()[0], DURING % ("next", "feature_flow/conductor.py"))
+        self.assertNotRegex(out, r"(?m)^TRUST ")
+
+    def test_a_test_command_that_edits_nothing_goes_through(self):
+        self.begin()
+        self.write(self.repo.path("t.py"), "print('fine')\n")
+        self.repo.resolve(T1)
+        rc, lines, err = self.passed("next")
+        self.assertEqual(rc, 0, (lines, err))
+        self.assertTrue(lines[0].startswith("REVIEW "), (lines, err))
+
+
+STAND_IN = """import hashlib, os, sys
+from pathlib import Path
+mode = os.environ["STAND_IN"]
+folder = Path(".feature-flow") / "state"
+folder.mkdir(parents=True, exist_ok=True)
+data = b"phase=build\\n"
+(folder / ("flow-%s.state" % sys.argv[1])).write_bytes(data)
+real = hashlib.sha256(data).hexdigest()
+if mode == "findings":
+    (folder / ("flow-%s.findings" % sys.argv[1])).write_bytes(b"late\\n")
+print("OK stand-in")
+sys.stdout.flush()
+if mode in ("right", "findings"):
+    sys.stderr.write("flow-state %s none\\n" % real)
+elif mode == "wrong":
+    sys.stderr.write("flow-state %s none\\n" % ("0" * 64))
+"""
+
+
+class StateAsSaved(unittest.TestCase):
+    """A stand-in flow.py beside a copy of the runner writes the state file, then reports a
+    different sha, no flow-state line at all, or the right one."""
+
+    def setUp(self):
+        self.repo = Repo(local=False)
+        self.addCleanup(self.repo.close)
+        conductor = tempfile.TemporaryDirectory()
+        self.addCleanup(conductor.cleanup)
+        self.folder = Path(conductor.name) / "scripts"
+        self.folder.mkdir()
+        shutil.copy(str(helpers.ROOT / "scripts" / "flow-trust.py"), str(self.folder))
+        (self.folder / "flow.py").write_text(STAND_IN, encoding="utf-8")
+        self.homes = {}
+        for name in ("CLAUDE_HOME", "AGENTS_HOME", "FEATURE_FLOW_HOME"):
+            folder = tempfile.TemporaryDirectory()
+            self.addCleanup(folder.cleanup)
+            self.homes[name] = folder.name
+
+    def run_mode(self, mode):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
+        env.update(self.homes, FLOW_TRUST="new", STAND_IN=mode)
+        result = subprocess.run([sys.executable, "-I", str(self.folder / "flow-trust.py"), "f", "next"],
+                                cwd=str(self.repo.dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                universal_newlines=True, env=env)
+        self.assertTrue(self.repo.path(STATE).is_file(), result.stderr)
+        return result.returncode, result.stdout.splitlines(), result.stderr
+
+    def test_a_different_sha_stops(self):
+        rc, lines, err = self.run_mode("wrong")
+        self.assertEqual(rc, 1, (lines, err))
+        self.assertEqual(lines[0], STATE_CHANGED % "next")
+        self.assertNotIn("flow-state", err)
+
+    def test_no_flow_state_line_stops(self):
+        rc, lines, err = self.run_mode("silent")
+        self.assertEqual(rc, 1, (lines, err))
+        self.assertEqual(lines[0], STATE_CHANGED % "next")
+
+    def test_a_file_that_exists_when_the_report_says_none_stops(self):
+        rc, lines, err = self.run_mode("findings")
+        self.assertEqual(rc, 1, (lines, err))
+        self.assertEqual(lines[0], STATE_CHANGED % "next")
+
+    def test_the_right_sha_goes_through(self):
+        rc, lines, err = self.run_mode("right")
+        self.assertEqual(rc, 0, (lines, err))
+        self.assertRegex(lines[0], TRUST)
+        self.assertEqual(lines[1:], ["OK stand-in"])
+        self.assertNotIn("flow-state", err)
+
+
+FLOOR = "Floor: allow flow-edit\n"
+
+
+def with_floor(data):
+    """The ticket's bytes with the Floor line after `Type: task`, in the file's own line ending."""
+    eol = b"\r\n" if b"\r\n" in data else b"\n"
+    edited = data.replace(b"Type: task" + eol, b"Type: task" + eol + FLOOR.strip().encode() + eol, 1)
+    assert edited != data
+    return edited
+
+
+class FlowEditBase(Base):
+    """--after-build <ticket> <sha>: a code change is accepted only when the ticket at <sha>
+    has `Floor: allow flow-edit`; a state change never is."""
+
+    floor = True
+
+    def prepare(self):
+        if self.floor:
+            path = self.repo.path(T1)
+            path.write_bytes(with_floor(path.read_bytes()))
+
+    def build(self, ticket_edit=None):
+        """start, BUILD, then the builder edits feature_flow/floorguard.py and commits; returns the base."""
+        rc, lines, err = self.passed("start")
+        self.token = lines[0].split()[1]
+        rc, lines, err = self.passed("next")
+        self.assertTrue(lines[0].startswith("BUILD "), (lines, err))
+        base = lines[0].split()[3]
+        with open(str(self.repo.path("feature_flow/floorguard.py")), "ab") as handle:
+            handle.write(b"\n# a flow-edit build\n")
+        if ticket_edit:
+            ticket_edit()
+        self.repo.resolve(T1)
+        return base
+
+    def after_build(self, base):
+        rc, out, err = self.trust("--after-build", T1, base, "f", "next",
+                                  FLOW_TRUST=self.digest, FLOW_SESSION=self.token)
+        return rc, out.splitlines(), err
+
+    def assertStopped(self, rc, lines, err):
+        self.assertEqual(rc, 1, (lines, err))
+        self.assertTrue(lines[0].startswith(CHANGED), (lines, err))
+        self.assertFalse(any(line.startswith("FLOW-EDIT") for line in lines), lines)
+
+
+class FlowEdit(FlowEditBase):
+    def test_a_ticket_that_allows_flow_edit_at_its_base_is_accepted(self):
+        base = self.build()
+        rc, lines, err = self.after_build(base)
+        self.assertEqual(rc, 0, (lines, err))
+        self.assertRegex(lines[0], TRUST)
+        self.assertEqual(lines[1], "FLOW-EDIT feature_flow/floorguard.py")
+        self.assertTrue(lines[2].startswith("REVIEW "), (lines, err))
+        self.digest = TRUST.match(lines[0]).group(1)
+        rc, lines, err = self.passed("next")
+        self.assertFalse(lines[0].startswith(CHANGED), lines)
+
+    def test_without_the_flag_it_stops(self):
+        self.build()
+        rc, out, err = self.call("next")
+        self.assertStopped(rc, out.splitlines(), err)
+        self.assertIn("feature_flow/floorguard.py", out)
+
+    def test_a_state_change_with_trust_rewritten_to_match_stops(self):
+        base = self.build()
+        self.append(self.repo.path(STATE), "phase=\n")
+        trust = self.repo.path(".feature-flow/state/flow-f.trust")
+        each = json.loads(trust.read_text(encoding="utf-8"))
+        for rel in ("feature_flow/floorguard.py", STATE):
+            each[rel] = hashlib.sha256(self.repo.path(rel).read_bytes()).hexdigest()
+        trust.write_text(json.dumps(each, sort_keys=True, indent=1) + "\n", encoding="utf-8")
+        rc, lines, err = self.after_build(base)
+        self.assertStopped(rc, lines, err)
+
+    def test_a_state_change_alone_stops_with_the_flag(self):
+        base = self.build()
+        self.append(self.repo.path(STATE), "phase=\n")
+        rc, lines, err = self.after_build(base)
+        self.assertStopped(rc, lines, err)
+        self.assertIn(STATE, lines[0])
+
+
+class FlowEditNoLine(FlowEditBase):
+    floor = False
+
+    def test_a_ticket_without_the_line_stops(self):
+        base = self.build()
+        rc, lines, err = self.after_build(base)
+        self.assertStopped(rc, lines, err)
+
+    def test_the_line_added_after_the_base_stops(self):
+        path = self.repo.path(T1)
+        base = self.build(lambda: path.write_bytes(with_floor(path.read_bytes())))
+        self.assertIn(FLOOR, path.read_text(encoding="utf-8"))
+        rc, lines, err = self.after_build(base)
+        self.assertStopped(rc, lines, err)
+
+    def test_a_git_replace_of_the_ticket_blob_is_ignored(self):
+        base = self.build()
+        old = self.repo.git("rev-parse", "%s:%s" % (base, T1))
+        forged = self.repo.dir / ".git" / "forged-ticket"
+        forged.write_bytes(with_floor(self.repo.path(T1).read_bytes()))
+        new = self.repo.git("hash-object", "-w", str(forged))
+        self.repo.git("replace", old, new)
+        self.assertIn(FLOOR.strip(), self.repo.git("cat-file", "blob", "%s:%s" % (base, T1)))
+        rc, lines, err = self.after_build(base)
+        self.assertStopped(rc, lines, err)
 
 
 if __name__ == "__main__":
