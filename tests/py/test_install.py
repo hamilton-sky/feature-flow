@@ -288,8 +288,8 @@ class RunTests(unittest.TestCase):
     def test_the_python_commands_are_installed_and_no_bash_scripts(self):
         self.run_install()
         scripts = sorted(p.name for p in (self.target / "scripts").iterdir())
-        self.assertEqual(scripts, ["floor-guard.py", "flow-status.py", "flow-view.html", "flow-view.py",
-                                   "flow.py", "gate.py"])
+        self.assertEqual(scripts, ["floor-guard.py", "flow-status.py", "flow-trust.py", "flow-view.html",
+                                   "flow-view.py", "flow.py", "gate.py"])
 
     def test_an_old_skill_that_runs_the_ticket_script_is_named(self):
         for name, text in (("old-review", "End with `REVIEW: PASS`.\n"), ("old-py", "run python3 scripts/flow-status.py f\n"),

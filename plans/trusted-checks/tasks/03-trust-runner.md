@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -48,3 +48,38 @@ exit 0
 - `feature_flow/codehash.py` (the in-process tripwire, kept), `feature_flow/prompts.py` (`ROLES`), `tests/py/test_tamper.py`
 
 ## Answer
+
+**Built**
+
+- `scripts/flow-trust.py` (new): the runner. Stdlib only, imports nothing from the repo. It works out how it was started (`__file__` set: run directly; otherwise `exec` by the loader, with `sys.argv[1]` as its path and `sys.argv[3:]` as its arguments). It accepts and ignores `--after-build <ticket> <sha>`. A missing or empty `FLOW_TRUST` is a STOP. It hashes the files that spec § Design "What is hashed" lists into a `<code>.<state>` digest and compares it with `FLOW_TRUST` (`new` skips the comparison). On a difference it prints the STOP and names the paths from the `.trust` list. Otherwise it runs `flow.py` with `-I -X pycache_prefix=<fresh temp>` and `FLOW_TRUSTED=1`, hashes again, writes `.feature-flow/state/flow-<feature>.trust` (sorted JSON), and prints `TRUST <digest>` followed by the conductor's stdout as is. It passes stderr on without the final `flow-state` line and exits with the conductor's exit code.
+- `tests/py/test_trust_runner.py` (new): 26 tests.
+- `tests/run.sh`: `scripts/flow-trust.py` added to the installed-file loop.
+- `tests/py/test_install.py`: `flow-trust.py` added to the exact list of installed `scripts/` files. The installer copies all of `scripts/`, so this test failed until the list included the new file. `install.py` and `pyproject.toml` (which bundles `scripts/*.py`) needed no change.
+
+**Proof**
+
+- `python3 -m unittest discover -s tests/py -p "test_trust_runner.py"`: `Ran 26 tests ... OK`, exit 0. Covered: a first call prints TRUST then OK. A later call with that digest gets `BUILD`. A missing or empty `FLOW_TRUST` is a STOP. Each of these trips the next call and is named: edited `feature_flow/conductor.py`, new `feature_flow/extra.py`, edited `.feature-flow/guides/build.md`, edited `.claude/agents/ticket-builder.md`, edited `.claude/skills/feature-flow/SKILL.md`, a line added to `flow-f.state`, an edited or missing root `guides/build.md`, an edit under `FEATURE_FLOW_HOME`. Hole (a), a committed `return` in `check_code`, gives a STOP that names `feature_flow/conductor.py`. Hole (b), `phase=` written into the state after resolving 01, gives a STOP that names the state file. None of these trip it: root `guides/notes.md`, root `agents/x.md`, `__pycache__/x.pyc`, `scripts/deploy.sh`, `flow-review-f.txt`, the log. The planted `.pyc` is real: it is loaded when `flow.py` is run directly, the control test shows `PW <token>`. Through the runner the source runs (`OK <token>`), both on a first call and between calls without a trip. The loader line from spec § Interfaces runs the runner as exec of its bytes. The runner's GUIDES and ROLES names match `prompts`.
+- `python3 install.py <tmp repo>` writes `scripts/flow-trust.py`: `bash tests/run.sh` prints `ok    installed scripts/flow-trust.py`.
+- `python3 -m unittest discover -s tests/py`: `Ran 307 tests ... OK`, exit 0.
+- `bash tests/run.sh`: `465 passed, 0 failed`, exit 0.
+- Smoke command: exit 0.
+
+**Decisions**
+
+- STOP lines go to stdout, like the conductor's. Usage errors go to stderr with exit 2.
+- If the `.trust` list is readable but names no difference (for example it was rewritten), the STOP says `(the earlier list names none of them)`. If the list is missing, unreadable or not a JSON object, it says `(no earlier list to name them)`.
+- Anything under the repo's `.feature-flow/state/` is left out of the code set, even if a home folder overlaps it. So the `.trust` file, the log and the review reply are never hashed. Only `flow-<f>.state` and `.findings` are, as the state part.
+- Paths are named under the resolved git top level (or cwd outside git). The home folders are resolved first, so their names are absolute POSIX.
+- When `FLOW_TRUST=new` there is no "before" snapshot. Ticket 04 needs one for the during-call check.
+- An unreadable file hashes as the marker `unreadable`, so the change still shows.
+
+**Shortcuts taken**
+
+- The pycache temp folder is removed with `shutil.rmtree(..., ignore_errors=True)`. A folder that cannot be removed (Windows file locks) is left in the system temp folder rather than failing a call whose conductor work is already done.
+- The GUIDES and ROLES names are copied from `prompts.py`, because the runner may not import it. A test fails if they drift.
+
+**For later tickets**
+
+- 04: `split_report()` already returns the `flow-state` line as its second value (currently `_report`). `snapshot()` returns `(code, state)` maps. Take the "before" snapshot for `new` calls too when the during-call check is added.
+- 05: `HANDOFF` lines come through the stdout bytes unchanged. Rewrite them in `main()` before writing stdout.
+- 06/07: the runner's direct form is `FLOW_TRUST=new python3 -I scripts/flow-trust.py <feature> <command>`.

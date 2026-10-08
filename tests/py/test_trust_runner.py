@@ -1,6 +1,7 @@
 """Ticket 03 of trusted-checks: scripts/flow-trust.py hashes the flow's files, refuses to call the
 conductor when they changed since the digest the session passed in, and prints the new digest."""
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -63,16 +64,17 @@ class Base(unittest.TestCase):
                                 universal_newlines=True, env=self.env(**env))
         return result.returncode, result.stdout, result.stderr
 
-    def call(self, command, *args):
+    def call(self, command, *args, **extra):
         """A call that passes the last digest (new on the first call) and the session token."""
         env = {"FLOW_TRUST": self.digest or "new"}
         if self.token:
             env["FLOW_SESSION"] = self.token
+        env.update(extra)
         return self.trust("f", command, *args, **env)
 
-    def passed(self, command, *args):
+    def passed(self, command, *args, **extra):
         """A call the runner lets through: TRUST first, then the conductor's output."""
-        rc, out, err = self.call(command, *args)
+        rc, out, err = self.call(command, *args, **extra)
         lines = out.splitlines()
         self.assertTrue(lines, "no output; stderr: %s" % err)
         match = TRUST.match(lines[0])
@@ -100,8 +102,12 @@ class Base(unittest.TestCase):
         self.assertNotIn("REVIEW", out)
 
     def assertGoesOn(self):
+        """The runner calls the conductor: TRUST first, then the conductor's own line (here a STOP
+        about the missing role file, which the fixture does not install)."""
         rc, lines, err = self.passed("prompt")
-        self.assertEqual(rc, 0, (lines, err))
+        self.assertTrue(lines, err)
+        self.assertFalse(lines[0].startswith(CHANGED), lines)
+        self.assertNotIn("flow-state", err)
 
 
 class FirstCalls(Base):
@@ -115,8 +121,9 @@ class FirstCalls(Base):
 
     def test_a_later_call_with_the_digest_goes_through(self):
         self.begin()
-        rc, lines, err = self.passed("prompt")
+        rc, lines, err = self.passed("next")
         self.assertEqual(rc, 0, (lines, err))
+        self.assertTrue(lines[0].startswith("BUILD "), lines)
 
     def test_a_missing_or_empty_flow_trust_stops(self):
         for env in ({}, {"FLOW_TRUST": ""}):
@@ -155,6 +162,34 @@ class FirstCalls(Base):
         self.assertRegex(out.splitlines()[0], TRUST)
         self.assertIn("usage:", err)
         self.assertNotIn("flow-state", err)
+
+
+class Started(Base):
+    def test_it_runs_as_exec_of_its_bytes_by_the_loader(self):
+        loader = ("import hashlib,sys;b=open(sys.argv[1],'rb').read().replace(b'\\r\\n',b'\\n');"
+                  "sys.exit(exec(compile(b,'flow-trust','exec')) if hashlib.sha256(b).hexdigest()==sys.argv[2] "
+                  "else 'flow-trust.py does not match this skill')")
+        path = self.repo.path("scripts/flow-trust.py")
+        pinned = hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+        result = subprocess.run([sys.executable, "-I", "-c", loader, str(path), pinned, "f", "start"],
+                                cwd=str(self.repo.dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                universal_newlines=True, env=self.env(FLOW_TRUST="new"))
+        self.assertEqual(result.returncode, 0, (result.stdout, result.stderr))
+        lines = result.stdout.splitlines()
+        self.assertRegex(lines[0], TRUST)
+        self.assertRegex(lines[1], r"^OK ")
+
+    def test_the_names_it_hashes_match_the_ones_the_conductor_looks_up(self):
+        spec = importlib.util.spec_from_file_location("flow_trust", str(helpers.ROOT / "scripts" / "flow-trust.py"))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        sys.path.insert(0, str(helpers.ROOT))
+        try:
+            from feature_flow import prompts
+        finally:
+            sys.path.remove(str(helpers.ROOT))
+        self.assertEqual(set(runner.ROLES), set(prompts.ROLES.values()))
+        self.assertEqual(set(runner.GUIDES), set(prompts.GUIDES.values()) | {"debug.md"})
 
 
 class Trips(Base):
@@ -292,9 +327,8 @@ class PlantedBytecode(Base):
         rc, lines, err = self.passed("start")
         self.assertTrue(lines[0].startswith("OK "), lines)
         self.plant()
-        rc, lines, err = self.passed("reset")
+        rc, lines, err = self.passed("start", FLOW_TAKEOVER="1")
         self.assertEqual(rc, 0, (lines, err))
-        rc, lines, err = self.passed("start")
         self.assertTrue(lines[0].startswith("OK "), lines)
 
 
