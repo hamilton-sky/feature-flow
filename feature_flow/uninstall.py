@@ -108,7 +108,7 @@ def remove_install(root, names, record_path, extra, force, dry, out):
     for rel in names:
         if rel in extra:
             continue
-        path = os.path.join(root, rel)
+        path = os.path.normpath(os.path.join(root, rel))
         if not _inside(root, rel):
             out("  skipped %s (not a path inside %s)" % (rel, root))
             kept += 1
