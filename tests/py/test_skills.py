@@ -17,6 +17,7 @@ class SkillTextTests(unittest.TestCase):
     def test_the_codex_role_check_honors_the_home_override(self):
         text = (helpers.ROOT / "adapters/codex/feature-flow/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/agents/", text)
+        self.assertNotIn("check that `.agents/flow-roles/feature-planner.md`", text)  # the planner roles may be in the home too
 
 
 if __name__ == "__main__":
