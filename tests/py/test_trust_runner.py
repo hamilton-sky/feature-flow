@@ -753,5 +753,100 @@ class FlowEditNoLine(FlowEditBase):
         self.assertStopped(rc, lines, err)
 
 
+class Handoff(Base):
+    """Ticket 05: at HANDOFF the runner adds its TRUST digest, and a new session passes it as
+    FLOW_TRUST on its first call (start), so the gap between sessions is checked too."""
+
+    ONE = {"FLOW_TICKETS_PER_SESSION": "1"}
+
+    def reply(self, text):
+        path = self.repo.dir.parent / (self.repo.dir.name + "-reply.txt")
+        path.write_text(text, encoding="utf-8")
+        self.addCleanup(path.unlink, missing_ok=True)
+        rc, lines, err = self.passed("verdict", str(path), **self.ONE)
+        self.assertEqual((rc, lines), (0, ["OK"]), err)
+
+    def to_handoff(self):
+        """One ticket built, resolved and passed by both review passes; the next `next` hands off."""
+        rc, lines, err = self.passed("start", **self.ONE)
+        self.token = lines[0].split()[1]
+        rc, lines, err = self.passed("next", **self.ONE)
+        self.assertTrue(lines[0].startswith("BUILD "), (lines, err))
+        self.repo.resolve(T1)
+        for review in ("spec", "quality"):
+            rc, lines, err = self.passed("next", **self.ONE)
+            self.assertTrue(lines[0].startswith("REVIEW "), (review, lines, err))
+            self.reply("fine\nREVIEW: PASS\n")
+
+    def handoff(self):
+        """The runner's HANDOFF call; returns the digest on its HANDOFF line."""
+        self.to_handoff()
+        rc, lines, err = self.passed("next", **self.ONE)
+        self.assertEqual(rc, 0, (lines, err))
+        self.assertEqual(lines, ["HANDOFF /feature-flow f %s" % self.digest], err)
+        return lines[0].split()[3]
+
+    def new_session_start(self, trust):
+        rc, out, err = self.trust("f", "start", FLOW_TRUST=trust, **self.ONE)
+        return rc, out.splitlines(), err
+
+    def test_the_runner_adds_its_trust_digest_to_handoff(self):
+        digest = self.handoff()
+        self.assertRegex("TRUST " + digest, TRUST)
+
+    def test_start_with_the_handoff_digest_goes_through(self):
+        digest = self.handoff()
+        rc, lines, err = self.new_session_start(digest)
+        self.assertEqual(rc, 0, (lines, err))
+        self.assertRegex(lines[0], TRUST)
+        self.assertTrue(lines[1].startswith("OK "), (lines, err))
+
+    def test_an_edited_conductor_between_the_sessions_stops_naming_it(self):
+        digest = self.handoff()
+        with open(str(self.repo.path("feature_flow/conductor.py")), "ab") as handle:
+            handle.write(b"\n# edited between sessions\n")
+        rc, lines, err = self.new_session_start(digest)
+        self.assertEqual(rc, 1, (lines, err))
+        self.assertTrue(lines[0].startswith(CHANGED), (lines, err))
+        self.assertIn("feature_flow/conductor.py", lines[0])
+        self.assertFalse(any(line.startswith("OK ") for line in lines), lines)
+
+    def test_an_old_style_handoff_with_no_digest_still_starts_with_new(self):
+        self.handoff()
+        rc, lines, err = self.new_session_start("new")
+        self.assertEqual(rc, 0, (lines, err))
+        self.assertRegex(lines[0], TRUST)
+        self.assertTrue(lines[1].startswith("OK "), (lines, err))
+
+    def test_the_conductor_run_directly_prints_handoff_unchanged(self):
+        self.to_handoff()
+        env = self.env(FLOW_TRUSTED="1", FLOW_SESSION=self.token, **self.ONE)
+        result = subprocess.run([sys.executable, "scripts/flow.py", "f", "next"], cwd=str(self.repo.dir),
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.decode("utf-8").splitlines(), ["HANDOFF /feature-flow f"])
+
+    def test_a_stop_after_the_call_leaves_handoff_without_a_digest(self):
+        """A digest is only given when the runner trusts the result: an after-call STOP takes the
+        TRUST line's place and the conductor's HANDOFF line follows as the conductor printed it."""
+        self.to_handoff()
+        runner = load_runner()
+        top = self.repo.dir.resolve()
+        here = top / "scripts"
+        result = types.SimpleNamespace(returncode=-9, stdout=b"HANDOFF /feature-flow f\n", stderr=b"")
+        out = io.TextIOWrapper(io.BytesIO())
+        with mock.patch.object(runner, "started", return_value=(here, ["f", "next"])), \
+                mock.patch.object(runner, "toplevel", return_value=top), \
+                mock.patch.object(runner, "run_conductor", return_value=result), \
+                mock.patch.dict(os.environ, self.env(FLOW_TRUST=self.digest), clear=True), \
+                mock.patch.object(sys, "stdout", out), \
+                mock.patch.object(sys, "stderr", io.TextIOWrapper(io.BytesIO())):
+            rc = runner.main()
+        out.flush()
+        lines = out.buffer.getvalue().decode("utf-8").splitlines()
+        self.assertEqual(rc, 1)
+        self.assertEqual(lines, ["STOP the conductor was killed by signal 9", "HANDOFF /feature-flow f"])
+
+
 if __name__ == "__main__":
     unittest.main()
