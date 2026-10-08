@@ -134,6 +134,11 @@ class UninstallTests(unittest.TestCase):
         self.uninstall(str(self.target), "--force")
         self.assertFalse(guide.exists())
 
+    def test_inside_is_right_for_a_root_folder(self):
+        root = os.path.abspath(os.sep)
+        self.assertTrue(uninstall._inside(root, "scripts/flow.py"))
+        self.assertFalse(uninstall._inside(root, "../x"))
+
     def test_run_state_is_left_alone(self):
         self.install()
         state = self.target / ".feature-flow" / "state"

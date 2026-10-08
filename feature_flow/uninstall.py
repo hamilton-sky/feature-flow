@@ -58,7 +58,11 @@ def _inside(root, rel):
     if not rel or os.path.isabs(rel) or ".." in rel.replace("\\", "/").split("/"):
         return False
     parent = os.path.dirname(os.path.join(root, rel))
-    return os.path.realpath(parent).startswith(os.path.realpath(root) + os.sep)
+    parent, root = os.path.realpath(parent), os.path.realpath(root)
+    try:
+        return os.path.commonpath([parent, root]) == root  # also right for a repo at the filesystem root
+    except ValueError:  # another drive on Windows
+        return False
 
 
 def _prune(root, rel, dry):
