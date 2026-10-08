@@ -55,6 +55,45 @@ class PromptFolderTests(unittest.TestCase):
         self.assertNotIn("python3 scripts/", text)
         self.assertIn("python3 " + shlex.quote(scripts.as_posix() + "/flow-status.py") + " demo --next", text)
 
+    def test_the_planner_templates_point_at_the_home_guides(self):
+        scripts = self.tree(self.root / "home")
+        (scripts.parent / "guides" / "plan.md").write_text("Use [templates/spec.md](templates/spec.md).", encoding="utf-8")
+        text = prompts.plan("plan", scripts, "demo", "draft", "brief")
+        self.assertIn("templates/spec.md (`%s/guides/templates/spec.md`)" % scripts.parent.as_posix(), text)
+        self.assertNotIn("](templates/", text)
+
+    def test_a_template_link_with_a_space_in_the_path_stays_one_destination(self):
+        scripts = self.tree(self.root / "my home")
+        (scripts.parent / "guides" / "plan.md").write_text("Use [t](templates/spec.md).", encoding="utf-8")
+        text = prompts.plan("plan", scripts, "demo", "draft", "brief")
+        self.assertIn("t (`%s/guides/templates/spec.md`)" % scripts.parent.as_posix(), text)
+
+    def test_the_repo_install_points_at_its_own_guides_folder(self):
+        repo = self.root / "repo"
+        scripts = self.tree(repo)
+        (repo / "guides" / "plan.md").unlink()  # an install has no guides/ beside scripts/
+        guides = repo / ".feature-flow" / "guides"
+        guides.mkdir(parents=True)
+        (guides / "plan.md").write_text("Use [templates/spec.md](templates/spec.md).", encoding="utf-8")
+        (repo / ".feature-flow" / "agents").mkdir()
+        (repo / ".feature-flow" / "agents" / "feature-planner.md").write_text(ROLE, encoding="utf-8")
+        old = os.getcwd()
+        os.chdir(str(repo))
+        try:
+            text = prompts.plan("plan", Path("scripts"), "demo", "draft", "brief")
+        finally:
+            os.chdir(old)
+        self.assertIn("templates/spec.md (`.feature-flow/guides/templates/spec.md`)", text)
+
+    def test_odd_characters_in_the_path_stay_in_one_code_span(self):
+        for name in ("a>b", "a#b%c", "a`b") if os.name != "nt" else ("a#b%c", "a`b"):   # Windows names cannot hold >
+            scripts = self.tree(self.root / name)
+            (scripts.parent / "guides" / "plan.md").write_text("Use [t](templates/spec.md).", encoding="utf-8")
+            text = prompts.plan("plan", scripts, "demo", "draft", "brief")
+            path = scripts.parent.as_posix() + "/guides/templates/spec.md"
+            fence = "``" if "`" in name else "`"
+            self.assertIn("t (%s%s%s)" % (fence, path, fence), text, name)
+
     def test_a_path_with_a_space_is_quoted(self):
         scripts = self.tree(self.root / "my home")
         os.chdir(self.root)
