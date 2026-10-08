@@ -4,6 +4,7 @@ It sets the limits, retries and review rounds. It judges every phase from the re
 caller, and prints exactly one line per command.
 """
 
+import hashlib
 import os
 import re
 import secrets
@@ -15,6 +16,11 @@ from feature_flow import checks, codehash, floorguard, gate, git, prompts, proof
 
 NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
+OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
+
+
+def owner_hash(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class Stop(Exception):
@@ -63,6 +69,7 @@ class Conductor:
         self.log_file = state.log_path(folder, feature)
         self.findings_file = state.file_path(folder, feature, "findings")
         self.st = state.load(self.state_file)
+        state.read_bytes(self.findings_file)  # so a call that never touches it still reports what is there
 
     # ---- small helpers -------------------------------------------------
 
@@ -321,9 +328,14 @@ class Conductor:
     def check_owner(self):
         """While a session owns the feature, every call must carry its token. Checked before any change."""
         owner = self.get("owner")
-        if owner and os.environ.get("FLOW_SESSION", "") != owner:
-            raise Stop("%s is owned by another session (%s). pass its token as FLOW_SESSION, or start this session "
-                       "with FLOW_TAKEOVER=1 once you are sure the other one is closed" % (self.feature, owner))
+        token = os.environ.get("FLOW_SESSION", "")
+        if not owner or owner_hash(token) == owner:
+            return
+        if OLD_OWNER.match(owner) and token == owner:
+            self.st["owner"] = owner_hash(token)  # stored as the hash on the next save
+            return
+        raise Stop("%s is owned by another session (%s). pass its token as FLOW_SESSION, or start this session "
+                   "with FLOW_TAKEOVER=1 once you are sure the other one is closed" % (self.feature, owner[:8]))
 
     def start(self):
         if not self.plan.is_dir():
@@ -332,9 +344,9 @@ class Conductor:
         takeover = bool(owner)
         if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
             raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
-                       % (self.feature, owner))
+                       % (self.feature, owner[:8]))
         token = secrets.token_hex(8)
-        self.st["owner"] = token
+        self.st["owner"] = owner_hash(token)
         self.st["session_done"] = 0
         self.save()
         self.log("TAKEOVER" if takeover else "START")
@@ -374,7 +386,7 @@ class Conductor:
         owner = self.get("owner")
         if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
             raise Stop("%s is owned by session %s. if that session is closed or dead, run reset with FLOW_TAKEOVER=1"
-                       % (self.feature, owner))
+                       % (self.feature, owner[:8]))
         paths = tickets.ticket_files(str(self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")))
         if num is not None:
             chosen = [p for p in paths if tickets.number(p) == num.zfill(2)]
@@ -394,8 +406,7 @@ class Conductor:
                            % nums)
         had_run = self.state_file.is_file()
         for path in (self.state_file, self.findings_file):
-            if path.is_file():
-                path.unlink()
+            state.remove(path)
         if not reopened and not had_run:
             return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
         self.st = {}
@@ -421,7 +432,7 @@ class Conductor:
             self.save()
             return self.pick_ticket()
         if verdict == "fail":
-            findings = self.findings_file.read_text(encoding="utf-8") if self.findings_file.is_file() else ""
+            findings = state.read_text(self.findings_file) or ""
             return self.send_back("quality review" if self.get("review_pass") == "quality" else "spec review",
                                   findings)
         if self.num("review_attempt") >= self.max_retries:
@@ -458,7 +469,7 @@ class Conductor:
             if match:
                 found = match.group(1).lower()
         if found == "fail":
-            self.findings_file.write_text("\n".join(text.splitlines()[:120]) + "\n", encoding="utf-8")
+            state.write_text(self.findings_file, "\n".join(text.splitlines()[:120]) + "\n")
         self.st["verdict"] = found or "none"
         self.save()
         self.log("VERDICT-%s" % (found or "none").upper())

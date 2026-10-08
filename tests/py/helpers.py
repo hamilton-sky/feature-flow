@@ -70,6 +70,7 @@ class Repo:
         for key in list(full):
             if key.startswith("FLOW_"):
                 del full[key]
+        full["FLOW_TRUSTED"] = "1"
         full.update(env)
         result = subprocess.run([sys.executable, self.script, "f"] + list(args), cwd=str(self.dir),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,

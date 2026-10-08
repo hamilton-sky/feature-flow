@@ -1,18 +1,34 @@
 """python3 scripts/flow.py <feature> <command>: the conductor's command line."""
 
+import os
 import sys
 from pathlib import Path
 
-from feature_flow import suggest
+from feature_flow import state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
 USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt | verdict <file> | reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
 COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset")
 ARGS = {"verdict": (3,), "plan-prompt": (3, 4), "reset": (2, 3)}
+RUNNER_ONLY = ("next", "prompt", "verdict")
 
 
 def main(argv=None, scripts=None):
+    """With FLOW_TRUSTED=1 (set by scripts/flow-trust.py) the last stderr line is always
+    `flow-state <state sha256 or none> <findings sha256 or none>`, for the bytes the conductor left."""
+    trusted = os.environ.get("FLOW_TRUSTED") == "1"
+    state.SEEN.clear()
+    try:
+        return run(argv, scripts, trusted)
+    finally:
+        if trusted:
+            sys.stdout.flush()
+            sys.stderr.write("flow-state %s\n" % state.reported())
+            sys.stderr.flush()
+
+
+def run(argv, scripts, trusted):
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) < 2 or args[1] not in COMMANDS or not args[0] or args[0].startswith("-"):
         print(USAGE, file=sys.stderr)
@@ -28,6 +44,9 @@ def main(argv=None, scripts=None):
     if len(args) not in ARGS.get(command, (2,)):
         print(USAGE, file=sys.stderr)
         return 2
+    if command in RUNNER_ONLY and not trusted:
+        print("STOP run the conductor through scripts/flow-trust.py, as the skill says")
+        return 1
     scripts = Path(scripts) if scripts else Path.cwd() / "scripts"
     conductor = None
     try:

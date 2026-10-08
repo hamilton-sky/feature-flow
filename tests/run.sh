@@ -5,6 +5,7 @@
 
 set -uo pipefail
 unset FLOW_INVOKE
+export FLOW_TRUSTED=1 # what scripts/flow-trust.py sets: next, prompt and verdict refuse to run without it
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
@@ -747,17 +748,18 @@ pyflow f start
 expect_rc "start exits 0" 0 "$RC"
 TOK="${OUT#OK }"
 if [ -n "$TOK" ] && [ "OK $TOK" = "$OUT" ]; then ok "start prints OK and a token"; else bad "start prints OK and a token" "$OUT"; fi
+OWNER="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:8])' "$TOK")"
 if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .feature-flow/state/flow-f.state)" ]; then ok "start leaves the ticket, round and attempt alone"; else bad "start leaves the ticket, round and attempt alone"; fi
 snap="$(cat .feature-flow/state/flow-f.state; git status --porcelain)"
 pyflow f next
 expect_rc "next without the token exits 1" 1 "$RC"
-expect_has "and names the owner" "owned by another session ($TOK)" "$OUT"
+expect_has "and names the owner" "owned by another session ($OWNER)" "$OUT"
 OUT="$(FLOW_SESSION=wrong python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "next with a different token stops too" "STOP f is owned by another session" "$OUT"
 if [ "$snap" = "$(cat .feature-flow/state/flow-f.state; git status --porcelain)" ]; then ok "and neither changes the state or the tree"; else bad "and neither changes the state or the tree"; fi
 pyflow f start
 expect_rc "a second session's start exits 1" 1 "$RC"
-expect_has "and names the owner" "STOP f is owned by session $TOK" "$OUT"
+expect_has "and names the owner" "STOP f is owned by session $OWNER." "$OUT"
 OUT="$(FLOW_TAKEOVER=1 python3 scripts/flow.py f start 2> /dev/null)"
 TOK2="${OUT#OK }"
 if [ -n "$TOK2" ] && [ "$TOK2" != "$TOK" ] && [ "OK $TOK2" = "$OUT" ]; then ok "FLOW_TAKEOVER=1 start returns a new token"; else bad "FLOW_TAKEOVER=1 start returns a new token" "$OUT"; fi
