@@ -160,6 +160,13 @@ class RunTests(unittest.TestCase):
         self.assertIn("added 0, updated 0, already current", again)
         self.assertIn("kept 0", again)
 
+    def test_a_user_install_ignores_a_target_that_does_not_exist(self):
+        home = self.user_env()
+        out, err = [], []
+        code = install.run(["--user", str(self.target / "stale-repo")], helpers.ROOT, out.append, err.append)
+        self.assertEqual((code, err), (0, []))
+        self.assertTrue((home / ".feature-flow" / "scripts" / "flow.py").is_file())
+
     def test_a_user_install_keeps_an_edited_home_file_and_force_replaces_it(self):
         home = self.user_env()
         self.run_install("--user")

@@ -548,7 +548,7 @@ def run(argv, here, out, err):
         out(USAGE[:-1])
         return 0
     target = opts["target"] or "."
-    if not os.path.isdir(target):
+    if not opts["user"] and not os.path.isdir(target):  # a user install ignores the target
         err("no such directory: " + target)
         return 2
     target = os.path.normpath(os.path.join(_logical_cwd(), target))
