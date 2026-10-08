@@ -139,6 +139,13 @@ class UninstallTests(unittest.TestCase):
         self.assertTrue(uninstall._inside(root, "scripts/flow.py"))
         self.assertFalse(uninstall._inside(root, "../x"))
 
+    def test_a_file_edited_to_another_installed_files_bytes_is_kept(self):
+        self.install()
+        skill = self.target / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+        skill.write_bytes((self.target / "scripts" / "flow.py").read_bytes())
+        self.uninstall(str(self.target))
+        self.assertTrue(skill.is_file())
+
     def test_run_state_is_left_alone(self):
         self.install()
         state = self.target / ".feature-flow" / "state"

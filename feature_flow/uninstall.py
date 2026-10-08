@@ -129,7 +129,8 @@ def remove_install(root, names, record_path, extra, force, dry, out):
         # only a regular file is read and hashed; a link or a special file (a FIFO would block) counts as changed,
         # and --force unlinks it without opening it or following it
         data = _read(path) if stat.S_ISREG(mode) else None
-        unchanged = data is not None and (recorded.get(rel) == _sha256(data) or _sha256(data) in RELEASED)
+        # the path's own record decides; the released hashes cover only an install old enough to have none
+        unchanged = data is not None and (_sha256(data) == recorded[rel] if rel in recorded else _sha256(data) in RELEASED)
         if not (unchanged or force):
             out("  kept    %s (edited since the install, use --force to remove it)" % path)
             kept += 1
