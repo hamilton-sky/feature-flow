@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import shlex
 import unittest
 from pathlib import Path
 
@@ -48,11 +49,17 @@ class PromptFolderTests(unittest.TestCase):
         self.assertIn("python3 %s/flow-status.py <feature> --check" % scripts.as_posix(), text)
         self.assertNotIn("python3 scripts/", text)
 
+    def test_a_path_with_shell_characters_is_quoted(self):
+        scripts = self.tree(self.root / "a$(x);`y`'z")
+        text = self.build(scripts)
+        self.assertNotIn("python3 scripts/", text)
+        self.assertIn("python3 " + shlex.quote(scripts.as_posix() + "/flow-status.py") + " demo --next", text)
+
     def test_a_path_with_a_space_is_quoted(self):
         scripts = self.tree(self.root / "my home")
         os.chdir(self.root)
         text = self.build(scripts)
-        self.assertIn('python3 "%s"/flow-status.py demo --next' % scripts.as_posix(), text)
+        self.assertIn("python3 '%s/flow-status.py' demo --next" % scripts.as_posix(), text)
 
     def test_the_repo_install_keeps_its_text(self):
         repo = self.root / "repo"

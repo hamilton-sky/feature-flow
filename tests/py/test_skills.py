@@ -11,6 +11,7 @@ class SkillTextTests(unittest.TestCase):
             text = (helpers.ROOT / rel).read_text(encoding="utf-8")
             self.assertIn(".feature-flow/scripts/flow.py", text, rel)
             self.assertIn("FEATURE_FLOW_HOME", text, rel)
+            self.assertIn("unrelated `scripts/flow.py`", text, rel)
             self.assertIn("scripts/flow.py", text, rel)
 
 

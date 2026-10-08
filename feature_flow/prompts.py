@@ -3,6 +3,8 @@
 The text is runtime neutral: any agent that can read a prompt can follow it.
 """
 
+import re
+import shlex
 from pathlib import Path
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
@@ -37,10 +39,8 @@ def _runner(text, scripts):
     folder = Path(scripts).absolute()
     if folder == Path.cwd() / "scripts":
         return text
-    path = folder.as_posix()
-    if " " in path:
-        path = '"%s"' % path
-    return text.replace("python3 scripts/", "python3 %s/" % path)
+    base = folder.as_posix()
+    return re.sub(r"python3 scripts/([\w.-]+)", lambda m: "python3 " + shlex.quote(base + "/" + m.group(1)), text)
 
 
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
