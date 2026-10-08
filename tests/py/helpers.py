@@ -17,13 +17,15 @@ def ticket_text(title, status, blocked):
 
 
 class Repo:
-    def __init__(self, tickets=(("01-a", "A", "—"), ("02-b", "B", "01"))):
+    def __init__(self, tickets=(("01-a", "A", "—"), ("02-b", "B", "01")), local=True):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        (self.dir / "scripts").mkdir()
-        shutil.copy(ROOT / "scripts" / "flow.py", self.dir / "scripts")
-        shutil.copytree(ROOT / "feature_flow", self.dir / "feature_flow",
-                        ignore=shutil.ignore_patterns("__pycache__"))
+        self.script = "scripts/flow.py"
+        if local:
+            (self.dir / "scripts").mkdir()
+            shutil.copy(ROOT / "scripts" / "flow.py", self.dir / "scripts")
+            shutil.copytree(ROOT / "feature_flow", self.dir / "feature_flow",
+                            ignore=shutil.ignore_patterns("__pycache__"))
         tasks = self.dir / "plans" / "f" / "tasks"
         tasks.mkdir(parents=True)
         for slug, title, blocked in tickets:
@@ -69,7 +71,7 @@ class Repo:
             if key.startswith("FLOW_"):
                 del full[key]
         full.update(env)
-        result = subprocess.run([sys.executable, "scripts/flow.py", "f"] + list(args), cwd=str(self.dir),
+        result = subprocess.run([sys.executable, self.script, "f"] + list(args), cwd=str(self.dir),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
                                 env=full)
         return result.returncode, result.stdout.strip()

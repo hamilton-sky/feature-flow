@@ -1,7 +1,7 @@
 # Prove the home conductor runs from a repo and the code-hash tripwire covers it
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: no
 
@@ -33,3 +33,19 @@ prints OK
 
 ## Answer
 
+
+**Built**: `tests/py/test_home_conductor.py` (new), `tests/py/helpers.py` (`Repo(local=True)`: with `local=False` no `scripts/` or `feature_flow/` copy is made; `Repo.script` is the flow script path `flow()` runs, default `scripts/flow.py`). No change to `feature_flow/codehash.py`; none was needed.
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -p "test_home_conductor.py"`: Ran 4 tests, OK.
+  - start prints `OK <token>`, next prints `BUILD ...`, `.feature-flow/state/flow-f.state` exists in the repo, and the home file list (ignoring `__pycache__`) equals the list right after install.
+  - Appending to home `feature_flow/floorguard.py`, and in a second test to home `scripts/flow.py`, makes the next `next` exit 1 with `STOP flow code changed while building` naming the absolute home path.
+  - With a repo-local install also present, editing both home files leaves the repo's `scripts/flow.py` run at exit 0 with no STOP.
+- `python3 -m unittest discover -s tests/py`: Ran 262 tests, OK.
+- `bash tests/run.sh`: 457 passed, 0 failed.
+
+**Decisions**: the repo-local case subclasses the home case and disables the three inherited tests by setting them to None, so only its own test runs. The `Repo` option was the least code since the plan files are reused.
+
+**Shortcuts taken**: none
+
+**For later tickets**: `Repo(local=False)` plus `repo.script = <home>/scripts/flow.py` is the way to run the home conductor from a test (ticket 07 can reuse it).
