@@ -269,6 +269,17 @@ def split_report(err):
     return err, None
 
 
+def with_digest(out, feature, trusted):
+    """The conductor's stdout with `HANDOFF <invoke> <feature>` lines given the digest, so the
+    next session can pass it as FLOW_TRUST on its first call. Line endings are kept."""
+    lines = out.splitlines(True)
+    for i, line in enumerate(lines):
+        text = line.rstrip(b"\r\n")
+        if text.startswith(b"HANDOFF ") and text.endswith(b" " + feature.encode("utf-8", "surrogateescape")):
+            lines[i] = text + b" " + trusted.encode("ascii") + line[len(text):]
+    return b"".join(lines)
+
+
 def main():
     here, args = started()
     parsed = parse(args)
@@ -300,14 +311,17 @@ def main():
     else:
         stop = None
         write_list(top, feature, dict(code, **state))
+    out = result.stdout
     if stop:
         sys.stdout.write(stop + "\n")
     else:
-        sys.stdout.write("TRUST %s\n" % digest(code, state))
+        trusted = digest(code, state)
+        sys.stdout.write("TRUST %s\n" % trusted)
         if edited is not None:
             sys.stdout.write("FLOW-EDIT %s\n" % edited)
+        out = with_digest(out, feature, trusted)
     sys.stdout.flush()
-    sys.stdout.buffer.write(result.stdout)
+    sys.stdout.buffer.write(out)
     sys.stdout.buffer.flush()
     sys.stderr.buffer.write(err)
     sys.stderr.buffer.flush()
