@@ -564,7 +564,7 @@ expect_rc "python3 -m unittest discover -s tests/py passes" 0 $rc
 [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -20
 out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor parses as Python 3.9" 0 $?
-out="$(cd "$ROOT" && grep -rlE '^(import|from) ' feature_flow | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib)\b')"
+out="$(cd "$ROOT" && grep -rlE '^(import|from) ' feature_flow | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat)\b')"
 if [ -z "$out" ]; then ok "the conductor imports only the standard library"; else bad "the conductor imports only the standard library" "$out"; fi
 
 flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and feature_flow/
