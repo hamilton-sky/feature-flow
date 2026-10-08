@@ -1,7 +1,7 @@
 # Make `uninstall --user` remove the home conductor too
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 
@@ -34,3 +34,16 @@ prints OK
 
 ## Answer
 
+
+**Built**: `feature_flow/install.py` (new `flow_home()`, the one lookup of `$FEATURE_FLOW_HOME` or `$HOME/.feature-flow`, used by `Installer` and the uninstaller), `feature_flow/uninstall.py` (third root in `uninstall_user`; `owned` flag on `_prune` and `remove_install`; empty home folder removed when nothing was kept; `USAGE` and the "no personal install" message name the third folder), `tests/py/test_uninstall.py` (FEATURE_FLOW_HOME moved back under the temp home, plus tests for edited/force, dry run, bytecode, `removed N, kept 0`). Test-only commit 075f682.
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -p "test_uninstall.py"`: Ran 20 tests, OK (before the code: 3 failures). That covers: temp home empty, `.feature-flow` gone, last line `removed N, kept 0`; edited home file kept and named, then `--force` removes all; `--dry-run` prints `would remove` and changes nothing; bytecode in `~/.feature-flow/feature_flow/__pycache__` does not block removal.
+- `python3 -m unittest discover -s tests/py`: Ran 254 tests, OK.
+- `bash tests/run.sh`: 457 passed, 0 failed.
+
+**Decisions**: the home root is passed `owned=True` so `_prune` drops `__pycache__` in every folder below it; also the root's own `__pycache__` is dropped before the root is removed. The root is removed with `os.rmdir`, so any user file left in it keeps the folder.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: `remove_install` and `_prune` take an optional `owned` argument (default False, repo behaviour unchanged).

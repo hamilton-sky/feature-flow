@@ -177,6 +177,11 @@ def _logical_cwd():
     return os.getcwd()
 
 
+def flow_home():
+    """The personal home folder of the flow: $FEATURE_FLOW_HOME or ~/.feature-flow."""
+    return os.environ.get("FEATURE_FLOW_HOME") or os.environ.get("HOME", "") + "/.feature-flow"
+
+
 class Installer:
     def __init__(self, here, target, agent, user_level, force, dry, out, private=False):
         self.here = here
@@ -189,7 +194,7 @@ class Installer:
         self.user_level = user_level
         if user_level:
             home = os.environ.get("HOME", "")
-            self.flow_dir = os.environ.get("FEATURE_FLOW_HOME") or home + "/.feature-flow"
+            self.flow_dir = flow_home()
             self.claude_dir = os.environ.get("CLAUDE_HOME") or home + "/.claude"
             self.agents_dir = os.environ.get("AGENTS_HOME") or home + "/.agents"
         else:
