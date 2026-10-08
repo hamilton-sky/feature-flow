@@ -388,8 +388,8 @@ git -C "$BAR/a" init -q; git -C "$BAR/b" init -q
 barenv() { env HOME="$BAR/home" CLAUDE_HOME="$BAR/home/.claude" AGENTS_HOME="$BAR/home/.agents" FEATURE_FLOW_HOME="$BAR/home/.feature-flow" "$@"; }
 barenv python3 "$ROOT/install.py" --user --agent all > /dev/null 2>&1; expect_rc "the user install succeeds" 0 $?
 FIRST_USER="$(cd "$BAR/a" && barenv python3 "$BAR/home/.feature-flow/scripts/flow.py" demo start 2> /dev/null | head -n 1)"
-(cd "$BAR/b" && python3 "$ROOT/install.py" . > /dev/null 2>&1)
-FIRST_REPO="$(cd "$BAR/b" && python3 scripts/flow.py demo start 2> /dev/null | head -n 1)"
+(cd "$BAR/b" && barenv python3 "$ROOT/install.py" . > /dev/null 2>&1)
+FIRST_REPO="$(cd "$BAR/b" && barenv python3 scripts/flow.py demo start 2> /dev/null | head -n 1)"
 if [ -n "$FIRST_USER" ] && [ "$FIRST_USER" = "$FIRST_REPO" ]; then ok "demo start prints the same first line from the home conductor and the repo one"; else bad "demo start prints the same first line from the home conductor and the repo one" "'$FIRST_USER' vs '$FIRST_REPO'"; fi
 if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] && [ ! -e "$BAR/a/.claude" ]; then ok "the user-installed repo has no scripts, installed.txt or .claude"; else bad "the user-installed repo has no scripts, installed.txt or .claude"; fi
 (cd "$ROOT" && barenv python3 -m feature_flow uninstall --user > /dev/null 2>&1); expect_rc "the user uninstall succeeds" 0 $?
