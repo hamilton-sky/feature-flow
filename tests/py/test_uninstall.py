@@ -122,6 +122,18 @@ class UninstallTests(unittest.TestCase):
         self.assertEqual(real.read_text(), "mine\n")
         self.assertEqual(self.files(), [])
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs named pipes")
+    def test_a_file_replaced_by_a_pipe_does_not_hang_and_force_unlinks_it(self):
+        self.install()
+        guide = self.target / ".feature-flow" / "guides" / "build.md"
+        guide.unlink()
+        os.mkfifo(str(guide))
+        self.uninstall(str(self.target), "--dry-run")
+        self.uninstall(str(self.target))
+        self.assertTrue(guide.exists())
+        self.uninstall(str(self.target), "--force")
+        self.assertFalse(guide.exists())
+
     def test_run_state_is_left_alone(self):
         self.install()
         state = self.target / ".feature-flow" / "state"

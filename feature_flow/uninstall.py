@@ -8,6 +8,7 @@ Plans, tickets and the run state in `.feature-flow/state/` are never touched.
 
 import os
 import shutil
+import stat
 import subprocess
 
 from feature_flow.install import (EXCLUDE_BEGIN, EXCLUDE_END, HASHES, INSTALLED, USER_HASHES, Installer, _logical_cwd,
@@ -116,10 +117,16 @@ def remove_install(root, names, record_path, extra, force, dry, out):
             continue
         if not os.path.lexists(path):
             continue
-        data = None if os.path.islink(path) else _read(path)
+        mode = os.lstat(path).st_mode
+        if stat.S_ISDIR(mode):
+            out("  kept    %s (now a folder, left alone)" % path)
+            kept += 1
+            continue
+        # only a regular file is read and hashed; a link or a special file (a FIFO would block) counts as changed,
+        # and --force unlinks it without opening it or following it
+        data = _read(path) if stat.S_ISREG(mode) else None
         unchanged = data is not None and (recorded.get(rel) == _sha256(data) or _sha256(data) in RELEASED)
-        replaced = os.path.islink(path)  # a link someone put there: --force unlinks it, never what it points to
-        if (os.path.isdir(path) and not replaced) or not (unchanged or (force and (replaced or data is not None))):
+        if not (unchanged or force):
             out("  kept    %s (edited since the install, use --force to remove it)" % path)
             kept += 1
             continue
