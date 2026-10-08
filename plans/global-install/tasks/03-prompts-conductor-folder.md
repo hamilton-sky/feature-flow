@@ -1,7 +1,7 @@
 # Point subagent prompts at the conductor that is running
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -31,3 +31,16 @@ prints OK
 
 ## Answer
 
+
+**Built**: `feature_flow/prompts.py` (new `_runner` helper, applied to role and guide in `build` and `plan`); `tests/py/test_prompts.py` (4 tests, committed first as `262c46f`, 3 failed before the change).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -p "test_prompts.py"`: Ran 4 tests, OK (covers rewrite in build, rewrite in plan role, quoted path with a space, repo install text kept and no absolute path added).
+- `python3 -m unittest discover -s tests/py -p "test_units.py"`: Ran 7 tests, OK.
+- `python3 -m unittest discover -s tests/py`: Ran 258 tests, OK.
+
+**Decisions**: the test uses a new file `test_prompts.py` since test_units covers other modules. A path with a space is quoted as `python3 "/a b/scripts"/flow-status.py`, which the shell reads as one word. Only the exact text `python3 scripts/` is rewritten; the task text built by the conductor is untouched.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the `plan` prompt leaves `<feature>` in the role body unreplaced (as before); the rewrite does not change that.
