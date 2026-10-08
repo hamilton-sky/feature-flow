@@ -9,21 +9,23 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, cli, install, status, suggest, view
+from feature_flow import __version__, cli, install, status, suggest, uninstall, view
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
+       feature-flow uninstall [target-repo] [--user] [--force] [--dry-run]
        feature-flow status <feature> [--next | --counts | --check | --mermaid [plain] | --json]
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
        feature-flow reset <feature> [NN]
        feature-flow --version
 install copies the skill, its roles, scripts and guides into a repo; feature-flow install --help says more.
+uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude and ~/.agents.
 status and view read plans/<feature>/ in the current directory, like scripts/flow-status.py and scripts/flow-view.py.
 reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.
 """
 
 
-COMMANDS = ("install", "status", "view", "reset", "--version", "--help")
+COMMANDS = ("install", "uninstall", "status", "view", "reset", "--version", "--help")
 
 
 def main(argv=None):
@@ -38,6 +40,8 @@ def main(argv=None):
         return 0
     if command == "install":
         return install.main(install.source_root(), rest)
+    if command == "uninstall":
+        return uninstall.main(rest)
     if command == "status":
         return status.main(rest)
     if command == "view":
