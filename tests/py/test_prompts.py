@@ -55,6 +55,25 @@ class PromptFolderTests(unittest.TestCase):
         self.assertNotIn("python3 scripts/", text)
         self.assertIn("python3 " + shlex.quote(scripts.as_posix() + "/flow-status.py") + " demo --next", text)
 
+    def test_the_planner_templates_point_at_the_home_guides(self):
+        scripts = self.tree(self.root / "home")
+        (scripts.parent / "guides" / "plan.md").write_text("Use [templates/spec.md](templates/spec.md).", encoding="utf-8")
+        text = prompts.plan("plan", scripts, "demo", "draft", "brief")
+        self.assertIn("[templates/spec.md](%s/guides/templates/spec.md)" % scripts.parent.as_posix(), text)
+        self.assertNotIn("](templates/", text)
+
+    def test_the_repo_install_keeps_its_template_links(self):
+        repo = self.root / "repo"
+        scripts = self.tree(repo)
+        (scripts.parent / "guides" / "plan.md").write_text("Use [templates/spec.md](templates/spec.md).", encoding="utf-8")
+        old = os.getcwd()
+        os.chdir(str(repo))
+        try:
+            text = prompts.plan("plan", Path("scripts"), "demo", "draft", "brief")
+        finally:
+            os.chdir(old)
+        self.assertIn("(templates/spec.md)", text)
+
     def test_a_path_with_a_space_is_quoted(self):
         scripts = self.tree(self.root / "my home")
         os.chdir(self.root)

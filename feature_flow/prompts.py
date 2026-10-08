@@ -43,6 +43,14 @@ def _runner(text, scripts):
     return re.sub(r"python3 scripts/([\w.-]+)", lambda m: "python3 " + shlex.quote(base + "/" + m.group(1)), text)
 
 
+def _templates(text, guides, scripts):
+    """Point the guide's `(templates/x.md)` links at the guides folder that is running, unless it is the repo's own."""
+    if Path(scripts).absolute() == Path.cwd() / "scripts":
+        return text
+    base = Path(guides).absolute().as_posix()
+    return re.sub(r"\]\(templates/([\w.-]+)\)", lambda m: "](%s)" % shlex.quote(base + "/templates/" + m.group(1)), text)
+
+
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
     role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
     guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
@@ -78,7 +86,8 @@ def plan(phase, scripts, feature, draft, brief, findings=""):
     Both get the approved brief and the draft folder, never the conversation or each other's reasoning.
     """
     role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
-    guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
+    guide_file = find_file(scripts, "guides", GUIDES[phase])
+    guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent, scripts)
     guide = guide.replace("<feature>", feature).replace("<draft>", draft)
     if phase == "plan":
         task = ("Your task: plan the feature `%s` from the approved brief below. Write the draft only inside "
