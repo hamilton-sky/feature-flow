@@ -6,9 +6,15 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
+import helpers
 from helpers import Repo
+
+sys.path.insert(0, str(helpers.ROOT))
+from feature_flow import state  # the package under test, from this checkout
 
 T1 = "plans/f/tasks/01-a.md"
 STATE = ".feature-flow/state/flow-f.state"
@@ -93,10 +99,49 @@ class Report(Base):
         self.assertEqual(self.reported(err), ("none", "none"))
         self.assertReportsDisk(err)
 
+    def test_a_usage_error_during_a_run_reports_the_files_on_disk(self):
+        rc, out, err = self.run_flow("start", FLOW_TRUSTED="1")
+        token = out.split()[1]
+        self.repo.path(FINDINGS).write_text("old findings\n", encoding="utf-8")
+        for args in (("verdict",), ("bogus",), ("reset", "01", "extra")):
+            rc, out, err = self.run_flow(*args, FLOW_TRUSTED="1", FLOW_SESSION=token)
+            self.assertEqual(rc, 2, args)
+            self.assertNotEqual(self.reported(err), ("none", "none"), args)
+            self.assertReportsDisk(err)
+
+    def test_a_state_file_that_is_not_utf8_stops_and_still_reports_both_files(self):
+        rc, out, err = self.run_flow("start", FLOW_TRUSTED="1")
+        token = out.split()[1]
+        self.repo.path(FINDINGS).write_text("old findings\n", encoding="utf-8")
+        self.repo.path(STATE).write_bytes(b"owner=\xff\xfe\n")
+        rc, out, err = self.run_flow("next", FLOW_TRUSTED="1", FLOW_SESSION=token)
+        self.assertEqual(rc, 1, err)
+        self.assertTrue(out.startswith("STOP ") and "damaged" in out, out)
+        self.assertNotIn("Traceback", err)
+        self.assertReportsDisk(err)
+        self.assertNotEqual(self.reported(err)[1], "none")
+
     def test_no_report_without_flow_trusted(self):
         rc, out, err = self.run_flow("start")
         self.assertEqual(rc, 0, out)
         self.assertNotIn("flow-state", err)
+
+
+class OnlyTheConductorsFiles(unittest.TestCase):
+    def test_other_files_with_the_same_suffix_do_not_change_the_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state.SEEN.clear()
+            state.save(Path(tmp) / "other.state", {"a": "1"})
+            state.write_text(Path(tmp) / "other.findings", "x\n")
+            state.load(Path(tmp) / "other.state")
+            state.read_bytes(Path(tmp) / "other.findings")
+            self.assertEqual(state.reported(), "none none")
+            state.save(Path(tmp) / "flow-f.state", {"a": "1"}, kind="state")
+            state.write_text(Path(tmp) / "flow-f.findings", "x\n", kind="findings")
+            self.assertEqual(state.reported(), "%s %s" % (sha(b"a=1\n"), sha(b"x\n")))
+            state.remove(Path(tmp) / "flow-f.findings", kind="findings")
+            self.assertEqual(state.reported(), "%s none" % sha(b"a=1\n"))
+            state.SEEN.clear()
 
 
 class Owner(Base):
