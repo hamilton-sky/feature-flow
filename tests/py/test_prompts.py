@@ -68,17 +68,28 @@ class PromptFolderTests(unittest.TestCase):
         text = prompts.plan("plan", scripts, "demo", "draft", "brief")
         self.assertIn("[t](<%s/guides/templates/spec.md>)" % scripts.parent.as_posix(), text)
 
-    def test_the_repo_install_keeps_its_template_links(self):
+    def test_the_repo_install_points_at_its_own_guides_folder(self):
         repo = self.root / "repo"
         scripts = self.tree(repo)
-        (scripts.parent / "guides" / "plan.md").write_text("Use [templates/spec.md](templates/spec.md).", encoding="utf-8")
+        (repo / "guides" / "plan.md").unlink()  # an install has no guides/ beside scripts/
+        guides = repo / ".feature-flow" / "guides"
+        guides.mkdir(parents=True)
+        (guides / "plan.md").write_text("Use [templates/spec.md](templates/spec.md).", encoding="utf-8")
+        (repo / ".feature-flow" / "agents").mkdir()
+        (repo / ".feature-flow" / "agents" / "feature-planner.md").write_text(ROLE, encoding="utf-8")
         old = os.getcwd()
         os.chdir(str(repo))
         try:
             text = prompts.plan("plan", Path("scripts"), "demo", "draft", "brief")
         finally:
             os.chdir(old)
-        self.assertIn("(templates/spec.md)", text)
+        self.assertIn("[templates/spec.md](<.feature-flow/guides/templates/spec.md>)", text)
+
+    def test_angle_brackets_in_the_path_are_escaped(self):
+        scripts = self.tree(self.root / "a>b")
+        (scripts.parent / "guides" / "plan.md").write_text("Use [t](templates/spec.md).", encoding="utf-8")
+        text = prompts.plan("plan", scripts, "demo", "draft", "brief")
+        self.assertIn("[t](<%s/guides/templates/spec.md>)" % scripts.parent.as_posix().replace(">", "\\>"), text)
 
     def test_a_path_with_a_space_is_quoted(self):
         scripts = self.tree(self.root / "my home")

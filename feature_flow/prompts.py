@@ -43,12 +43,23 @@ def _runner(text, scripts):
     return re.sub(r"python3 scripts/([\w.-]+)", lambda m: "python3 " + shlex.quote(base + "/" + m.group(1)), text)
 
 
-def _templates(text, guides, scripts):
-    """Point the guide's `(templates/x.md)` links at the guides folder that is running, unless it is the repo's own."""
-    if Path(scripts).absolute() == Path.cwd() / "scripts":
-        return text
-    base = Path(guides).absolute().as_posix()
-    return re.sub(r"\]\(templates/([\w.-]+)\)", lambda m: "](<%s>)" % (base + "/templates/" + m.group(1)), text)
+def _templates(text, guides):
+    """Point the guide's `(templates/x.md)` links at the guides folder it was read from.
+
+    The link is relative to the guide, which the planner does not read from the repo root. The path is
+    relative to the working folder when the guides are inside it, else absolute, and is written as an
+    angle-bracketed markdown destination so a space in it stays one destination.
+    """
+    guides = Path(guides).absolute()
+    try:
+        base = guides.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        base = guides.as_posix()
+
+    def link(m):
+        path = (base + "/templates/" + m.group(1)).replace("\\", "\\\\").replace("<", "\\<").replace(">", "\\>")
+        return "](<%s>)" % path
+    return re.sub(r"\]\(templates/([\w.-]+)\)", link, text)
 
 
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
@@ -87,7 +98,7 @@ def plan(phase, scripts, feature, draft, brief, findings=""):
     """
     role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
     guide_file = find_file(scripts, "guides", GUIDES[phase])
-    guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent, scripts)
+    guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent)
     guide = guide.replace("<feature>", feature).replace("<draft>", draft)
     if phase == "plan":
         task = ("Your task: plan the feature `%s` from the approved brief below. Write the draft only inside "
