@@ -1,7 +1,7 @@
 # Document the user install and bump the version to 0.4.0
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: no
 
@@ -30,3 +30,12 @@ exit 0
 
 ## Answer
 
+**Built**: `feature_flow/__init__.py` (0.4.0), `feature_flow/command.py` (uninstall line names ~/.feature-flow), `README.md` (new "Two ways to install" section, uninstall sentence, the "stay in the repo" sentence rewritten).
+
+**Proof**: `python3 -m feature_flow --version` printed `feature-flow 0.4.0`; `grep -c FEATURE_FLOW_HOME README.md` printed 2 (exit 0); `grep "stay in the repo" README.md` finds nothing; `grep 0.3 README.md pyproject.toml` finds nothing; `python3 -m unittest discover -s tests/py` ran 263 tests, OK.
+
+**Decisions**: the table row "The skill goes to" was already accurate for `--user`, so left unchanged.
+
+**Shortcuts taken**: none
+
+**For later tickets**: none. I did not run `bash tests/run.sh` (no behaviour change; ticket 07 runs the full bar).
