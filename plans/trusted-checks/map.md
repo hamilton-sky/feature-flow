@@ -32,6 +32,7 @@ Every conductor call the skills make goes through `scripts/flow-trust.py`, whose
   - `py_compile.compile(..., invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)` writes a .pyc whose header holds the source's mtime and size (used to forge one in tests): docs: https://docs.python.org/3/library/py_compile.html
   - `git --no-replace-objects` ignores replacement refs made by `git replace`: docs: https://git-scm.com/docs/git#Documentation/git.txt---no-replace-objects and https://git-scm.com/docs/git-replace. `git cat-file blob` prints the raw blob with no textconv: https://git-scm.com/docs/git-cat-file
   - `cmd.exe`: `%` expands variables, `!` only with delayed expansion (off by default), `"` groups an argument; the loader uses only double quotes and none of `$ % !`: docs: https://learn.microsoft.com/windows-server/administration/windows-commands/cmd
+- 01 — the five scripts drop their own folder from sys.path first thing and load feature_flow by path (spec_from_file_location), so nothing in scripts/ or the repo root can shadow a module; work under python3 -I.
 
 ## Open questions
 
