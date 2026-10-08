@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: resolved
+Status: open
 Blocked by: —
 Test first: yes
 
@@ -83,3 +83,13 @@ exit 0
 - 04: `split_report()` already returns the `flow-state` line as its second value (currently `_report`). `snapshot()` returns `(code, state)` maps. Take the "before" snapshot for `new` calls too when the during-call check is added.
 - 05: `HANDOFF` lines come through the stdout bytes unchanged. Rewrite them in `main()` before writing stdout.
 - 06/07: the runner's direct form is `FLOW_TRUST=new python3 -I scripts/flow-trust.py <feature> <command>`.
+
+## Review findings (round 1, quality review)
+
+QUALITY
+1. blocker tests/py/test_trust_runner.py (found by CI, "windows with python" job on 7ab6752): `PlantedBytecode.plant` reads conductor.py with read_text and writes it back with write_text. On a Windows checkout the file has CRLF line endings: read_text turns them into LF, so `len(edited.encode("utf-8"))` is 25452 while `stat.st_size` is 25998, and all three PlantedBytecode tests fail with `AssertionError: 25452 != 25998`. write_text would also write CRLF back. Fix: work on bytes (read_bytes, replace the byte strings, write_bytes) so the size and the bytes stay exactly as on disk on every platform.
+2. minor scripts/flow-trust.py: `tree()` uses `os.walk` without following links, so a symlinked subfolder inside `feature_flow/` or a skill folder is never hashed, but Python still imports through it. Either follow links (followlinks=True, with loop protection) or record a linked folder as a hashed entry so adding one trips the check.
+3. minor scripts/flow-trust.py: `home()` falls back to `Path.home()`, which can raise RuntimeError when HOME is unset; install.py uses `os.environ.get("HOME", "")`. Use the same fallback or print a STOP.
+4. minor scripts/flow-trust.py: a conductor killed by a signal gives a negative returncode and an odd exit code. Map a negative code to 1 with a STOP line.
+5. minor tests/py/test_trust_runner.py: no trip case for `.agents/skills/feature-flow/`, `.agents/flow-roles/`, `$CLAUDE_HOME`/`$AGENTS_HOME` skill edits, or `.feature-flow/agents/`. Add one each.
+REVIEW: FAIL
