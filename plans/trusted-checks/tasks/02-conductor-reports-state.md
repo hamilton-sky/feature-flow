@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: resolved
+Status: open
 Blocked by: —
 Test first: yes
 
@@ -72,3 +72,11 @@ Work started at 059c302e35928f6069140582729bf98ad265641e. Test-only commit: 9017
 
 - 03/04 (runner): set `FLOW_TRUSTED=1` for the conductor and parse the last stderr line `flow-state <64 hex|none> <64 hex|none>`; `none` means the file did not exist (or was deleted) as far as the conductor knows. A usage error before the conductor is built reports `none none` even if files exist.
 - 06/07: `start` still prints `OK <token>`; the state now holds `owner=<sha256>`. Owner STOPs print 8 characters of the hash, not the token. Direct `next|prompt|verdict` now STOP: README and skills (07, 06) must use the runner. `tests/run.sh` exports `FLOW_TRUSTED=1` at its top.
+
+## Review findings (round 1, quality review)
+
+QUALITY
+1. major feature_flow/cli.py: With FLOW_TRUSTED=1, any exit before `Conductor(...)` reads the files reports `flow-state none none`, even when the state and findings files exist. That covers the usage and arg-count errors, the bad feature name, and a Stop raised early in `Conductor.__init__`. Reproduced: `start`, then `FLOW_TRUSTED=1 flow.py f verdict` with no file returns rc 2 and the last stderr line is `flow-state none none`, while `.feature-flow/state/flow-f.state` exists. The ticket defines `none` as "the file did not exist or was deleted", not "never looked". Ticket 04 STOPs with "the run state was changed by something other than the conductor" when a file exists but the report says `none`, so a simple usage mistake will look like tampering. Fix: once the feature name passes validation, read both files before any early return, or have `main` report only after the files have been resolved and read. Add a test for a trusted usage error while a run is active.
+2. minor feature_flow/state.py / feature_flow/conductor.py: A damaged state file that is not valid UTF-8 makes `state.load` raise after the state bytes are recorded but before `Conductor.__init__` reads the findings file. The report then says `none` for an existing findings file, and the traceback ends up above the flow-state line. Fix: read the findings file before decoding the state, or catch the decode error and raise Stop.
+3. minor feature_flow/state.py: `_remember` picks the kind from the path suffix (`.state` / `.findings`). Any future file with one of those suffixes that goes through `write_text`/`remove` would silently overwrite the report. Fix: pass the kind in explicitly, or compare against the conductor's own two paths.
+REVIEW: FAIL
