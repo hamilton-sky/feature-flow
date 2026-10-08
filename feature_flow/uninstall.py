@@ -118,7 +118,8 @@ def remove_install(root, names, record_path, extra, force, dry, out):
             continue
         data = None if os.path.islink(path) else _read(path)
         unchanged = data is not None and (recorded.get(rel) == _sha256(data) or _sha256(data) in RELEASED)
-        if os.path.islink(path) or os.path.isdir(path) or not (unchanged or force):
+        replaced = os.path.islink(path)  # a link someone put there: --force unlinks it, never what it points to
+        if (os.path.isdir(path) and not replaced) or not (unchanged or (force and (replaced or data is not None))):
             out("  kept    %s (edited since the install, use --force to remove it)" % path)
             kept += 1
             continue

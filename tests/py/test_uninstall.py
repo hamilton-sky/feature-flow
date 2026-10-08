@@ -107,6 +107,21 @@ class UninstallTests(unittest.TestCase):
         self.uninstall(str(self.target))
         self.assertTrue((cache / "mine.pyc").is_file())
 
+    @unittest.skipIf(os.name == "nt", "symlinks need privileges on Windows")
+    def test_a_file_replaced_by_a_link_is_kept_unless_forced_and_its_target_survives(self):
+        self.install()
+        guide = self.target / ".feature-flow" / "guides" / "build.md"
+        real = Path(self.tmp.name) / "real.md"
+        real.write_text("mine\n")
+        guide.unlink()
+        guide.symlink_to(real)
+        self.uninstall(str(self.target))
+        self.assertTrue(guide.is_symlink())
+        self.uninstall(str(self.target), "--force")
+        self.assertFalse(guide.is_symlink())
+        self.assertEqual(real.read_text(), "mine\n")
+        self.assertEqual(self.files(), [])
+
     def test_run_state_is_left_alone(self):
         self.install()
         state = self.target / ".feature-flow" / "state"
