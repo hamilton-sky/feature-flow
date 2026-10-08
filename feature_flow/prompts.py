@@ -44,11 +44,11 @@ def _runner(text, scripts):
 
 
 def _templates(text, guides):
-    """Point the guide's `(templates/x.md)` links at the guides folder it was read from.
+    """Replace the guide's `[label](templates/x.md)` links with the path of the file in the folder it was read from.
 
     The link is relative to the guide, which the planner does not read from the repo root. The path is
-    relative to the working folder when the guides are inside it, else absolute, and is written as an
-    angle-bracketed markdown destination so a space in it stays one destination.
+    relative to the working folder when the guides are inside it, else absolute. It goes in a code span, not a
+    link destination, so no character in the path needs escaping.
     """
     guides = Path(guides).absolute()
     try:
@@ -56,10 +56,14 @@ def _templates(text, guides):
     except ValueError:
         base = guides.as_posix()
 
-    def link(m):
-        path = (base + "/templates/" + m.group(1)).replace("\\", "\\\\").replace("<", "\\<").replace(">", "\\>")
-        return "](<%s>)" % path
-    return re.sub(r"\]\(templates/([\w.-]+)\)", link, text)
+    def span(path):
+        longest = max([len(run) for run in re.findall("`+", path)] or [0])
+        fence = "`" * (longest + 1)
+        pad = " " if path.startswith("`") or path.endswith("`") else ""
+        return fence + pad + path + pad + fence
+
+    return re.sub(r"\[([^\]]*)\]\(templates/([\w.-]+)\)",
+                  lambda m: "%s (%s)" % (m.group(1), span(base + "/templates/" + m.group(2))), text)
 
 
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
