@@ -1,19 +1,22 @@
 """Ticket 03 of trusted-checks: scripts/flow-trust.py hashes the flow's files, refuses to call the
 conductor when they changed since the digest the session passed in, and prints the new digest."""
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import py_compile
 import re
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import helpers
 from helpers import Repo
@@ -22,6 +25,19 @@ T1 = "plans/f/tasks/01-a.md"
 STATE = ".feature-flow/state/flow-f.state"
 TRUST = re.compile(r"^TRUST ([0-9a-f]{16}\.[0-9a-f]{16})$")
 CHANGED = "STOP flow files changed since the last step:"
+
+
+def load_runner():
+    """scripts/flow-trust.py as a module, without running main(). Loading it outside -I drops
+    sys.path[0], so sys.path is put back afterwards."""
+    saved = list(sys.path)
+    try:
+        spec = importlib.util.spec_from_file_location("flow_trust", str(helpers.ROOT / "scripts" / "flow-trust.py"))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+    finally:
+        sys.path[:] = saved
+    return runner
 
 
 class Base(unittest.TestCase):
@@ -181,9 +197,7 @@ class Started(Base):
         self.assertRegex(lines[1], r"^OK ")
 
     def test_the_names_it_hashes_match_the_ones_the_conductor_looks_up(self):
-        spec = importlib.util.spec_from_file_location("flow_trust", str(helpers.ROOT / "scripts" / "flow-trust.py"))
-        runner = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(runner)
+        runner = load_runner()
         sys.path.insert(0, str(helpers.ROOT))
         try:
             from feature_flow import prompts
@@ -281,35 +295,6 @@ class Trips(Base):
         self.append(path)
         self.assertStops(path.resolve().as_posix())
 
-    def link(self, link, target):
-        try:
-            os.symlink(str(target), str(link), target_is_directory=True)
-        except (OSError, NotImplementedError) as error:  # Windows without the symlink privilege
-            self.skipTest("cannot make a folder link here: %s" % error)
-
-    def test_a_linked_folder_in_the_package(self):
-        outside = tempfile.TemporaryDirectory()
-        self.addCleanup(outside.cleanup)
-        self.write(Path(outside.name) / "evil.py", "x = 1\n")
-        self.begin()
-        self.link(self.repo.path("feature_flow/linked"), outside.name)
-        self.assertStops("feature_flow/linked")
-
-    def test_an_edit_inside_a_linked_folder(self):
-        outside = tempfile.TemporaryDirectory()
-        self.addCleanup(outside.cleanup)
-        self.write(Path(outside.name) / "evil.py", "x = 1\n")
-        self.link(self.repo.path("feature_flow/linked"), outside.name)
-        self.repo.commit("link")
-        self.begin()
-        self.append(Path(outside.name) / "evil.py")
-        self.assertStops("feature_flow/linked/evil.py")
-
-    def test_a_looping_link_ends_and_trips(self):
-        self.begin()
-        self.link(self.repo.path("feature_flow/loop"), self.repo.path("feature_flow"))
-        self.assertStops("feature_flow/loop")
-
     def test_hole_a_a_committed_return_in_check_code(self):
         self.begin()
         path = self.repo.path("feature_flow/conductor.py")
@@ -406,9 +391,7 @@ class PlantedBytecodeCrlf(PlantedBytecode):
 
 class Homes(Base):
     def test_unset_home_falls_back_like_the_installer(self):
-        spec = importlib.util.spec_from_file_location("flow_trust", str(helpers.ROOT / "scripts" / "flow-trust.py"))
-        runner = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(runner)
+        runner = load_runner()
         saved = dict(os.environ)
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
         for key in ("HOME", "AGENTS_HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"):
@@ -431,16 +414,125 @@ class Homes(Base):
         self.assertIn(skill.resolve().as_posix(), out)
 
 
-class Killed(Base):
-    @unittest.skipUnless(hasattr(signal, "SIGKILL"), "no SIGKILL on this platform")
-    def test_a_conductor_killed_by_a_signal_is_a_stop_with_exit_1(self):
-        self.write(self.repo.path("scripts/flow.py"),
-                   "import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n")
-        rc, out, err = self.trust("f", "start", FLOW_TRUST="new")
-        self.assertEqual(rc, 1, (out, err))
+class KilledInProcess(Base):
+    """main() run in this process with a fake conductor result, so no signal has to exist here."""
+
+    def run_main(self, result):
+        runner = load_runner()
+        out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", newline="")
+        err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", newline="")
+        env = dict(self.env(FLOW_TRUST="new"))
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(runner, "started", return_value=(self.repo.path("scripts").resolve(), ["f", "start"])), \
+                mock.patch.object(runner, "toplevel", return_value=Path(str(self.repo.dir)).resolve()), \
+                mock.patch.object(runner, "run_conductor", return_value=result) as conductor, \
+                mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+            code = runner.main()
+            out.flush()
+            err.flush()
+        self.assertEqual(conductor.call_count, 1)
+        return code, out.buffer.getvalue().decode("utf-8"), err.buffer.getvalue().decode("utf-8")
+
+    def test_a_negative_return_code_is_a_stop_with_exit_1(self):
+        result = types.SimpleNamespace(returncode=-9, stdout=b"OK abc\n", stderr=b"oops\nflow-state f none\n")
+        code, out, err = self.run_main(result)
+        self.assertEqual(code, 1, (out, err))
         lines = out.splitlines()
         self.assertRegex(lines[0], TRUST)
-        self.assertEqual(lines[-1], "STOP the conductor was killed by signal %d" % signal.SIGKILL)
+        self.assertEqual(lines[1], "OK abc")
+        self.assertEqual(lines[-1], "STOP the conductor was killed by signal 9")
+        self.assertEqual(err, "oops\n")
+        self.assertTrue(self.repo.path(".feature-flow/state/flow-f.trust").is_file())
+
+    def test_a_normal_return_code_is_passed_through(self):
+        result = types.SimpleNamespace(returncode=3, stdout=b"STOP x\n", stderr=b"flow-state f none\n")
+        code, out, err = self.run_main(result)
+        self.assertEqual(code, 3, (out, err))
+        self.assertNotIn("killed", out)
+
+
+class FakeLinks:
+    """A tiny file system for tree() and hash_files(): folders, files and folder links,
+    served through mocks of os.listdir, os.path.realpath and Path.is_symlink/is_dir/is_file/read_bytes,
+    so no real link is needed on any platform."""
+
+    def __init__(self, root, folders, files, links):
+        self.root = Path(root)
+        self.folders = {self.root / f for f in folders}
+        self.files = {self.root / f for f in files}
+        self.links = {self.root / k: self.root / v for k, v in links.items()}
+
+    def real(self, path):
+        path = Path(path)
+        for _ in range(50):
+            for link, target in self.links.items():
+                if path == link or link in path.parents:
+                    path = target / path.relative_to(link)
+                    break
+            else:
+                return path
+        raise AssertionError("fake realpath did not settle: %s" % path)
+
+    def realpath(self, path):
+        return str(self.real(path))
+
+    def listdir(self, path):
+        real = self.real(path)
+        if real not in self.folders:
+            raise FileNotFoundError(str(path))
+        return [p.name for p in self.folders | self.files | set(self.links) if p.parent == real]
+
+    def patches(self):
+        fake = self
+        cls = type(Path())
+        return [
+            mock.patch("os.path.realpath", side_effect=self.realpath),
+            mock.patch("os.listdir", side_effect=self.listdir),
+            mock.patch.object(cls, "is_symlink", lambda p: fake.real(p.parent) / p.name in fake.links),
+            mock.patch.object(cls, "is_dir", lambda p: fake.real(p) in fake.folders),
+            mock.patch.object(cls, "is_file", lambda p: fake.real(p) in fake.files),
+            mock.patch.object(cls, "read_bytes", lambda p: fake.real(p).as_posix().encode("utf-8")),
+        ]
+
+
+class LinkedFolders(unittest.TestCase):
+    """tree() follows linked folders and lists them; a loop ends. Checked in this process on a fake
+    file system, so it runs the same everywhere."""
+
+    ROOT = Path(tempfile.gettempdir()) / "fake-flow"
+
+    def setUp(self):
+        self.runner = load_runner()
+
+    def fs(self, links):
+        return FakeLinks(self.ROOT, ["feature_flow", "feature_flow/__pycache__", "outside"],
+                         ["feature_flow/conductor.py", "feature_flow/__pycache__/conductor.pyc", "outside/evil.py"],
+                         links)
+
+    def walk(self, fs):
+        with contextlib.ExitStack() as stack:
+            for patch in fs.patches():
+                stack.enter_context(patch)
+            found = self.runner.tree(self.ROOT / "feature_flow")
+            each = self.runner.hash_files(found, self.ROOT)
+        return [p.relative_to(self.ROOT).as_posix() for p in found], each
+
+    def test_a_linked_folder_is_listed_and_followed(self):
+        found, each = self.walk(self.fs({"feature_flow/linked": "outside"}))
+        self.assertEqual(found, ["feature_flow/conductor.py", "feature_flow/linked", "feature_flow/linked/evil.py"])
+        target = "link " + str(self.ROOT / "outside")
+        self.assertEqual(each["feature_flow/linked"], hashlib.sha256(target.encode("utf-8")).hexdigest())
+        self.assertIn("feature_flow/linked/evil.py", each)
+
+    def test_adding_a_linked_folder_changes_the_code_part(self):
+        _, without = self.walk(self.fs({}))
+        _, linked = self.walk(self.fs({"feature_flow/linked": "outside"}))
+        self.assertNotEqual(self.runner.part(without), self.runner.part(linked))
+
+    def test_a_looping_link_is_listed_but_not_entered_again(self):
+        found, each = self.walk(self.fs({"feature_flow/loop": "feature_flow"}))
+        self.assertEqual(found, ["feature_flow/conductor.py", "feature_flow/loop"])
+        self.assertIn("feature_flow/loop", each)
 
 
 if __name__ == "__main__":
