@@ -167,10 +167,10 @@ class RunTests(unittest.TestCase):
         original = guide.read_bytes()
         guide.write_bytes(original + b"my own edit\n")
         _, out, _ = self.run_install("--user")
-        self.assertIn("kept    %s" % guide, out)
+        self.assertIn("kept    %s" % str(guide).replace("\\", "/"), out.replace("\\", "/"))
         self.assertIn(b"my own edit", guide.read_bytes())
         _, out, _ = self.run_install("--user", "--force")
-        self.assertIn("update  %s" % guide, out)
+        self.assertIn("update  %s" % str(guide).replace("\\", "/"), out.replace("\\", "/"))
         self.assertEqual(guide.read_bytes(), original)
 
     def test_a_user_install_updates_an_unedited_home_file_from_an_older_recorded_hash(self):
@@ -183,7 +183,7 @@ class RunTests(unittest.TestCase):
         lines.append("%s  guides/build.md" % install._sha256(guide.read_bytes()))
         record.write_text("\n".join(lines) + "\n", encoding="utf-8")
         _, out, _ = self.run_install("--user")
-        self.assertIn("update  %s" % guide, out)
+        self.assertIn("update  %s" % str(guide).replace("\\", "/"), out.replace("\\", "/"))
         self.assertNotIn(b"earlier version", guide.read_bytes())
 
     def test_a_user_codex_install_writes_no_roles_into_the_repo(self):

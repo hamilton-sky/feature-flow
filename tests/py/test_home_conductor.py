@@ -69,7 +69,8 @@ class HomeConductor(unittest.TestCase):
         rc, out = self.finish()
         self.assertEqual(rc, 1, out)
         self.assertTrue(out.startswith("STOP flow code changed while building "), out)
-        self.assertIn(str(self.flow_home / rel), out)
+        # Windows prints forward slashes and may spell the temp folder differently (short or long name)
+        self.assertIn(".feature-flow/" + rel, out.replace("\\\\", "/"))
 
     def test_start_and_next_run_from_the_repo_and_write_nothing_in_the_home(self):
         self.begin()
