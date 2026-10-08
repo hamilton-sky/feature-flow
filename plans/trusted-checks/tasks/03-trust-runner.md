@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: resolved
+Status: open
 Blocked by: —
 Test first: yes
 
@@ -101,3 +101,10 @@ QUALITY
 4. minor scripts/flow-trust.py: a conductor killed by a signal gives a negative returncode and an odd exit code. Map a negative code to 1 with a STOP line.
 5. minor tests/py/test_trust_runner.py: no trip case for `.agents/skills/feature-flow/`, `.agents/flow-roles/`, `$CLAUDE_HOME`/`$AGENTS_HOME` skill edits, or `.feature-flow/agents/`. Add one each.
 REVIEW: FAIL
+
+## Review findings (round 2, floor guard)
+
+floor guard: the diff weakens the bar instead of meeting it
+skip: tests/py/test_trust_runner.py: self.skipTest("cannot make a folder link here: %s" % error)
+skip: tests/py/test_trust_runner.py: @unittest.skipUnless(hasattr(signal, "SIGKILL"), "no SIGKILL on this platform")
+if a finding is intended, the ticket needs a line like: Floor: allow <category>
