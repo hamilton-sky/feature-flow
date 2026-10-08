@@ -4,7 +4,9 @@ usage: python3 install.py [target-repo] [--agent claude|codex|all] [--user] [--p
 copies the feature-flow skill, its roles, scripts and guides into a repo so the flow works there.
 a file that already exists and differs is kept and reported, unless --force is given or nobody
 edited it since an earlier feature-flow install wrote it (then it is updated).
-nothing is ever deleted. CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrides ~/.agents for --user.
+nothing is ever deleted. --user installs for every repo and writes nothing into one: the skills and
+roles go to ~/.claude and ~/.agents, the scripts, guides, roles and Python package to ~/.feature-flow.
+CLAUDE_HOME overrides ~/.claude, AGENTS_HOME ~/.agents and FEATURE_FLOW_HOME ~/.feature-flow for --user.
 
 Files are compared and written as bytes, and the two text transforms (the Codex skill header and
 a role file without its frontmatter) follow the awk programs of the bash version line for line,
@@ -30,15 +32,18 @@ copies the feature-flow skill, its roles, scripts and guides into a repo so the 
     agents  go to <target>/.claude/agents/   (or ~/.claude/agents/ with --user)
   --agent codex: the Codex skill from adapters/codex/, the other skills with a Codex header
     skills  go to <target>/.agents/skills/   (or ~/.agents/skills/ with --user)
-    roles   go to <target>/.agents/flow-roles/ (always: the skill reads them from the repo)
+    roles   go to <target>/.agents/flow-roles/ (not with --user: they are in ~/.feature-flow/agents/)
   --agent all does both.
   scripts go to <target>/scripts/ and guides, roles and the Python package to <target>/.feature-flow/
-    (always: the skill and scripts/flow.py read them from the repo)
+    (the skill and scripts/flow.py read them from the repo)
+  --user installs for every repo and writes no file into one (a target argument is ignored):
+    scripts/, guides/, agents/ and feature_flow/ go to ~/.feature-flow/ (FEATURE_FLOW_HOME overrides it)
 a file that already exists and differs is kept and reported, unless --force is given or it is
   still exactly what an earlier feature-flow install wrote (then it is updated).
   --private keeps the install out of git: its paths go into .git/info/exclude, which is never
     committed, so only the plans and tickets are. Later installs keep that list up to date.
-nothing is ever deleted. CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrides ~/.agents for --user.
+nothing is ever deleted. CLAUDE_HOME overrides ~/.claude, AGENTS_HOME ~/.agents and FEATURE_FLOW_HOME
+  ~/.feature-flow for --user.
 """
 
 # inside an installed package the skills, roles, guides and scripts sit in this folder of feature_flow
@@ -172,6 +177,11 @@ def _logical_cwd():
     return os.getcwd()
 
 
+def flow_home():
+    """The personal home folder of the flow: $FEATURE_FLOW_HOME or ~/.feature-flow."""
+    return os.environ.get("FEATURE_FLOW_HOME") or os.environ.get("HOME", "") + "/.feature-flow"
+
+
 class Installer:
     def __init__(self, here, target, agent, user_level, force, dry, out, private=False):
         self.here = here
@@ -181,8 +191,10 @@ class Installer:
         self.dry = dry
         self.out = out
         self.private = private
+        self.user_level = user_level
         if user_level:
             home = os.environ.get("HOME", "")
+            self.flow_dir = flow_home()
             self.claude_dir = os.environ.get("CLAUDE_HOME") or home + "/.claude"
             self.agents_dir = os.environ.get("AGENTS_HOME") or home + "/.agents"
         else:
@@ -195,8 +207,8 @@ class Installer:
         self.package = package
         self.added = self.updated = self.same = self.kept = 0
         self.written = {}
-        # each folder this installs into, with its hash record; the target's own comes first
-        self.records = [(target, HASHES)]
+        # each folder this installs into, with its hash record; the conductor's own folder comes first
+        self.records = [(self.flow_dir, USER_HASHES)] if user_level else [(target, HASHES)]
         if user_level and agent in ("claude", "all"):
             self.records.append((self.claude_dir, USER_HASHES))
         if user_level and agent in ("codex", "all"):
@@ -294,7 +306,7 @@ class Installer:
                 else:
                     self.place(file, self.agents_dir + "/skills/" + name + "/" + file[len(skill) + 1:])
         agents = here + "/agents"
-        names = sorted(os.listdir(agents), key=os.fsencode) if os.path.isdir(agents) else []
+        names = sorted(os.listdir(agents), key=os.fsencode) if os.path.isdir(agents) and not self.user_level else []
         for name in names:
             file = agents + "/" + name
             if name.startswith(".") or not name.endswith(".md") or not os.path.isfile(file):
@@ -307,11 +319,12 @@ class Installer:
         """Add this run's in-repo files to the list, and every file's hash to its folder's record, keeping
         the earlier runs' entries for files that still exist. True when the target's list or record changed."""
         names = set()
-        try:
-            with open(self.target + "/" + INSTALLED, encoding="utf-8") as old:
-                names.update(line.strip() for line in old)
-        except OSError:
-            pass
+        if not self.user_level:
+            try:
+                with open(self.target + "/" + INSTALLED, encoding="utf-8") as old:
+                    names.update(line.strip() for line in old)
+            except OSError:
+                pass
         hashes = dict((root, dict(self.recorded[root])) for root, _ in self.records)
         for dest, data in self.written.items():
             root, rel = self.locate(dest)
@@ -319,10 +332,12 @@ class Installer:
                 names.add(rel)
             if root is not None and data is not None:
                 hashes[root][rel] = _sha256(data)
-        names.update((INSTALLED, HASHES))
-        names = sorted(n for n in names
-                       if n in (INSTALLED, HASHES) or (n and os.path.isfile(self.target + "/" + n)))
-        changed = self._write(self.target + "/" + INSTALLED, "".join(n + "\n" for n in names))
+        changed = False
+        if not self.user_level:
+            names.update((INSTALLED, HASHES))
+            names = sorted(n for n in names
+                           if n in (INSTALLED, HASHES) or (n and os.path.isfile(self.target + "/" + n)))
+            changed = self._write(self.target + "/" + INSTALLED, "".join(n + "\n" for n in names))
         for root, record in self.records:
             kept = names if root == self.target else sorted(
                 n for n in hashes[root] if os.path.isfile(root + "/" + n))
@@ -408,11 +423,38 @@ class Installer:
             self.out("note: left from an earlier feature-flow, no longer installed:" + found
                      + ". delete them, /feature-flow replaces them")
 
+    def repo_notes(self, listed):
+        """What a repo install says about git: not a repository, kept private, or what to commit."""
+        try:
+            git = subprocess.run(["git", "-C", self.target, "rev-parse", "--git-dir"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+        except OSError:
+            git = 127
+        if git != 0:
+            self.out("note: %s is not a git repository, and the flow needs one" % self.target)
+        elif self.private or self.excluded():
+            self.private = True
+            exclude = self.exclude_file()
+            if exclude and self.write_exclude(exclude):
+                self.out("kept out of git: the install is listed in " + os.path.relpath(exclude, self.target)
+                         .replace(os.sep, "/") + ", which is never committed")
+            if self.tracked_installed():
+                self.out("note: git still tracks the install from before. untrack it, keeping the files: "
+                         "git rm -r -q --cached --ignore-unmatch --pathspec-from-file=%s"
+                         ' && git commit -m "chore: stop tracking feature-flow"' % INSTALLED)
+        elif self.added or self.updated or listed:
+            git_c = ""
+            if os.path.realpath(self.target) != os.path.realpath(os.getcwd()):
+                git_c = '-C "%s" ' % self.target if " " in self.target else "-C %s " % self.target
+            self.out('next: commit the installed files: git %sadd --pathspec-from-file=%s'
+                     ' && git %scommit -m "chore: install feature-flow"' % (git_c, INSTALLED, git_c))
+
     def run(self):
         here, agent = self.here, self.agent
         if self.dry:
             self.out("dry run: nothing will be written")
-        self.out("installing into " + self.target + ("" if agent == "claude" else " (%s)" % agent))
+        where = self.flow_dir if self.user_level else self.target
+        self.out("installing into " + where + ("" if agent == "claude" else " (%s)" % agent))
         left = []
         if agent in ("claude", "all"):
             for name in SKILLS:
@@ -422,10 +464,16 @@ class Installer:
         if agent in ("codex", "all"):
             self.install_codex()
             left.append(self.agents_dir + "/skills")
-        self.copy_tree(here + "/scripts", self.target + "/scripts")
-        self.copy_tree(here + "/guides", self.target + "/.feature-flow/guides")
-        self.copy_tree(here + "/agents", self.target + "/.feature-flow/agents")
-        self.copy_tree(self.package, self.target + "/.feature-flow/feature_flow", skip=BUNDLE)
+        if self.user_level:
+            self.copy_tree(here + "/scripts", self.flow_dir + "/scripts")
+            self.copy_tree(here + "/guides", self.flow_dir + "/guides")
+            self.copy_tree(here + "/agents", self.flow_dir + "/agents")
+            self.copy_tree(self.package, self.flow_dir + "/feature_flow", skip=BUNDLE)
+        else:
+            self.copy_tree(here + "/scripts", self.target + "/scripts")
+            self.copy_tree(here + "/guides", self.target + "/.feature-flow/guides")
+            self.copy_tree(here + "/agents", self.target + "/.feature-flow/agents")
+            self.copy_tree(self.package, self.target + "/.feature-flow/feature_flow", skip=BUNDLE)
         listed = not self.dry and self.write_installed()
 
         self.out("")
@@ -435,29 +483,8 @@ class Installer:
         self.report_leftovers(left)
 
         if not self.dry:
-            try:
-                git = subprocess.run(["git", "-C", self.target, "rev-parse", "--git-dir"],
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
-            except OSError:
-                git = 127
-            if git != 0:
-                self.out("note: %s is not a git repository, and the flow needs one" % self.target)
-            elif self.private or self.excluded():
-                self.private = True
-                exclude = self.exclude_file()
-                if exclude and self.write_exclude(exclude):
-                    self.out("kept out of git: the install is listed in " + os.path.relpath(exclude, self.target)
-                             .replace(os.sep, "/") + ", which is never committed")
-                if self.tracked_installed():
-                    self.out("note: git still tracks the install from before. untrack it, keeping the files: "
-                             "git rm -r -q --cached --ignore-unmatch --pathspec-from-file=%s"
-                             ' && git commit -m "chore: stop tracking feature-flow"' % INSTALLED)
-            elif self.added or self.updated or listed:
-                git_c = ""
-                if os.path.realpath(self.target) != os.path.realpath(os.getcwd()):
-                    git_c = '-C "%s" ' % self.target if " " in self.target else "-C %s " % self.target
-                self.out('next: commit the installed files: git %sadd --pathspec-from-file=%s'
-                         ' && git %scommit -m "chore: install feature-flow"' % (git_c, INSTALLED, git_c))
+            if not self.user_level:
+                self.repo_notes(listed)
             if not shutil.which("python3"):
                 self.out("note: install python3 (3.9 or later): scripts/flow.py needs it")
             if agent in ("claude", "all"):
@@ -521,7 +548,7 @@ def run(argv, here, out, err):
         out(USAGE[:-1])
         return 0
     target = opts["target"] or "."
-    if not os.path.isdir(target):
+    if not opts["user"] and not os.path.isdir(target):  # a user install ignores the target
         err("no such directory: " + target)
         return 2
     target = os.path.normpath(os.path.join(_logical_cwd(), target))

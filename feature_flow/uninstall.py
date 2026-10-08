@@ -11,7 +11,7 @@ import shutil
 import stat
 import subprocess
 
-from feature_flow.install import (EXCLUDE_BEGIN, EXCLUDE_END, HASHES, INSTALLED, USER_HASHES, Installer, _logical_cwd,
+from feature_flow.install import (EXCLUDE_BEGIN, EXCLUDE_END, HASHES, INSTALLED, USER_HASHES, Installer, _logical_cwd, flow_home,
                                   _read, _read_text, _sha256)
 from feature_flow.released import RELEASED
 
@@ -19,11 +19,11 @@ USAGE = """\
 usage: feature-flow uninstall [target-repo] [--user] [--force] [--dry-run]
 removes the files `feature-flow install` wrote into the repo (.claude/, .agents/, scripts/, .feature-flow/),
 and the lines a --private install put in .git/info/exclude.
-  --user     remove the personal install in ~/.claude and ~/.agents instead (what `install --user` wrote)
+  --user     remove the personal install in ~/.feature-flow, ~/.claude and ~/.agents instead (what `install --user` wrote)
   --force    also remove a file you edited since the install
   --dry-run  say what would be removed, change nothing
 a file you edited is kept and named. plans/ and your tickets are never touched, nor is .feature-flow/state/.
-CLAUDE_HOME overrides ~/.claude and AGENTS_HOME overrides ~/.agents for --user.
+CLAUDE_HOME overrides ~/.claude, AGENTS_HOME ~/.agents and FEATURE_FLOW_HOME ~/.feature-flow for --user.
 """
 
 
@@ -65,12 +65,13 @@ def _inside(root, rel):
         return False
 
 
-def _prune(root, rel, dry):
-    """Remove the folders above rel that the removal left empty, up to but not including root."""
+def _prune(root, rel, dry, owned=False):
+    """Remove the folders above rel that the removal left empty, up to but not including root.
+    owned: every folder under root belongs to the install, so bytecode in it is dropped too."""
     parent = os.path.dirname(rel)
     while parent and not dry:
         folder = os.path.join(root, parent)
-        if parent.replace("\\", "/").startswith(".feature-flow/"):  # a folder the install owns: drop bytecode python left
+        if owned or parent.replace("\\", "/").startswith(".feature-flow/"):  # a folder the install owns: drop bytecode python left
             shutil.rmtree(os.path.join(folder, "__pycache__"), ignore_errors=True)
         try:
             os.rmdir(folder)
@@ -107,7 +108,7 @@ def _drop_exclude_block(target, out, dry):
             f.write("".join(l + "\n" for l in lines))
 
 
-def remove_install(root, names, record_path, extra, force, dry, out):
+def remove_install(root, names, record_path, extra, force, dry, out, owned=False):
     """Remove the files names (relative to root) that still hold their recorded bytes. Returns (removed, kept)."""
     recorded = _recorded(record_path)
     removed = kept = 0
@@ -139,7 +140,7 @@ def remove_install(root, names, record_path, extra, force, dry, out):
         removed += 1
         if not dry:
             os.remove(path)
-            _prune(root, rel, dry)
+            _prune(root, rel, dry, owned)
     return removed, kept
 
 
@@ -165,13 +166,14 @@ def uninstall_repo(target, force, dry, out):
 def uninstall_user(force, dry, out):
     home = os.environ.get("HOME", "")
     removed = kept = found = 0
-    for root in (os.environ.get("CLAUDE_HOME") or home + "/.claude", os.environ.get("AGENTS_HOME") or home + "/.agents"):
+    flow = flow_home()
+    for root in (flow, os.environ.get("CLAUDE_HOME") or home + "/.claude", os.environ.get("AGENTS_HOME") or home + "/.agents"):
         record = root + "/" + USER_HASHES
         recorded = _recorded(record)
         if not recorded:
             continue
         found += 1
-        r, k = remove_install(root, sorted(recorded), record, (), force, dry, out)
+        r, k = remove_install(root, sorted(recorded), record, (), force, dry, out, root == flow)
         removed += r
         kept += k
         if not k and os.path.lexists(record):
@@ -179,8 +181,14 @@ def uninstall_user(force, dry, out):
             removed += 1
             if not dry:
                 os.remove(record)
+        if root == flow and not k and not dry:
+            shutil.rmtree(os.path.join(root, "__pycache__"), ignore_errors=True)
+            try:
+                os.rmdir(root)
+            except OSError:
+                pass
     if not found:
-        out("no personal feature-flow install found in %s/.claude or %s/.agents" % (home, home))
+        out("no personal feature-flow install found in %s, %s/.claude or %s/.agents" % (flow, home, home))
         return 1
     return _report(removed, kept, dry, out, None)
 

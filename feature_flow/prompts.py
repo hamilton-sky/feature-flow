@@ -3,6 +3,8 @@
 The text is runtime neutral: any agent that can read a prompt can follow it.
 """
 
+import re
+import shlex
 from pathlib import Path
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
@@ -32,9 +34,18 @@ def _body(path):
     return text.strip("\n")
 
 
+def _runner(text, scripts):
+    """Point `python3 scripts/` at the scripts folder that is running, unless it is the repo's own."""
+    folder = Path(scripts).absolute()
+    if folder == Path.cwd() / "scripts":
+        return text
+    base = folder.as_posix()
+    return re.sub(r"python3 scripts/([\w.-]+)", lambda m: "python3 " + shlex.quote(base + "/" + m.group(1)), text)
+
+
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
-    role = _body(find_file(scripts, "agents", ROLES[phase]))
-    guide = _body(find_file(scripts, "guides", GUIDES[phase]))
+    role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
                                ("<base>", sha), ("<base-commit>", sha), ("<start-commit>", sha)):
         guide = guide.replace(placeholder, value)
@@ -66,8 +77,8 @@ def plan(phase, scripts, feature, draft, brief, findings=""):
 
     Both get the approved brief and the draft folder, never the conversation or each other's reasoning.
     """
-    role = _body(find_file(scripts, "agents", ROLES[phase]))
-    guide = _body(find_file(scripts, "guides", GUIDES[phase]))
+    role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
     guide = guide.replace("<feature>", feature).replace("<draft>", draft)
     if phase == "plan":
         task = ("Your task: plan the feature `%s` from the approved brief below. Write the draft only inside "

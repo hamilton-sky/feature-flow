@@ -18,10 +18,11 @@ class UninstallTests(unittest.TestCase):
         self.target.mkdir()
         subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         self.home = Path(self.tmp.name) / "home"
-        self.saved = dict((k, os.environ.get(k)) for k in ("HOME", "CLAUDE_HOME", "AGENTS_HOME"))
+        self.saved = dict((k, os.environ.get(k)) for k in ("HOME", "CLAUDE_HOME", "AGENTS_HOME", "FEATURE_FLOW_HOME"))
         os.environ["HOME"] = str(self.home)
         os.environ["CLAUDE_HOME"] = str(self.home / ".claude")
         os.environ["AGENTS_HOME"] = str(self.home / ".agents")
+        os.environ["FEATURE_FLOW_HOME"] = str(self.home / ".feature-flow")
 
     def tearDown(self):
         for k, v in self.saved.items():
@@ -184,7 +185,34 @@ class UninstallTests(unittest.TestCase):
         code, out, _ = self.uninstall("--user")
         self.assertEqual(code, 0)
         self.assertEqual(self.files(self.home), [])
+        self.assertFalse((self.home / ".feature-flow").exists())
         self.assertEqual(self.files(), in_repo)
+        self.assertRegex(out.splitlines()[-1], r"^removed \d+, kept 0$")
+
+    def test_user_keeps_an_edited_home_file_and_force_removes_it(self):
+        self.install("--user", "--agent", "all")
+        flow = self.home / ".feature-flow" / "scripts" / "flow.py"
+        flow.write_bytes(flow.read_bytes() + b"# mine\n")
+        _, out, _ = self.uninstall("--user")
+        self.assertIn("kept    %s (edited" % flow, out)
+        self.assertTrue(flow.is_file())
+        self.uninstall("--user", "--force")
+        self.assertFalse((self.home / ".feature-flow").exists())
+
+    def test_user_dry_run_changes_nothing(self):
+        self.install("--user", "--agent", "all")
+        before = self.files(self.home)
+        _, out, _ = self.uninstall("--user", "--dry-run")
+        self.assertIn("would remove", out)
+        self.assertEqual(self.files(self.home), before)
+
+    def test_user_bytecode_in_the_home_folder_does_not_stop_the_removal(self):
+        self.install("--user", "--agent", "all")
+        cache = self.home / ".feature-flow" / "feature_flow" / "__pycache__"
+        cache.mkdir()
+        (cache / "x.pyc").write_bytes(b"\0")
+        self.uninstall("--user")
+        self.assertFalse((self.home / ".feature-flow").exists())
 
     def test_user_without_a_personal_install_says_so(self):
         code, out, _ = self.uninstall("--user")
