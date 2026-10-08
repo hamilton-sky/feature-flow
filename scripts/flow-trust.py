@@ -6,6 +6,9 @@ usage: FLOW_TRUST=<last TRUST digest | new> python3 -I scripts/flow-trust.py [--
 It hashes the flow's own files (the conductor, its package, guides, roles, skills and the run
 state), refuses to call the conductor when they differ from the digest the session passed in
 FLOW_TRUST, runs the conductor, and prints `TRUST <digest>` for the session to pass next time.
+It stops when the flow's code changed during the call, or when the run state is not what the
+conductor reported saving. After a BUILD, `--after-build <ticket> <sha>` accepts a code change
+(never a state change) when the ticket at <sha> has `Floor: allow flow-edit`.
 
 It imports nothing from the repo, on purpose: it is the code that decides whether the flow's
 files on disk were changed, so it must not run any of them. The skill's loader checks this
@@ -19,6 +22,7 @@ if not (sys.flags.isolated or getattr(sys.flags, "safe_path", 0)):
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -29,6 +33,8 @@ USAGE = ("usage: FLOW_TRUST=<last TRUST digest | new> python3 -I scripts/flow-tr
 NO_TRUST = "STOP pass FLOW_TRUST: the last TRUST digest, or new on this session's first call"
 CHANGED = "STOP flow files changed since the last step: %s"
 KILLED = "STOP the conductor was killed by signal %d"
+DURING = "STOP flow code changed during %s: %s"
+STATE_CHANGED = "STOP the run state was changed by something other than the conductor during %s"
 SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.py", "flow-trust.py")
 GUIDES = ("build.md", "review.md", "review-quality.md", "plan.md", "plan-review.md", "debug.md")  # prompts.GUIDES + debug.md
 ROLES = ("ticket-builder.md", "ticket-reviewer.md", "feature-planner.md", "plan-reviewer.md")  # prompts.ROLES
@@ -48,18 +54,19 @@ def started():
 
 
 def parse(args):
-    """(feature, command, the conductor's other args), or None on a usage error.
-    --after-build <ticket> <sha> is accepted and ignored for now."""
+    """(feature, command, the conductor's other args, (ticket, sha) or None), or None on a usage error."""
+    after = None
     if args[:1] == ["--after-build"]:
         if len(args) < 3:
             return None
+        after = (args[1], args[2])
         args = args[3:]
     if len(args) < 2:
         return None
     feature = args[0]
     if not feature or feature.startswith("-") or feature in (".", "..") or any(c in feature for c in "/\\:"):
         return None
-    return feature, args[1], args[2:]
+    return feature, args[1], args[2:], after
 
 
 def toplevel():
@@ -203,6 +210,57 @@ def run_conductor(here, feature, command, rest):
         shutil.rmtree(cache, ignore_errors=True)
 
 
+def changed(before, after):
+    return sorted(key for key in set(before) | set(after) if before.get(key) != after.get(key))
+
+
+def allows_flow_edit(top, ticket, sha):
+    """True when the ticket's blob at sha has a `Floor:` line that lists flow-edit. Read with
+    --no-replace-objects so a `git replace` cannot swap the blob. The Floor line is parsed as
+    floorguard.allow_line does: the first one in the first 20 lines."""
+    if not all(c in "0123456789abcdefABCDEF" for c in sha) or not 4 <= len(sha) <= 64:
+        return False
+    path = Path(ticket)
+    if path.is_absolute():
+        if not under(path.resolve(), top):
+            return False
+        path = path.resolve().relative_to(top)
+    try:
+        out = subprocess.run(["git", "--no-replace-objects", "cat-file", "blob", "%s:%s" % (sha, path.as_posix())],
+                             cwd=str(top), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        return False
+    if out.returncode != 0:
+        return False
+    for line in out.stdout.decode("utf-8", "replace").split("\n")[:20]:
+        if line.startswith("Floor:"):
+            allow = re.sub(r"^floor:[ \t]*allow[ \t]*", "", line.lower(), count=1)
+            return "flow-edit" in allow.replace(",", " ").split()
+    return False
+
+
+def flow_edit(top, feature, trust, after, code, state):
+    """The code paths a flow-edit build may change, or None when the change is not accepted:
+    the state part must match exactly, and the ticket at its base must allow flow-edit.
+    The .trust list only names the paths."""
+    if after is None or trust.split(".")[1:] != [part(state)]:
+        return None
+    if not allows_flow_edit(top, after[0], after[1]):
+        return None
+    return named_changes(top, feature, dict(code, **state))
+
+
+def state_as_saved(report, state, top, feature):
+    """True when the conductor's `flow-state <state> <findings>` line matches both files now."""
+    fields = (report or "").split()
+    if len(fields) != 3 or fields[0] != "flow-state":
+        return False
+    for path, said in zip(state_files(top, feature), fields[1:]):
+        if (None if said == "none" else said) != state.get(name(path, top)):
+            return False
+    return True
+
+
 def split_report(err):
     """(stderr without the conductor's final `flow-state` line, that line or None)."""
     lines = err.splitlines(True)
@@ -217,31 +275,43 @@ def main():
     if parsed is None:
         print(USAGE, file=sys.stderr)
         return 2
-    feature, command, rest = parsed
+    feature, command, rest, after = parsed
     trust = os.environ.get("FLOW_TRUST", "")
     if not trust:
         print(NO_TRUST)
         return 1
     top = toplevel()
-    if trust != "new":
-        code, state = snapshot(here, top, feature)
-        if digest(code, state) != trust:
-            print(CHANGED % named_changes(top, feature, dict(code, **state)))
+    before, state = snapshot(here, top, feature)
+    edited = None
+    if trust != "new" and digest(before, state) != trust:
+        edited = flow_edit(top, feature, trust, after, before, state)
+        if edited is None:
+            print(CHANGED % named_changes(top, feature, dict(before, **state)))
             return 1
     result = run_conductor(here, feature, command, rest)
     code, state = snapshot(here, top, feature)
-    write_list(top, feature, dict(code, **state))
-    err, _report = split_report(result.stderr)
-    sys.stdout.write("TRUST %s\n" % digest(code, state))
+    err, report = split_report(result.stderr)
+    if code != before:
+        stop = DURING % (command, ", ".join(changed(before, code)))
+    elif result.returncode < 0:
+        stop = KILLED % -result.returncode
+    elif not state_as_saved(report, state, top, feature):
+        stop = STATE_CHANGED % command
+    else:
+        stop = None
+        write_list(top, feature, dict(code, **state))
+    if stop:
+        sys.stdout.write(stop + "\n")
+    else:
+        sys.stdout.write("TRUST %s\n" % digest(code, state))
+        if edited is not None:
+            sys.stdout.write("FLOW-EDIT %s\n" % edited)
     sys.stdout.flush()
     sys.stdout.buffer.write(result.stdout)
     sys.stdout.buffer.flush()
     sys.stderr.buffer.write(err)
     sys.stderr.buffer.flush()
-    if result.returncode < 0:
-        print(KILLED % -result.returncode)
-        return 1
-    return result.returncode
+    return 1 if stop else result.returncode
 
 
 if __name__ == "__main__":
