@@ -28,6 +28,7 @@ USAGE = ("usage: FLOW_TRUST=<last TRUST digest | new> python3 -I scripts/flow-tr
          "[--after-build <ticket> <sha>] <feature> <command> [args...]")
 NO_TRUST = "STOP pass FLOW_TRUST: the last TRUST digest, or new on this session's first call"
 CHANGED = "STOP flow files changed since the last step: %s"
+KILLED = "STOP the conductor was killed by signal %d"
 SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.py", "flow-trust.py")
 GUIDES = ("build.md", "review.md", "review-quality.md", "plan.md", "plan-review.md", "debug.md")  # prompts.GUIDES + debug.md
 ROLES = ("ticket-builder.md", "ticket-reviewer.md", "feature-planner.md", "plan-reviewer.md")  # prompts.ROLES
@@ -73,15 +74,31 @@ def toplevel():
 
 
 def home(variable, name):
-    return Path(os.environ.get(variable) or Path.home() / name).resolve()
+    """$variable, else $HOME/name with an unset HOME read as empty, as the installer does."""
+    return Path(os.environ.get(variable) or os.environ.get("HOME", "") + "/" + name).resolve()
 
 
-def tree(folder):
-    """Every file under folder, skipping __pycache__/ and *.pyc."""
+def tree(folder, chain=frozenset()):
+    """Every file under folder, skipping __pycache__/ and *.pyc. Linked folders are followed,
+    since Python imports through them, and listed themselves so adding one changes the hash;
+    one that loops back to a folder on its own path is listed but not entered again."""
+    real = os.path.realpath(str(folder))
+    if real in chain:
+        return []
+    try:
+        names = sorted(os.listdir(str(folder)))
+    except OSError:
+        return []
     found = []
-    for root, dirs, files in os.walk(str(folder)):
-        dirs[:] = [d for d in dirs if d != "__pycache__"]
-        found += [Path(root) / f for f in files if not f.endswith(".pyc")]
+    for entry in names:
+        path = folder / entry
+        if path.is_symlink() and path.is_dir():
+            found.append(path)
+        if path.is_dir():
+            if entry != "__pycache__":
+                found += tree(path, chain | {real})
+        elif not entry.endswith(".pyc"):
+            found.append(path)
     return found
 
 
@@ -118,10 +135,14 @@ def name(path, top):
 
 
 def hash_files(paths, top):
-    """{name: sha256 of the file} for the paths that are files."""
+    """{name: sha256 of the file} for the paths that are files; a linked folder hashes as
+    the sha256 of `link <its real path>`."""
     each = {}
     for path in paths:
-        if path.is_file():
+        if path.is_dir():
+            target = "link " + os.path.realpath(str(path))
+            each[name(path, top)] = hashlib.sha256(target.encode("utf-8", "surrogateescape")).hexdigest()
+        elif path.is_file():
             try:
                 each[name(path, top)] = hashlib.sha256(path.read_bytes()).hexdigest()
             except OSError:
@@ -217,6 +238,9 @@ def main():
     sys.stdout.buffer.flush()
     sys.stderr.buffer.write(err)
     sys.stderr.buffer.flush()
+    if result.returncode < 0:
+        print(KILLED % -result.returncode)
+        return 1
     return result.returncode
 
 

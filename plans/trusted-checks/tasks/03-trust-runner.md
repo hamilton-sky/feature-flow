@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -52,16 +52,16 @@ exit 0
 **Built**
 
 - `scripts/flow-trust.py` (new): the runner. Stdlib only, imports nothing from the repo. It works out how it was started (`__file__` set: run directly; otherwise `exec` by the loader, with `sys.argv[1]` as its path and `sys.argv[3:]` as its arguments). It accepts and ignores `--after-build <ticket> <sha>`. A missing or empty `FLOW_TRUST` is a STOP. It hashes the files that spec § Design "What is hashed" lists into a `<code>.<state>` digest and compares it with `FLOW_TRUST` (`new` skips the comparison). On a difference it prints the STOP and names the paths from the `.trust` list. Otherwise it runs `flow.py` with `-I -X pycache_prefix=<fresh temp>` and `FLOW_TRUSTED=1`, hashes again, writes `.feature-flow/state/flow-<feature>.trust` (sorted JSON), and prints `TRUST <digest>` followed by the conductor's stdout as is. It passes stderr on without the final `flow-state` line and exits with the conductor's exit code.
-- `tests/py/test_trust_runner.py` (new): 26 tests.
+- `tests/py/test_trust_runner.py` (new): 40 tests (26 in round 1, 14 added in round 2 for the review fixes).
 - `tests/run.sh`: `scripts/flow-trust.py` added to the installed-file loop.
 - `tests/py/test_install.py`: `flow-trust.py` added to the exact list of installed `scripts/` files. The installer copies all of `scripts/`, so this test failed until the list included the new file. `install.py` and `pyproject.toml` (which bundles `scripts/*.py`) needed no change.
 
 **Proof**
 
-- `python3 -m unittest discover -s tests/py -p "test_trust_runner.py"`: `Ran 26 tests ... OK`, exit 0. Covered: a first call prints TRUST then OK. A later call with that digest gets `BUILD`. A missing or empty `FLOW_TRUST` is a STOP. Each of these trips the next call and is named: edited `feature_flow/conductor.py`, new `feature_flow/extra.py`, edited `.feature-flow/guides/build.md`, edited `.claude/agents/ticket-builder.md`, edited `.claude/skills/feature-flow/SKILL.md`, a line added to `flow-f.state`, an edited or missing root `guides/build.md`, an edit under `FEATURE_FLOW_HOME`. Hole (a), a committed `return` in `check_code`, gives a STOP that names `feature_flow/conductor.py`. Hole (b), `phase=` written into the state after resolving 01, gives a STOP that names the state file. None of these trip it: root `guides/notes.md`, root `agents/x.md`, `__pycache__/x.pyc`, `scripts/deploy.sh`, `flow-review-f.txt`, the log. The planted `.pyc` is real: it is loaded when `flow.py` is run directly, the control test shows `PW <token>`. Through the runner the source runs (`OK <token>`), both on a first call and between calls without a trip. The loader line from spec § Interfaces runs the runner as exec of its bytes. The runner's GUIDES and ROLES names match `prompts`.
+- `python3 -m unittest discover -s tests/py -p "test_trust_runner.py"`: `Ran 40 tests ... OK`, exit 0 (round 2 rerun). Covered: a first call prints TRUST then OK. A later call with that digest gets `BUILD`. A missing or empty `FLOW_TRUST` is a STOP. Each of these trips the next call and is named: edited `feature_flow/conductor.py`, new `feature_flow/extra.py`, edited `.feature-flow/guides/build.md`, edited `.claude/agents/ticket-builder.md`, edited `.claude/skills/feature-flow/SKILL.md`, a line added to `flow-f.state`, an edited or missing root `guides/build.md`, an edit under `FEATURE_FLOW_HOME`. Hole (a), a committed `return` in `check_code`, gives a STOP that names `feature_flow/conductor.py`. Hole (b), `phase=` written into the state after resolving 01, gives a STOP that names the state file. None of these trip it: root `guides/notes.md`, root `agents/x.md`, `__pycache__/x.pyc`, `scripts/deploy.sh`, `flow-review-f.txt`, the log. The planted `.pyc` is real: it is loaded when `flow.py` is run directly, the control test shows `PW <token>`. Through the runner the source runs (`OK <token>`), both on a first call and between calls without a trip. The loader line from spec § Interfaces runs the runner as exec of its bytes. The runner's GUIDES and ROLES names match `prompts`.
 - `python3 install.py <tmp repo>` writes `scripts/flow-trust.py`: `bash tests/run.sh` prints `ok    installed scripts/flow-trust.py`.
-- `python3 -m unittest discover -s tests/py`: `Ran 307 tests ... OK`, exit 0.
-- `bash tests/run.sh`: `465 passed, 0 failed`, exit 0.
+- `python3 -m unittest discover -s tests/py`: `Ran 321 tests ... OK`, exit 0 (round 2 rerun).
+- `bash tests/run.sh`: `465 passed, 0 failed`, exit 0 (round 2 rerun, `ok    installed scripts/flow-trust.py`).
 - Smoke command: exit 0.
 
 **Decisions**
@@ -83,6 +83,14 @@ exit 0
 - 04: `split_report()` already returns the `flow-state` line as its second value (currently `_report`). `snapshot()` returns `(code, state)` maps. Take the "before" snapshot for `new` calls too when the during-call check is added.
 - 05: `HANDOFF` lines come through the stdout bytes unchanged. Rewrite them in `main()` before writing stdout.
 - 06/07: the runner's direct form is `FLOW_TRUST=new python3 -I scripts/flow-trust.py <feature> <command>`.
+
+**Review fixes** (round 1, quality review)
+
+1. CRLF in `PlantedBytecode.plant`: reproduced off Windows. With conductor.py rewritten to CRLF, `read_text` gives 25452 bytes and `st_size` gives 25998, the same numbers as the CI job. `plant()` now works on bytes (`read_bytes`, byte-string replace, `write_bytes`). New `PlantedBytecodeCrlf` reruns all three plant tests after converting the test repo's copy of conductor.py to CRLF before the layout commit. All three pass: the plant still loads when `flow.py` is run directly, and the runner still runs the source.
+2. Linked folders: `tree()` is now a small recursive walk that follows linked folders, because Python imports through them. It also returns the linked folder itself, and `hash_files` hashes that entry as sha256 of `link <real path>`, so adding a link changes the digest even when it loops. A link that points back to a folder on its own path is listed but not entered again. Tests: adding a linked folder into `feature_flow/` trips and names `feature_flow/linked`. An edit inside a committed linked folder trips and names `feature_flow/linked/evil.py`. A looping link `feature_flow/loop -> feature_flow` finishes, trips, and names it. These tests skip only if `os.symlink` fails (Windows without the symlink privilege).
+3. `home()` now falls back to `os.environ.get("HOME", "") + "/" + name`, as install.py does. Tests: with HOME unset the default is `/.agents`, the installer's value. The runner previously gave `/root/.agents` here. With `AGENTS_HOME` unset, an edit under `$HOME/.agents/skills/feature-flow/` trips.
+4. A negative return code (killed by a signal) now prints `STOP the conductor was killed by signal N` after the conductor's output and exits 1. TRUST is still printed first, because the call happened and the list was written. Before the fix, the test showed exit 247. The test runs only where `signal.SIGKILL` exists.
+5. Trip tests added for `.agents/skills/feature-flow/`, `.agents/flow-roles/`, `.feature-flow/agents/`, `$CLAUDE_HOME/skills/feature-flow/` and `$AGENTS_HOME/skills/feature-flow/`. Each STOPs and names its path.
 
 ## Review findings (round 1, quality review)
 

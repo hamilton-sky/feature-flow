@@ -36,6 +36,7 @@ Every conductor call the skills make goes through `scripts/flow-trust.py`, whose
 - 02 — with FLOW_TRUSTED=1 the conductor's last stderr line is `flow-state <state sha|none> <findings sha|none>` from the bytes it wrote/read (state.SEEN); owner stored as sha256(token), old 16-hex raw owners accepted once; next/prompt/verdict STOP without FLOW_TRUSTED=1.
 - 02 — (round 2) cli.peek reads both files before any early return, so usage errors report what is on disk; state.* records only with an explicit kind ("state"/"findings"); a non-UTF-8 state file is a STOP.
 - 03 — scripts/flow-trust.py: stdlib-only runner; FLOW_TRUST required (new = no compare); digest <code>.<state> over the spec's hashed set; STOP names paths from the untrusted .trust list; conductor run with -I, a fresh pycache_prefix and FLOW_TRUSTED=1; flow-state line stripped from stderr.
+- 03 — (round 2) the runner follows linked folders and hashes each link as an entry; HOME falls back like install.py; a conductor killed by a signal is a STOP with exit 1; the bytecode plant test works on bytes (CRLF-safe).
 
 ## Open questions
 
