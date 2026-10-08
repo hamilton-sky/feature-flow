@@ -59,8 +59,14 @@ class PromptFolderTests(unittest.TestCase):
         scripts = self.tree(self.root / "home")
         (scripts.parent / "guides" / "plan.md").write_text("Use [templates/spec.md](templates/spec.md).", encoding="utf-8")
         text = prompts.plan("plan", scripts, "demo", "draft", "brief")
-        self.assertIn("[templates/spec.md](%s/guides/templates/spec.md)" % scripts.parent.as_posix(), text)
+        self.assertIn("[templates/spec.md](<%s/guides/templates/spec.md>)" % scripts.parent.as_posix(), text)
         self.assertNotIn("](templates/", text)
+
+    def test_a_template_link_with_a_space_in_the_path_stays_one_destination(self):
+        scripts = self.tree(self.root / "my home")
+        (scripts.parent / "guides" / "plan.md").write_text("Use [t](templates/spec.md).", encoding="utf-8")
+        text = prompts.plan("plan", scripts, "demo", "draft", "brief")
+        self.assertIn("[t](<%s/guides/templates/spec.md>)" % scripts.parent.as_posix(), text)
 
     def test_the_repo_install_keeps_its_template_links(self):
         repo = self.root / "repo"

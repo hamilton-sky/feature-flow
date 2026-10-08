@@ -48,7 +48,7 @@ def _templates(text, guides, scripts):
     if Path(scripts).absolute() == Path.cwd() / "scripts":
         return text
     base = Path(guides).absolute().as_posix()
-    return re.sub(r"\]\(templates/([\w.-]+)\)", lambda m: "](%s)" % shlex.quote(base + "/templates/" + m.group(1)), text)
+    return re.sub(r"\]\(templates/([\w.-]+)\)", lambda m: "](<%s>)" % (base + "/templates/" + m.group(1)), text)
 
 
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
