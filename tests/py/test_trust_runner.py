@@ -8,6 +8,7 @@ import os
 import py_compile
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -201,6 +202,11 @@ class Trips(Base):
         self.write(self.repo.path(".claude/skills/feature-flow/SKILL.md"), "# skill\n")
         self.write(self.repo.path("guides/build.md"), "# root guide\n")
         self.write(self.homes["FEATURE_FLOW_HOME"] / "guides" / "build.md", "# home guide\n")
+        self.write(self.repo.path(".agents/skills/feature-flow/SKILL.md"), "# skill\n")
+        self.write(self.repo.path(".agents/flow-roles/ticket-builder.md"), "# role\n")
+        self.write(self.repo.path(".feature-flow/agents/ticket-builder.md"), "# role\n")
+        self.write(self.homes["CLAUDE_HOME"] / "skills" / "feature-flow" / "SKILL.md", "# skill\n")
+        self.write(self.homes["AGENTS_HOME"] / "skills" / "feature-flow" / "SKILL.md", "# skill\n")
 
     def test_an_edited_conductor(self):
         self.begin()
@@ -247,6 +253,62 @@ class Trips(Base):
         path = self.homes["FEATURE_FLOW_HOME"] / "guides" / "build.md"
         self.append(path)
         self.assertStops(path.resolve().as_posix())
+
+    def test_an_edited_agents_skill(self):
+        self.begin()
+        self.append(self.repo.path(".agents/skills/feature-flow/SKILL.md"))
+        self.assertStops(".agents/skills/feature-flow/SKILL.md")
+
+    def test_an_edited_flow_role_under_agents(self):
+        self.begin()
+        self.append(self.repo.path(".agents/flow-roles/ticket-builder.md"))
+        self.assertStops(".agents/flow-roles/ticket-builder.md")
+
+    def test_an_edited_role_under_feature_flow_agents(self):
+        self.begin()
+        self.append(self.repo.path(".feature-flow/agents/ticket-builder.md"))
+        self.assertStops(".feature-flow/agents/ticket-builder.md")
+
+    def test_an_edited_skill_under_claude_home(self):
+        self.begin()
+        path = self.homes["CLAUDE_HOME"] / "skills" / "feature-flow" / "SKILL.md"
+        self.append(path)
+        self.assertStops(path.resolve().as_posix())
+
+    def test_an_edited_skill_under_agents_home(self):
+        self.begin()
+        path = self.homes["AGENTS_HOME"] / "skills" / "feature-flow" / "SKILL.md"
+        self.append(path)
+        self.assertStops(path.resolve().as_posix())
+
+    def link(self, link, target):
+        try:
+            os.symlink(str(target), str(link), target_is_directory=True)
+        except (OSError, NotImplementedError) as error:  # Windows without the symlink privilege
+            self.skipTest("cannot make a folder link here: %s" % error)
+
+    def test_a_linked_folder_in_the_package(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        self.write(Path(outside.name) / "evil.py", "x = 1\n")
+        self.begin()
+        self.link(self.repo.path("feature_flow/linked"), outside.name)
+        self.assertStops("feature_flow/linked")
+
+    def test_an_edit_inside_a_linked_folder(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        self.write(Path(outside.name) / "evil.py", "x = 1\n")
+        self.link(self.repo.path("feature_flow/linked"), outside.name)
+        self.repo.commit("link")
+        self.begin()
+        self.append(Path(outside.name) / "evil.py")
+        self.assertStops("feature_flow/linked/evil.py")
+
+    def test_a_looping_link_ends_and_trips(self):
+        self.begin()
+        self.link(self.repo.path("feature_flow/loop"), self.repo.path("feature_flow"))
+        self.assertStops("feature_flow/loop")
 
     def test_hole_a_a_committed_return_in_check_code(self):
         self.begin()
@@ -296,18 +358,18 @@ class PlantedBytecode(Base):
 
     def plant(self):
         source = self.repo.path("feature_flow/conductor.py")
-        original = source.read_text(encoding="utf-8")
+        original = source.read_bytes()
         stat = source.stat()
-        honest, forged = 'return "OK %s" % token', 'return "PW %s" % token'
+        honest, forged = b'return "OK %s" % token', b'return "PW %s" % token'
         self.assertIn(honest, original)
         edited = original.replace(honest, forged, 1)
-        self.assertEqual(len(edited.encode("utf-8")), stat.st_size)
-        source.write_text(edited, encoding="utf-8")
+        self.assertEqual(len(edited), stat.st_size)
+        source.write_bytes(edited)
         os.utime(str(source), (stat.st_atime, stat.st_mtime))
         cfile = importlib.util.cache_from_source(str(source))
         py_compile.compile(str(source), cfile=cfile, doraise=True,
                            invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
-        source.write_text(original, encoding="utf-8")
+        source.write_bytes(original)
         os.utime(str(source), (stat.st_atime, stat.st_mtime))
 
     def test_the_plant_would_run_without_the_runner(self):
@@ -330,6 +392,55 @@ class PlantedBytecode(Base):
         rc, lines, err = self.passed("start", FLOW_TAKEOVER="1")
         self.assertEqual(rc, 0, (lines, err))
         self.assertTrue(lines[0].startswith("OK "), lines)
+
+
+class PlantedBytecodeCrlf(PlantedBytecode):
+    """The same, with conductor.py checked out with CRLF line endings, as on Windows."""
+
+    def prepare(self):
+        path = self.repo.path("feature_flow/conductor.py")
+        data = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        path.write_bytes(data)
+        self.assertIn(b"\r\n", path.read_bytes())
+
+
+class Homes(Base):
+    def test_unset_home_falls_back_like_the_installer(self):
+        spec = importlib.util.spec_from_file_location("flow_trust", str(helpers.ROOT / "scripts" / "flow-trust.py"))
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        saved = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
+        for key in ("HOME", "AGENTS_HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"):
+            os.environ.pop(key, None)
+        self.assertEqual(runner.home("AGENTS_HOME", ".agents"), Path("/.agents").resolve())
+
+    def test_the_default_agents_home_is_under_home(self):
+        home = tempfile.TemporaryDirectory()
+        self.addCleanup(home.cleanup)
+        del self.homes["AGENTS_HOME"]
+        skill = Path(home.name) / ".agents" / "skills" / "feature-flow" / "SKILL.md"
+        self.write(skill, "# skill\n")
+        os.environ.pop("AGENTS_HOME", None)
+        rc, lines, err = self.passed("start", HOME=home.name)
+        self.assertEqual(rc, 0, (lines, err))
+        self.append(skill)
+        rc, out, err = self.call("start", HOME=home.name, FLOW_TAKEOVER="1")
+        self.assertEqual(rc, 1, (out, err))
+        self.assertTrue(out.startswith(CHANGED), out)
+        self.assertIn(skill.resolve().as_posix(), out)
+
+
+class Killed(Base):
+    @unittest.skipUnless(hasattr(signal, "SIGKILL"), "no SIGKILL on this platform")
+    def test_a_conductor_killed_by_a_signal_is_a_stop_with_exit_1(self):
+        self.write(self.repo.path("scripts/flow.py"),
+                   "import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n")
+        rc, out, err = self.trust("f", "start", FLOW_TRUST="new")
+        self.assertEqual(rc, 1, (out, err))
+        lines = out.splitlines()
+        self.assertRegex(lines[0], TRUST)
+        self.assertEqual(lines[-1], "STOP the conductor was killed by signal %d" % signal.SIGKILL)
 
 
 if __name__ == "__main__":
