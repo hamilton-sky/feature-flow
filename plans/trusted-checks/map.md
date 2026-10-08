@@ -34,6 +34,7 @@ Every conductor call the skills make goes through `scripts/flow-trust.py`, whose
   - `cmd.exe`: `%` expands variables, `!` only with delayed expansion (off by default), `"` groups an argument; the loader uses only double quotes and none of `$ % !`: docs: https://learn.microsoft.com/windows-server/administration/windows-commands/cmd
 - 01 — the five scripts drop their own folder from sys.path first thing and load feature_flow by path (spec_from_file_location), so nothing in scripts/ or the repo root can shadow a module; work under python3 -I.
 - 02 — with FLOW_TRUSTED=1 the conductor's last stderr line is `flow-state <state sha|none> <findings sha|none>` from the bytes it wrote/read (state.SEEN); owner stored as sha256(token), old 16-hex raw owners accepted once; next/prompt/verdict STOP without FLOW_TRUSTED=1.
+- 02 — (round 2) cli.peek reads both files before any early return, so usage errors report what is on disk; state.* records only with an explicit kind ("state"/"findings"); a non-UTF-8 state file is a STOP.
 
 ## Open questions
 

@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -72,6 +72,16 @@ Work started at 059c302e35928f6069140582729bf98ad265641e. Test-only commit: 9017
 
 - 03/04 (runner): set `FLOW_TRUSTED=1` for the conductor and parse the last stderr line `flow-state <64 hex|none> <64 hex|none>`; `none` means the file did not exist (or was deleted) as far as the conductor knows. A usage error before the conductor is built reports `none none` even if files exist.
 - 06/07: `start` still prints `OK <token>`; the state now holds `owner=<sha256>`. Owner STOPs print 8 characters of the hash, not the token. Direct `next|prompt|verdict` now STOP: README and skills (07, 06) must use the runner. `tests/run.sh` exports `FLOW_TRUSTED=1` at its top.
+
+**Review fixes (round 1)**
+
+Round 2 started at 308f8e9359dc900ce89a57d62b5217796ee3256b. Test-only commit: 0806c01 (`test(trusted-checks): 02 failing test`). At that commit the 3 new tests failed for the reasons named in the findings: a usage error reported `('none', 'none')` while the state file existed, the non-UTF-8 state file gave a traceback instead of a STOP, and `state.save` on `other.state` changed the report.
+
+1. Usage errors report `none none`: reproduced first (`start`, then trusted `verdict` with no file: rc 2, `flow-state none none` while the state file existed). Fixed in `feature_flow/cli.py`: new `peek(args)`, called by `main()` with `FLOW_TRUSTED=1` before `run()`. When `args[0]` is a plain feature name it reads the state and findings files under `git toplevel/.feature-flow/state` (creates nothing), so every early return (usage, arg count, unknown command, a Stop in `Conductor.__init__`) reports what is on disk. `Conductor.__init__` reads them again after a possible migration, so that case still reports the copied files. After the fix, by hand: `start` -> `flow-state 0a4c23f3...9236 none`; `verdict` with no file -> rc 2, `flow-state 0a4c23f3...9236 none`; disk sha `0a4c23f3...9236`. Test: `test_a_usage_error_during_a_run_reports_the_files_on_disk` (`verdict` with no file, `bogus`, `reset 01 extra`, all rc 2, report equals disk, not `none none`).
+2. A state file that is not UTF-8: `Conductor.__init__` now reads the findings file before the state file, and turns `UnicodeDecodeError` from `state.load` into `STOP the state file ... is damaged: it is not UTF-8 text`. Test: `test_a_state_file_that_is_not_utf8_stops_and_still_reports_both_files` (rc 1, STOP with "damaged", no traceback, report equals disk, findings not `none`).
+3. Kind from the suffix: `state._remember` now takes the kind explicitly. `read_bytes`, `read_text`, `write_text`, `remove`, `load` and `save` take an optional `kind` ("state"/"findings") and only record when it is given; the conductor and `cli.peek` pass it for their two files. Test: `test_other_files_with_the_same_suffix_do_not_change_the_report` (`other.state`/`other.findings` leave `none none`; with `kind` the shas of the written bytes, `none` after `remove`).
+
+Proof after the fixes: `python3 -m unittest discover -s tests/py -p "test_state_report.py"`: `Ran 10 tests ... OK`. `python3 -m unittest discover -s tests/py`: `Ran 281 tests in 103.945s OK`. `bash tests/run.sh`: `464 passed, 0 failed`, exit 0. Smoke: exit 0.
 
 ## Review findings (round 1, quality review)
 

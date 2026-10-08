@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from feature_flow import state, suggest
+from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
 USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt | verdict <file> | reset [NN]\n"
@@ -20,7 +20,10 @@ def main(argv=None, scripts=None):
     trusted = os.environ.get("FLOW_TRUSTED") == "1"
     state.SEEN.clear()
     try:
-        return run(argv, scripts, trusted)
+        args = list(sys.argv[1:] if argv is None else argv)
+        if trusted:
+            peek(args)
+        return run(args, scripts, trusted)
     finally:
         if trusted:
             sys.stdout.flush()
@@ -28,8 +31,20 @@ def main(argv=None, scripts=None):
             sys.stderr.flush()
 
 
-def run(argv, scripts, trusted):
-    args = list(sys.argv[1:] if argv is None else argv)
+def peek(args):
+    """Read the feature's state and findings files before anything can return early, so the report
+    names the files that are there even after a usage error. Creates nothing."""
+    feature = args[0] if args else ""
+    if not feature or feature.startswith("-") or feature in (".", "..") or any(c in feature for c in "/\\:"):
+        return
+    top = git.toplevel()
+    if top is not None:
+        folder = top / state.STATE_DIR
+        state.read_bytes(state.state_path(folder, feature), "state")
+        state.read_bytes(state.file_path(folder, feature, "findings"), "findings")
+
+
+def run(args, scripts, trusted):
     if len(args) < 2 or args[1] not in COMMANDS or not args[0] or args[0].startswith("-"):
         print(USAGE, file=sys.stderr)
         if len(args) >= 2 and args[0] in COMMANDS:

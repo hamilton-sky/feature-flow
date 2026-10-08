@@ -15,9 +15,8 @@ KINDS = ("state", "log", "findings")
 SEEN = {}  # "state"/"findings" -> the bytes this process last wrote or read there, None: no file
 
 
-def _remember(path, data):
-    kind = Path(path).suffix[1:]
-    if kind in ("state", "findings"):
+def _remember(kind, data):
+    if kind is not None:
         SEEN[kind] = data
 
 
@@ -27,30 +26,31 @@ def reported():
                     for k in ("state", "findings"))
 
 
-def read_bytes(path):
-    """The file's bytes, or None when there is none; remembered for reported()."""
+def read_bytes(path, kind=None):
+    """The file's bytes, or None when there is none; remembered for reported() under kind
+    ("state" or "findings"), when given."""
     path = Path(path)
     data = path.read_bytes() if path.is_file() else None
-    _remember(path, data)
+    _remember(kind, data)
     return data
 
 
-def read_text(path):
-    data = read_bytes(path)
+def read_text(path, kind=None):
+    data = read_bytes(path, kind)
     return None if data is None else data.decode("utf-8")
 
 
-def write_text(path, text):
+def write_text(path, text, kind=None):
     data = text.encode("utf-8")
     Path(path).write_bytes(data)
-    _remember(path, data)
+    _remember(kind, data)
 
 
-def remove(path):
+def remove(path, kind=None):
     path = Path(path)
     if path.is_file():
         path.unlink()
-    _remember(path, None)
+    _remember(kind, None)
 
 
 def state_dir(top):
@@ -90,9 +90,9 @@ def migrate(old_folder, new_folder, feature):
     return True
 
 
-def load(path):
+def load(path, kind=None):
     data = {}
-    text = read_text(path)
+    text = read_text(path, kind)
     if text is None:
         return data
     for line in text.splitlines():
@@ -102,14 +102,14 @@ def load(path):
     return data
 
 
-def save(path, data):
+def save(path, data, kind=None):
     path = Path(path)
     lines = ["%s=%s" % (key, str(value).replace("\n", " ")) for key, value in data.items()]
     tmp = path.with_name(path.name + ".tmp")
     out = ("\n".join(lines) + "\n").encode("utf-8")
     tmp.write_bytes(out)
     tmp.replace(path)
-    _remember(path, out)
+    _remember(kind, out)
 
 
 def log(path, num, event):

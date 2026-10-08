@@ -68,8 +68,11 @@ class Conductor:
         self.state_file = state.state_path(folder, feature)
         self.log_file = state.log_path(folder, feature)
         self.findings_file = state.file_path(folder, feature, "findings")
-        self.st = state.load(self.state_file)
-        state.read_bytes(self.findings_file)  # so a call that never touches it still reports what is there
+        state.read_bytes(self.findings_file, "findings")  # so a call that never touches it still reports it
+        try:
+            self.st = state.load(self.state_file, "state")
+        except UnicodeDecodeError:
+            raise Stop("the state file %s is damaged: it is not UTF-8 text" % self.state_file)
 
     # ---- small helpers -------------------------------------------------
 
@@ -83,7 +86,7 @@ class Conductor:
             raise Stop("the state file %s is damaged: %s is not a number" % (self.state_file, key))
 
     def save(self):
-        state.save(self.state_file, self.st)
+        state.save(self.state_file, self.st, "state")
 
     def log(self, event):
         state.log(self.log_file, self.get("num"), event)
@@ -405,8 +408,8 @@ class Conductor:
                 raise Stop("reopened %s but could not commit it. this session must be allowed to run git commit"
                            % nums)
         had_run = self.state_file.is_file()
-        for path in (self.state_file, self.findings_file):
-            state.remove(path)
+        for path, kind in ((self.state_file, "state"), (self.findings_file, "findings")):
+            state.remove(path, kind)
         if not reopened and not had_run:
             return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
         self.st = {}
@@ -432,7 +435,7 @@ class Conductor:
             self.save()
             return self.pick_ticket()
         if verdict == "fail":
-            findings = state.read_text(self.findings_file) or ""
+            findings = state.read_text(self.findings_file, "findings") or ""
             return self.send_back("quality review" if self.get("review_pass") == "quality" else "spec review",
                                   findings)
         if self.num("review_attempt") >= self.max_retries:
@@ -469,7 +472,7 @@ class Conductor:
             if match:
                 found = match.group(1).lower()
         if found == "fail":
-            state.write_text(self.findings_file, "\n".join(text.splitlines()[:120]) + "\n")
+            state.write_text(self.findings_file, "\n".join(text.splitlines()[:120]) + "\n", "findings")
         self.st["verdict"] = found or "none"
         self.save()
         self.log("VERDICT-%s" % (found or "none").upper())
