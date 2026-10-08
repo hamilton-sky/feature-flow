@@ -24,3 +24,4 @@
 ## Open questions
 
 - none
+- 01 — `install --user` writes scripts, guides, agents, feature_flow and feature-flow.sha256 to `$FEATURE_FLOW_HOME` or `~/.feature-flow`, nothing into a repo; test_uninstall points `FEATURE_FLOW_HOME` outside the temp home until ticket 02.

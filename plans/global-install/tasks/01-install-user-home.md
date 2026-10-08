@@ -1,7 +1,7 @@
 # Make `install --user` write the whole flow under ~/.feature-flow/ and nothing into a repo
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -38,3 +38,16 @@ prints OK
 
 ## Answer
 
+**Built**: `feature_flow/install.py` (home folder `$FEATURE_FLOW_HOME` or `$HOME/.feature-flow` for `--user`; scripts, guides, agents, feature_flow and `feature-flow.sha256` go there; no repo record or `installed.txt`; no `.agents/flow-roles/` with `--user`; repo-only git notes moved into `repo_notes()`; docstring and `USAGE`), `feature_flow/command.py` (`USAGE`), `tests/py/test_install.py`, `tests/py/test_uninstall.py`, `tests/run.sh`. Test-only commit ee84c7a.
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -p "test_install.py"` prints OK (27 tests, new ones cover the layout, no `_bundle`, empty repo, second run "already current", edited file kept, `--force`, older recorded hash updated, codex writes no roles in the repo).
+- `python3 -m unittest discover -s tests/py`: Ran 251 tests, OK.
+- `bash tests/run.sh`: 457 passed, 0 failed.
+- Repo-install tests pass unchanged.
+
+**Decisions**: `--user` ignores the target argument; the first output line names the home folder. The old assertion that `installed.txt` lacks skills became "no `.feature-flow` in the repo" (stronger).
+
+**Shortcuts taken**: in `test_uninstall.py` `setUp`, `FEATURE_FLOW_HOME` points at a sibling temp folder `flowhome`, outside the temp home, not under it as the ticket text says. Reason: `uninstall --user` does not know the home root until ticket 02, and the test asserts the temp home is empty. A user decision, because of the 01/02 order. Ticket 02 must move it back under `self.home` (one-line comment in the test says so).
+
+**For later tickets**: ticket 02 moves `FEATURE_FLOW_HOME` in `test_uninstall.py` back under the temp home. The home record `feature-flow.sha256` lists paths relative to the home folder (`scripts/flow.py`, `feature_flow/...`).

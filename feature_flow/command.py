@@ -18,7 +18,7 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
        feature-flow reset <feature> [NN]
        feature-flow --version
-install copies the skill, its roles, scripts and guides into a repo; feature-flow install --help says more.
+install copies the skill, its roles, scripts and guides into a repo; --user installs them once for every repo, in ~/.claude, ~/.agents and ~/.feature-flow, and writes nothing into a repo. feature-flow install --help says more.
 uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude and ~/.agents.
 status and view read plans/<feature>/ in the current directory, like scripts/flow-status.py and scripts/flow-view.py.
 reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.

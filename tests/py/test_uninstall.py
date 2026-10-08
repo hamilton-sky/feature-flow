@@ -22,7 +22,8 @@ class UninstallTests(unittest.TestCase):
         os.environ["HOME"] = str(self.home)
         os.environ["CLAUDE_HOME"] = str(self.home / ".claude")
         os.environ["AGENTS_HOME"] = str(self.home / ".agents")
-        os.environ["FEATURE_FLOW_HOME"] = str(self.home / ".feature-flow")
+        # outside the temp home until uninstall --user learns the third root (ticket 02), which moves it back under self.home
+        os.environ["FEATURE_FLOW_HOME"] = str(Path(self.tmp.name) / "flowhome")
 
     def tearDown(self):
         for k, v in self.saved.items():
