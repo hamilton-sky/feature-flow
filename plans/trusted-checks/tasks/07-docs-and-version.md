@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: no
 
@@ -47,3 +47,35 @@ prints OK
 - `README.md` (the cautions section), `guides/build.md`, `feature_flow/__init__.py`
 
 ## Answer
+
+Work started at 27b0269a906473abcbb119996a03ab670a420549. Test first: no.
+
+**Built**
+
+- `README.md`, Caution: the old code-check sentence and "That check is a tripwire, not a sandbox." are replaced. The new text says every conductor call runs through `scripts/flow-trust.py` (beside the conductor: `scripts/` in the repo, `~/.feature-flow/scripts/` for a `--user` install), whose sha256 the skill pins and whose loader runs those same bytes. It says the runner prints `TRUST <code>.<state>` and the session passes it on as `FLOW_TRUST`. Then a **Protected:** paragraph (subagent edits to the package, the six named `scripts/` files, guides, roles, skill folders, in repo and install folders, and to `.feature-flow/state/`, including edits by tests, `check` commands and git hooks during a step; a STOP that names the files instead of TRUST; between sessions via the HANDOFF digest; the kept `Floor: allow flow-edit` sentence plus `FLOW-EDIT <files>`, which tells you which flow files changed) and a **Not protected:** paragraph (PATH `python3` or system Python, the agent, anything outside the repo and install folders; the very first call; a background process swapping a file between check and load; a session that stops passing its digest or resumes without one). The paragraph also says the conductor's own check stays as a second line for accidental edits and cannot stop deliberate tampering on its own. The floor guard and auto-stop sentences are unchanged.
+- `README.md`, Commands: the `flow.py <feature> start|next|prompt|verdict` line is split. `flow.py` keeps `start|reset [NN]` and the planning commands. A new line gives `FLOW_TRUST=<digest|new> python3 -I scripts/flow-trust.py <feature> next|prompt|verdict <file>` and notes that it prints TRUST first. Below the block, a sentence quotes the conductor's refusal (`STOP run the conductor through scripts/flow-trust.py, as the skill says`) and says where the scripts live for a `--user` install. The handoff example now shows the digest word (`HANDOFF /feature-flow csv-export <16 hex>.<16 hex>`).
+- `guides/build.md`: the "Do not edit the flow's own code" bullet now names `feature_flow/`, the six `scripts/` files, the guides and the roles, and adds the run state in `.feature-flow/state/`. It says `Floor: allow flow-edit` allows only the code edits and never the run state, and that the session stops the run if they change. No installed copy needed a refresh: guides are installed only under `.feature-flow/guides/`, which `test_own_install` forbids tracking, and that test passes.
+- `feature_flow/__init__.py`: `__version__ = "0.5.0"`.
+- `tests/run.sh`: the `--version prints the version` expectation changed from `feature-flow 0.4.0` to `feature-flow 0.5.0`. The 0.4.0 bump (496f635) changed the same line. `feature_flow/released.py` only lists 0.1.x hashes and never grows, so it is unchanged.
+
+**Proof**
+
+- `python3 -c "import feature_flow; print(feature_flow.__version__)"` printed `0.5.0` (rc 0).
+- README check command: exit 0.
+- guides/build.md check command: exit 0.
+- `python3 -m unittest discover -s tests/py`: `Ran 350 tests in 171.796s` / `OK`.
+- `bash tests/run.sh`: `465 passed, 0 failed`, exit 0 (includes `ok --version prints the version`). Smoke command: exit 0.
+
+**Decisions**
+
+- The README's direct runner form is the short `python3 -I scripts/flow-trust.py` form from ticket 03's Answer, not the skill's pinned loader line. The loader belongs in the skill, and its pinned sha would go out of date in the README with every runner change.
+- The handoff example shows a made-up `<16 hex>.<16 hex>` digest, because that is what the runner appends (ticket 05).
+- The scripts named in the guide and README are the six that the runner hashes (spec "What is hashed"). The user's own files in `scripts/` are not flow code.
+
+**Shortcuts taken**
+
+- none
+
+**For later tickets**
+
+- 08: the docs now promise exactly what the acceptance drive proves (holes a, b, c, new package file, edited guide/role/skill/state each STOP). If 08 finds a gap, the Protected paragraph in README's Caution must change with it.
