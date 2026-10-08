@@ -65,7 +65,8 @@ def _prune(root, rel, dry):
     parent = os.path.dirname(rel)
     while parent and not dry:
         folder = os.path.join(root, parent)
-        shutil.rmtree(os.path.join(folder, "__pycache__"), ignore_errors=True)  # bytecode python left there
+        if parent.replace("\\", "/").startswith(".feature-flow/"):  # a folder the install owns: drop bytecode python left
+            shutil.rmtree(os.path.join(folder, "__pycache__"), ignore_errors=True)
         try:
             os.rmdir(folder)
         except OSError:
@@ -144,7 +145,7 @@ def uninstall_repo(target, force, dry, out):
                 if not dry:
                     os.remove(target + "/" + rel)
                     _prune(target, rel, dry)
-        _drop_exclude_block(target, out, dry)
+    _drop_exclude_block(target, out, dry)
     return _report(removed, kept, dry, out, target + "/.feature-flow/state")
 
 

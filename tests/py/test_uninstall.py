@@ -90,6 +90,23 @@ class UninstallTests(unittest.TestCase):
         self.uninstall(str(self.target))
         self.assertEqual(exclude.read_text(), "*.log\n")
 
+    def test_a_partial_uninstall_still_unlists_the_private_block(self):
+        exclude = self.target / ".git" / "info" / "exclude"
+        exclude.parent.mkdir(exist_ok=True)
+        self.install("--private")
+        skill = self.target / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+        skill.write_bytes(skill.read_bytes() + b"my own edit\n")
+        self.uninstall(str(self.target))
+        self.assertNotIn(install.EXCLUDE_BEGIN, exclude.read_text())
+
+    def test_bytecode_of_the_users_own_scripts_is_left_alone(self):
+        self.install()
+        cache = self.target / "scripts" / "__pycache__"
+        cache.mkdir()
+        (cache / "mine.pyc").write_bytes(b"\0")
+        self.uninstall(str(self.target))
+        self.assertTrue((cache / "mine.pyc").is_file())
+
     def test_run_state_is_left_alone(self):
         self.install()
         state = self.target / ".feature-flow" / "state"
