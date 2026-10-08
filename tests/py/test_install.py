@@ -111,26 +111,86 @@ class RunTests(unittest.TestCase):
         recorded = dict(reversed(l.split("  ", 1)) for l in hashes.read_text(encoding="utf-8").splitlines())
         self.assertEqual(recorded[".agents/skills/feature-flow/SKILL.md"], install._sha256(skill.read_bytes()))
 
-    def test_a_user_level_upgrade_replaces_a_skill_nobody_edited(self):
+    def user_env(self):
         home = Path(self.tmp.name) / "home"
+        saved = dict((k, os.environ.get(k)) for k in ("HOME", "CLAUDE_HOME", "AGENTS_HOME", "FEATURE_FLOW_HOME"))
+        os.environ["HOME"] = str(home)
         os.environ["CLAUDE_HOME"] = str(home / ".claude")
         os.environ["AGENTS_HOME"] = str(home / ".agents")
-        try:
-            self.run_install("--user")
-            record = home / ".claude" / "feature-flow.sha256"
-            skill = home / ".claude" / "skills" / "feature-flow" / "SKILL.md"
-            self.assertIn("  skills/feature-flow/SKILL.md\n", record.read_text(encoding="utf-8"))
-            skill.write_bytes(b"skill from an earlier version\n")
-            record.write_text("%s  skills/feature-flow/SKILL.md\n" % install._sha256(skill.read_bytes()),
-                              encoding="utf-8")
-            _, out, _ = self.run_install("--user")
-        finally:
-            del os.environ["CLAUDE_HOME"]
-            del os.environ["AGENTS_HOME"]
+        os.environ["FEATURE_FLOW_HOME"] = str(home / ".feature-flow")
+
+        def restore():
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        self.addCleanup(restore)
+        return home
+
+    def test_a_user_level_upgrade_replaces_a_skill_nobody_edited(self):
+        home = self.user_env()
+        self.run_install("--user")
+        record = home / ".claude" / "feature-flow.sha256"
+        skill = home / ".claude" / "skills" / "feature-flow" / "SKILL.md"
+        self.assertIn("  skills/feature-flow/SKILL.md\n", record.read_text(encoding="utf-8"))
+        skill.write_bytes(b"skill from an earlier version\n")
+        record.write_text("%s  skills/feature-flow/SKILL.md\n" % install._sha256(skill.read_bytes()),
+                          encoding="utf-8")
+        _, out, _ = self.run_install("--user")
         self.assertIn("  update  %s/skills/feature-flow/SKILL.md" % (home / ".claude"), out)
         self.assertNotIn(b"earlier version", skill.read_bytes())
-        self.assertNotIn("skills/feature-flow", (self.target / ".feature-flow" / "installed.txt").read_text())
+        self.assertFalse((self.target / ".feature-flow").exists())
         self.assertFalse((home / ".agents").exists())
+
+    def test_a_user_install_puts_the_whole_flow_in_the_home_folder_and_nothing_in_the_repo(self):
+        home = self.user_env()
+        code, out, _ = self.run_install("--user", "--agent", "all")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0], "installing into %s (all)" % (home / ".feature-flow"))
+        flow = home / ".feature-flow"
+        for name in ("scripts/flow.py", "guides/build.md", "agents/ticket-builder.md",
+                     "feature_flow/__init__.py", "feature-flow.sha256"):
+            self.assertTrue((flow / name).is_file(), name)
+        self.assertFalse((flow / "feature_flow" / "_bundle").exists())
+        self.assertEqual([p.name for p in self.target.iterdir()], ["home"])
+        self.assertNotIn("next: commit the installed files", out)
+        self.assertNotIn("not a git repository", out)
+        _, again, _ = self.run_install("--user", "--agent", "all")
+        self.assertIn("added 0, updated 0, already current", again)
+        self.assertIn("kept 0", again)
+
+    def test_a_user_install_keeps_an_edited_home_file_and_force_replaces_it(self):
+        home = self.user_env()
+        self.run_install("--user")
+        guide = home / ".feature-flow" / "guides" / "build.md"
+        original = guide.read_bytes()
+        guide.write_bytes(original + b"my own edit\n")
+        _, out, _ = self.run_install("--user")
+        self.assertIn("kept    %s" % guide, out)
+        self.assertIn(b"my own edit", guide.read_bytes())
+        _, out, _ = self.run_install("--user", "--force")
+        self.assertIn("update  %s" % guide, out)
+        self.assertEqual(guide.read_bytes(), original)
+
+    def test_a_user_install_updates_an_unedited_home_file_from_an_older_recorded_hash(self):
+        home = self.user_env()
+        self.run_install("--user")
+        guide = home / ".feature-flow" / "guides" / "build.md"
+        record = home / ".feature-flow" / "feature-flow.sha256"
+        guide.write_bytes(b"guide from an earlier version\n")
+        lines = [l for l in record.read_text(encoding="utf-8").splitlines() if not l.endswith("  guides/build.md")]
+        lines.append("%s  guides/build.md" % install._sha256(guide.read_bytes()))
+        record.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _, out, _ = self.run_install("--user")
+        self.assertIn("update  %s" % guide, out)
+        self.assertNotIn(b"earlier version", guide.read_bytes())
+
+    def test_a_user_codex_install_writes_no_roles_into_the_repo(self):
+        home = self.user_env()
+        self.run_install("--user", "--agent", "codex")
+        self.assertFalse((self.target / ".agents").exists())
+        self.assertTrue((home / ".feature-flow" / "agents" / "ticket-reviewer.md").is_file())
 
     @unittest.skipIf(sys.platform == "win32", "symlinks need extra rights on Windows")
     def test_an_upgrade_never_writes_through_a_symlink(self):

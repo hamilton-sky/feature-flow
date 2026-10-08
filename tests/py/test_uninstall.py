@@ -18,10 +18,11 @@ class UninstallTests(unittest.TestCase):
         self.target.mkdir()
         subprocess.run(["git", "init", "-q", str(self.target)], check=True)
         self.home = Path(self.tmp.name) / "home"
-        self.saved = dict((k, os.environ.get(k)) for k in ("HOME", "CLAUDE_HOME", "AGENTS_HOME"))
+        self.saved = dict((k, os.environ.get(k)) for k in ("HOME", "CLAUDE_HOME", "AGENTS_HOME", "FEATURE_FLOW_HOME"))
         os.environ["HOME"] = str(self.home)
         os.environ["CLAUDE_HOME"] = str(self.home / ".claude")
         os.environ["AGENTS_HOME"] = str(self.home / ".agents")
+        os.environ["FEATURE_FLOW_HOME"] = str(self.home / ".feature-flow")
 
     def tearDown(self):
         for k, v in self.saved.items():
