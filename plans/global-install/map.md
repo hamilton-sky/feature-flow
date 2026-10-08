@@ -28,3 +28,4 @@
 - 02 — `uninstall --user` also walks `flow_home()` (shared with the installer), prunes bytecode there via `owned`, and removes the empty home folder.
 - 03 — `prompts.build`/`plan` rewrite `python3 scripts/` in role and guide to the running scripts folder (absolute, quoted if it has a space) unless it is `cwd/scripts`.
 - 04 — the home conductor runs from a repo and the code-hash tripwire already covers the home files (no code change); `Repo(local=False)` + `repo.script` for tests.
+- 05 — both skills prefer the repo's `scripts/flow.py`, else `${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/scripts/flow.py`; install-check lines also offer `install --user`.

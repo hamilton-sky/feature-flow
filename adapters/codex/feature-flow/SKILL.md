@@ -9,7 +9,7 @@ Plan or build the feature in `<arguments>`.
 
 The first word is the **feature**. `show` means draw the graph. `auto` means ask nothing and go. If no feature was given and the conversation so far describes work to build, plan it (below) and propose the feature's name in the brief. If no feature was given otherwise, list `plans/*/` and ask which one.
 
-The conductor is `python3 scripts/flow.py <feature> <command>`. It decides the order, runs the gate and the floor guard, and keeps its state in `.feature-flow/state/`, a folder git ignores. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
+The conductor is `python3 scripts/flow.py <feature> <command>`. If `scripts/flow.py` exists in the repo, use it (the repo's own install wins); otherwise use `python3 "${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/scripts/flow.py"` (`~/.feature-flow/scripts/flow.py`). Wherever this skill or a message names `scripts/flow.py`, `scripts/flow-status.py` or `scripts/flow-view.py`, it means the same folder, and the guides are then in that folder's sibling `guides/` (`~/.feature-flow/guides/`, else `.feature-flow/guides/` in the repo). Run the conductor with the working directory in the repo: state and plans stay there. It decides the order, runs the gate and the floor guard, and keeps its state in `.feature-flow/state/`, a folder git ignores. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
 
 ## Show
 
@@ -33,7 +33,7 @@ With a plan present, check these before `start`, and stop at the first that fail
 
 - `git status --porcelain` is empty, apart from untracked Python bytecode (`__pycache__/`, `*.pyc`) and files listed in `.feature-flow/installed.txt` and that list itself: those are feature-flow's own install or upgrade, so never stop for them (`next` still stops if one of them was edited). Suggest committing them (`git add --pathspec-from-file=.feature-flow/installed.txt && git commit -m "chore: install feature-flow"`) and carry on.
 - `python3 scripts/flow-status.py <feature> --check` prints `OK`.
-- `.agents/flow-roles/ticket-builder.md` and `.agents/flow-roles/ticket-reviewer.md` exist. If not, say to run `uvx feature-flow-cli install . --agent codex` in this repo (or `python3 install.py <repo> --agent codex` from a feature-flow clone).
+- `ticket-builder.md` and `ticket-reviewer.md` are in `.agents/flow-roles/` in the repo or in `~/.feature-flow/agents/`. If not, say to run `uvx feature-flow-cli install . --agent codex` in this repo, or `uvx feature-flow-cli install --user --agent codex` (once for every repo) (or `python3 install.py <repo> --agent codex` from a feature-flow clone).
 
 Then run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'`. The conductor keeps its state in `.feature-flow/state/`, a git-ignored folder in the repo, so it never needs to write `.git`. If it prints `STOP cannot write the flow state`, tell the user this session must be allowed to write that folder.
 

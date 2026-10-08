@@ -1,7 +1,7 @@
 # Teach both skills to use the repo's conductor, else the home one
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -36,3 +36,12 @@ prints OK
 
 ## Answer
 
+**Built**: `skills/feature-flow/SKILL.md` and `adapters/codex/feature-flow/SKILL.md` (conductor rule after the "The conductor is" sentence; install checks offer `install --user`; Codex role check accepts `.agents/flow-roles/` or `~/.feature-flow/agents/`); refreshed `.claude/skills/feature-flow/SKILL.md` and `.agents/skills/feature-flow/SKILL.md` with `python3 install.py . --agent all --force`; new `tests/py/test_skills.py` (committed first as `5d2756c`, failed on the missing `.feature-flow/scripts/flow.py`).
+
+**Proof**: `python3 -m unittest discover -s tests/py -p test_skills.py` printed OK (1 test); `-p test_own_install.py` printed OK (2 tests); full `python3 -m unittest discover -s tests/py` printed OK (263 tests). Both SKILL.md files contain `FEATURE_FLOW_HOME` and `.feature-flow/scripts/flow.py` (asserted by the test). `bash tests/run.sh` not run by me.
+
+**Decisions**: the literal `~/.feature-flow/scripts/flow.py` is spelled out beside the `${FEATURE_FLOW_HOME:-...}` form so the plain-text check finds it.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: `install.py . --agent all --force` also creates an untracked `.feature-flow/` in this repo (installed.txt etc.); I deleted it afterwards and committed none of it.
