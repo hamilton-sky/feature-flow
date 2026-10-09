@@ -121,6 +121,19 @@ class Report(Base):
         self.assertReportsDisk(err)
         self.assertNotEqual(self.reported(err)[1], "none")
 
+    def test_a_crash_prints_its_traceback_before_the_report(self):
+        rc, out, err = self.run_flow("start", FLOW_TRUSTED="1")
+        token = out.split()[1]
+        conductor = self.repo.path("feature_flow/conductor.py")
+        original = conductor.read_text(encoding="utf-8")
+        for crash, says in (("1 / 0", "ZeroDivisionError"), ("sys.exit('conductor gave up')", "conductor gave up")):
+            conductor.write_text(original + "\n\nimport sys\n\n\ndef crash(self):\n    %s\n\n\nConductor.next = crash\n"
+                                 % crash, encoding="utf-8")
+            rc, out, err = self.run_flow("next", FLOW_TRUSTED="1", FLOW_SESSION=token)
+            self.assertEqual(rc, 1, err)
+            self.assertIn(says, err)
+            self.assertReportsDisk(err)
+
     def test_no_report_without_flow_trusted(self):
         rc, out, err = self.run_flow("start")
         self.assertEqual(rc, 0, out)

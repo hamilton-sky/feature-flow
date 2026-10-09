@@ -11,6 +11,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def insert_after_line(data, marker, line):
+    """data (bytes) with line added after the line holding marker, using the file's own line end."""
+    start = data.index(marker)
+    end = data.index(b"\n", start) + 1
+    eol = b"\r\n" if data[end - 2:end] == b"\r\n" else b"\n"
+    return data[:end] + line + eol + data[end:]
+
+
+def run_loader(line, runner, args, cwd, env):
+    """A skill's loader line run through the platform shell the way the gate runs commands, with
+    python3 as this interpreter (the Windows CI job has `python`, not `python3`) and <S>/flow-trust.py
+    as runner. Returns the finished process, output as text."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from feature_flow import gate  # the package under test, from this checkout
+
+    if not line.startswith("python3 "):
+        raise AssertionError("the loader line does not start with python3: %s" % line)
+    cmd = '"%s"' % sys.executable + line[len("python3"):]
+    cmd = cmd.replace("<S>/flow-trust.py", '"%s"' % runner) + " " + " ".join(args)
+    argv, use_shell = gate.shell(cmd)
+    return subprocess.run(argv, shell=use_shell, cwd=str(cwd), env=env,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+
 def ticket_text(title, status, blocked):
     return ("# %s\n\nType: task\nStatus: %s\nBlocked by: %s\nTest first: no\n\n\nbody\n\n"
             "## Done when\n\n- x\n\n## Answer\n" % (title, status, blocked))

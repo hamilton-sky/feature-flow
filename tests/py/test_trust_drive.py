@@ -18,9 +18,6 @@ import helpers
 from helpers import Repo
 from test_skill_trust import SKILLS, loader_line
 
-sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import gate  # the package under test, from this checkout
-
 T1 = "plans/f/tasks/01-a.md"
 T2 = "plans/f/tasks/02-b.md"
 STATE = ".feature-flow/state/flow-f.state"
@@ -41,14 +38,6 @@ COMMANDS = ("# Commands: f\n\n"
 # Hole (c): the builder's committed test script edits the conductor when the gate runs it.
 EVIL_TEST = ("with open('feature_flow/conductor.py', 'ab') as handle:\n"
              "    handle.write(b'\\n# edited by t.py\\n')\n")
-
-
-def insert_after_line(data, marker, line):
-    """data (bytes) with line added after the line holding marker, using the file's own line end."""
-    start = data.index(marker)
-    end = data.index(b"\n", start) + 1
-    eol = b"\r\n" if data[end - 2:end] == b"\r\n" else b"\n"
-    return data[:end] + line + eol + data[end:]
 
 
 class Drive(unittest.TestCase):
@@ -83,18 +72,13 @@ class Drive(unittest.TestCase):
     def run_loader(self, *args):
         """The extracted loader line (python3 as the running interpreter, <S> as the fixture's
         scripts folder) through the platform shell; returns (exit code, stdout lines, stderr)."""
-        self.assertTrue(self.loader.startswith("python3 "))
-        cmd = PYTHON + self.loader[len("python3"):]
-        cmd = cmd.replace("<S>/flow-trust.py", '"%s"' % self.runner) + " " + " ".join(args)
         env = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
         env.update(self.homes)
         env["FLOW_TRUST"] = self.digest
         env["FLOW_INVOKE"] = "/feature-flow"
         if self.token:
             env["FLOW_SESSION"] = self.token
-        argv, use_shell = gate.shell(cmd)
-        done = subprocess.run(argv, shell=use_shell, cwd=str(self.repo.dir), env=env,
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        done = helpers.run_loader(self.loader, self.runner, args, self.repo.dir, env)
         return done.returncode, done.stdout.splitlines(), done.stderr
 
     def call(self, command, *args):
@@ -152,10 +136,14 @@ class Drive(unittest.TestCase):
         with open(str(self.repo.path(rel)), "ab") as handle:
             handle.write(data)
 
+    def named(self, line):
+        """The paths a `STOP flow files changed since the last step: a, b` line names."""
+        self.assertTrue(line.startswith(CHANGED), line)
+        return line[len(CHANGED):].split(", ")
+
     def assert_stops_naming(self, rel):
         lines = self.stopped()
-        self.assertTrue(lines[0].startswith(CHANGED), lines)
-        self.assertIn(rel, lines[0].split())
+        self.assertIn(rel, self.named(lines[0]))
         self.assertFalse(any(line.startswith(("BUILD", "REVIEW", "DONE")) for line in lines), lines)
 
 
@@ -187,7 +175,7 @@ class Holes(Drive):
         self.begin()
         path = self.repo.path("feature_flow/conductor.py")
         marker = b'"""Stop when the files the conductor runs from changed since the ticket was picked."""'
-        path.write_bytes(insert_after_line(path.read_bytes(), marker, b"        return"))
+        path.write_bytes(helpers.insert_after_line(path.read_bytes(), marker, b"        return"))
         self.repo.resolve(T1)
         self.assertEqual(self.repo.porcelain(), "")
         self.assert_stops_naming("feature_flow/conductor.py")
@@ -201,7 +189,7 @@ class Holes(Drive):
         # the session stops; a retry with the same digest still never hands out ticket 02
         self.build = build
         lines = self.stopped()
-        self.assertIn(STATE, lines[0].split())
+        self.assertIn(STATE, self.named(lines[0]))
         for line in lines:
             self.assertFalse(line.startswith("BUILD"), lines)
             self.assertNotIn("02-b.md", line)
@@ -262,11 +250,11 @@ class PlantedBytecode(Drive):
         stat = source.stat()
         self.assertIn(self.HONEST, original)
         source.write_bytes(original.replace(self.HONEST, self.FORGED, 1))
-        os.utime(str(source), (stat.st_atime, stat.st_mtime))
+        os.utime(str(source), ns=(stat.st_atime_ns, stat.st_mtime_ns))
         py_compile.compile(str(source), cfile=importlib.util.cache_from_source(str(source)), doraise=True,
                            invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
         source.write_bytes(original)
-        os.utime(str(source), (stat.st_atime, stat.st_mtime))
+        os.utime(str(source), ns=(stat.st_atime_ns, stat.st_mtime_ns))
         self.assertEqual(source.read_bytes(), original)
 
     def test_the_planted_pyc_is_not_run(self):

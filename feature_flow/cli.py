@@ -2,6 +2,7 @@
 
 import os
 import sys
+import traceback
 from pathlib import Path
 
 from feature_flow import git, state, suggest
@@ -24,6 +25,18 @@ def main(argv=None, scripts=None):
         if trusted:
             peek(args)
         return run(args, scripts, trusted)
+    except SystemExit as err:  # say what the interpreter would say, but before the report
+        if not trusted:
+            raise
+        if err.code is None or isinstance(err.code, int):
+            return err.code or 0
+        print(err.code, file=sys.stderr)
+        return 1
+    except BaseException:  # the traceback goes before the report, which stays the last stderr line
+        if not trusted:
+            raise
+        traceback.print_exc()
+        return 1
     finally:
         if trusted:
             sys.stdout.flush()
@@ -34,14 +47,20 @@ def main(argv=None, scripts=None):
 def peek(args):
     """Read the feature's state and findings files before anything can return early, so the report
     names the files that are there even after a usage error. Creates nothing."""
-    feature = args[0] if args else ""
-    if not feature or feature.startswith("-") or feature in (".", "..") or any(c in feature for c in "/\\:"):
+    if not args or not plain(args[0]):
         return
+    feature = args[0]
     top = git.toplevel()
     if top is not None:
         folder = top / state.STATE_DIR
         state.read_bytes(state.state_path(folder, feature), "state")
         state.read_bytes(state.file_path(folder, feature, "findings"), "findings")
+
+
+def plain(feature):
+    """True when feature is a plain folder name: not empty, no leading -, no path parts."""
+    return (bool(feature) and not feature.startswith("-") and feature not in (".", "..")
+            and not any(c in feature for c in "/\\:"))
 
 
 def run(args, scripts, trusted):
@@ -53,7 +72,7 @@ def run(args, scripts, trusted):
             sys.stderr.write(suggest.hint(args[1], COMMANDS))
         return 2
     feature, command = args[0], args[1]
-    if feature in (".", "..") or any(c in feature for c in "/\\:"):
+    if not plain(feature):
         print("the feature must be a plain folder name, not %s" % feature, file=sys.stderr)
         return 2
     if len(args) not in ARGS.get(command, (2,)):

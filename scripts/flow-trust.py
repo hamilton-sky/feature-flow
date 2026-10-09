@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The trusted check in front of every conductor call.
 
-usage: FLOW_TRUST=<last TRUST digest | new> python3 -I scripts/flow-trust.py [--after-build <ticket> <sha>] <feature> <command> [args...]
+usage: FLOW_TRUST=<last TRUST digest | new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py [--after-build <ticket> <sha>] <feature> <command> [args...]
 
 It hashes the flow's own files (the conductor, its package, guides, roles, skills and the run
 state), refuses to call the conductor when they differ from the digest the session passed in
@@ -18,7 +18,12 @@ nothing a subagent can write decides the check. Standard library only, Python 3.
 import sys
 
 if not (sys.flags.isolated or getattr(sys.flags, "safe_path", 0)):
-    del sys.path[0]  # the script's folder (or the working folder for -c): nothing there may shadow a module
+    first = sys.path.pop(0)  # our own folder, out of the way: nothing there may shadow a module
+    import os
+
+    own = os.path.dirname(os.path.realpath(globals().get("__file__") or sys.argv[1]))
+    if os.path.normcase(os.path.realpath(first or os.curdir)) != os.path.normcase(own):
+        sys.path.insert(0, first)  # not our own folder (started some other way): put it back
 import hashlib
 import json
 import os
@@ -28,13 +33,14 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-USAGE = ("usage: FLOW_TRUST=<last TRUST digest | new> python3 -I scripts/flow-trust.py "
+USAGE = ("STOP usage: FLOW_TRUST=<last TRUST digest | new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py "
          "[--after-build <ticket> <sha>] <feature> <command> [args...]")
 NO_TRUST = "STOP pass FLOW_TRUST: the last TRUST digest, or new on this session's first call"
 CHANGED = "STOP flow files changed since the last step: %s"
 KILLED = "STOP the conductor was killed by signal %d"
 DURING = "STOP flow code changed during %s: %s"
 STATE_CHANGED = "STOP the run state was changed by something other than the conductor during %s"
+NO_REPORT = "STOP the conductor did not report its state (it crashed?) during %s"
 SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.py", "flow-trust.py")
 GUIDES = ("build.md", "review.md", "review-quality.md", "plan.md", "plan-review.md", "debug.md")  # prompts.GUIDES + debug.md
 ROLES = ("ticket-builder.md", "ticket-reviewer.md", "feature-planner.md", "plan-reviewer.md")  # prompts.ROLES
@@ -143,18 +149,27 @@ def name(path, top):
 
 def hash_files(paths, top):
     """{name: sha256 of the file} for the paths that are files; a linked folder hashes as
-    the sha256 of `link <its real path>`."""
+    the sha256 of `link <its real path>`, and a link to nothing as `link <its target text>`,
+    so swapping either is noticed."""
     each = {}
     for path in paths:
         if path.is_dir():
-            target = "link " + os.path.realpath(str(path))
-            each[name(path, top)] = hashlib.sha256(target.encode("utf-8", "surrogateescape")).hexdigest()
+            each[name(path, top)] = link_hash(os.path.realpath(str(path)))
         elif path.is_file():
             try:
                 each[name(path, top)] = hashlib.sha256(path.read_bytes()).hexdigest()
             except OSError:
                 each[name(path, top)] = "unreadable"
+        elif path.is_symlink():
+            try:
+                each[name(path, top)] = link_hash(os.readlink(str(path)))
+            except OSError:
+                each[name(path, top)] = "unreadable"
     return each
+
+
+def link_hash(target):
+    return hashlib.sha256(("link " + target).encode("utf-8", "surrogateescape")).hexdigest()
 
 
 def snapshot(here, top, feature):
@@ -177,6 +192,10 @@ def trust_path(top, feature):
     return top / STATE_DIR / ("flow-%s.trust" % feature)
 
 
+def changed(before, after):
+    return sorted(key for key in set(before) | set(after) if before.get(key) != after.get(key))
+
+
 def named_changes(top, feature, now):
     """The paths that differ from the per-file list the last call wrote. That list is untrusted:
     it only names paths once the digest has already decided to stop."""
@@ -186,7 +205,7 @@ def named_changes(top, feature, now):
         before = None
     if not isinstance(before, dict):
         return "(no earlier list to name them)"
-    names = sorted(key for key in set(before) | set(now) if before.get(key) != now.get(key))
+    names = changed(before, now)
     return ", ".join(names) if names else "(the earlier list names none of them)"
 
 
@@ -208,10 +227,6 @@ def run_conductor(here, feature, command, rest):
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     finally:
         shutil.rmtree(cache, ignore_errors=True)
-
-
-def changed(before, after):
-    return sorted(key for key in set(before) | set(after) if before.get(key) != after.get(key))
 
 
 def allows_flow_edit(top, ticket, sha):
@@ -269,23 +284,23 @@ def split_report(err):
     return err, None
 
 
-def with_digest(out, feature, trusted):
-    """The conductor's stdout with `HANDOFF <invoke> <feature>` lines given the digest, so the
-    next session can pass it as FLOW_TRUST on its first call. Line endings are kept."""
-    lines = out.splitlines(True)
-    for i, line in enumerate(lines):
-        text = line.rstrip(b"\r\n")
-        if text.startswith(b"HANDOFF ") and text.endswith(b" " + feature.encode("utf-8", "surrogateescape")):
-            lines[i] = text + b" " + trusted.encode("ascii") + line[len(text):]
-    return b"".join(lines)
+def with_digest(out, command, feature, trusted):
+    """The conductor's stdout given the digest when it is the one-line `HANDOFF <invoke> <feature>`
+    reply of `next`, so the next session can pass it as FLOW_TRUST on its first call. Any other
+    output (a prompt that quotes such a line, say) is left alone. The line ending is kept."""
+    text = out.rstrip(b"\r\n")
+    if (command == "next" and text.startswith(b"HANDOFF ") and b"\n" not in text and b"\r" not in text
+            and text.endswith(b" " + feature.encode("utf-8", "surrogateescape"))):
+        return text + b" " + trusted.encode("ascii") + out[len(text):]
+    return out
 
 
 def main():
     here, args = started()
     parsed = parse(args)
     if parsed is None:
-        print(USAGE, file=sys.stderr)
-        return 2
+        print(USAGE)
+        return 1
     feature, command, rest, after = parsed
     trust = os.environ.get("FLOW_TRUST", "")
     if not trust:
@@ -306,6 +321,8 @@ def main():
         stop = DURING % (command, ", ".join(changed(before, code)))
     elif result.returncode < 0:
         stop = KILLED % -result.returncode
+    elif report is None:
+        stop = NO_REPORT % command
     elif not state_as_saved(report, state, top, feature):
         stop = STATE_CHANGED % command
     else:
@@ -319,7 +336,7 @@ def main():
         sys.stdout.write("TRUST %s\n" % trusted)
         if edited is not None:
             sys.stdout.write("FLOW-EDIT %s\n" % edited)
-        out = with_digest(out, feature, trusted)
+        out = with_digest(out, command, feature, trusted)
     sys.stdout.flush()
     sys.stdout.buffer.write(out)
     sys.stdout.buffer.flush()

@@ -5,17 +5,12 @@ import hashlib
 import os
 import re
 import shutil
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 import helpers
 from helpers import Repo
-
-sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import gate  # the package under test, from this checkout
 
 SKILLS = ("skills/feature-flow/SKILL.md", "adapters/codex/feature-flow/SKILL.md")
 # spec.md § Interfaces, up to the pinned sha
@@ -26,6 +21,7 @@ LINE = re.compile(r"^[ \t]*(python3 -I -c .*<S>/flow-trust\.py ([0-9a-f]{64}))[ 
 PINNED = re.compile(r"flow-trust\.py ([0-9a-f]{64})")
 TRUST = re.compile(r"^TRUST [0-9a-f]{16}\.[0-9a-f]{16}$")
 MISMATCH = "flow-trust.py does not match this skill"
+OFFSET = 10  # inside the first line, `#!/usr/bin/env python3`
 
 
 def skill_text(rel):
@@ -86,20 +82,13 @@ class LoaderRun(unittest.TestCase):
             self.addCleanup(folder.cleanup)
             self.homes[name] = folder.name
         self.repo.git("add", "-A")
-        self.repo.git("commit", "-q", "--allow-empty", "-m", "layout")
+        self.repo.git("commit", "-q", "-m", "layout")
 
     def run_loader(self, *args):
-        line = loader_line(SKILLS[0])[0]
-        self.assertTrue(line.startswith("python3 "))
-        # the Windows CI job has `python`, not `python3`
-        cmd = '"%s"' % sys.executable + line[len("python3"):]
-        cmd = cmd.replace("<S>/flow-trust.py", '"%s"' % self.runner) + " " + " ".join(args)
         env = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
         env.update(self.homes)
         env["FLOW_TRUST"] = "new"
-        argv, use_shell = gate.shell(cmd)
-        return subprocess.run(argv, shell=use_shell, cwd=str(self.repo.dir), env=env,
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        return helpers.run_loader(loader_line(SKILLS[0])[0], self.runner, args, self.repo.dir, env)
 
     def assert_started(self, done):
         lines = done.stdout.splitlines()
@@ -119,9 +108,10 @@ class LoaderRun(unittest.TestCase):
         self.assertNotIn("PLANTED", done.stdout + done.stderr)
 
     def test_a_runner_with_one_byte_changed_does_not_match(self):
-        data = self.runner.read_bytes()
-        self.assertIn(b"trusted check", data)
-        self.runner.write_bytes(data.replace(b"trusted check", b"trusted checK", 1))
+        data = bytearray(self.runner.read_bytes())
+        self.assertNotIn(data[OFFSET:OFFSET + 1], (b"\r", b"\n"))
+        data[OFFSET] ^= 0x01  # a letter stays a letter, and no line ending is made or lost
+        self.runner.write_bytes(bytes(data))
         done = self.run_loader("f", "start")
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertIn(MISMATCH, done.stderr)

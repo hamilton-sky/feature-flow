@@ -29,7 +29,7 @@ CHANGED = "STOP flow files changed since the last step:"
 
 def load_runner():
     """scripts/flow-trust.py as a module, without running main(). Loading it outside -I drops
-    sys.path[0], so sys.path is put back afterwards."""
+    sys.path[0] when that is the scripts folder, so sys.path is put back afterwards."""
     saved = list(sys.path)
     try:
         spec = importlib.util.spec_from_file_location("flow_trust", str(helpers.ROOT / "scripts" / "flow-trust.py"))
@@ -180,6 +180,15 @@ class FirstCalls(Base):
         self.assertIn("usage:", err)
         self.assertNotIn("flow-state", err)
 
+    def test_a_usage_error_of_its_own_is_a_stop_on_stdout_with_exit_1(self):
+        for args in (("f",), ("--after-build", "01"), ("../x", "next")):
+            rc, out, err = self.trust(*args, FLOW_TRUST="new")
+            self.assertEqual(rc, 1, (args, out, err))
+            self.assertTrue(out.startswith("STOP usage: FLOW_TRUST="), (args, out))
+            self.assertIn("FLOW_SESSION=<token>", out)
+            self.assertEqual(err, "", args)
+            self.assertFalse(self.repo.path(STATE).exists())
+
 
 class Started(Base):
     def test_it_runs_as_exec_of_its_bytes_by_the_loader(self):
@@ -195,6 +204,16 @@ class Started(Base):
         lines = result.stdout.splitlines()
         self.assertRegex(lines[0], TRUST)
         self.assertRegex(lines[1], r"^OK ")
+
+    def test_loaded_from_another_folder_it_leaves_sys_path_alone(self):
+        """Only its own folder is taken off sys.path; here sys.path[0] is the tests' folder."""
+        saved = list(sys.path)
+        try:
+            spec = importlib.util.spec_from_file_location("flow_trust_kept", str(helpers.ROOT / "scripts" / "flow-trust.py"))
+            spec.loader.exec_module(importlib.util.module_from_spec(spec))
+            self.assertEqual(sys.path, saved)
+        finally:
+            sys.path[:] = saved
 
     def test_the_names_it_hashes_match_the_ones_the_conductor_looks_up(self):
         runner = load_runner()
@@ -404,6 +423,9 @@ class Homes(Base):
         del self.homes["AGENTS_HOME"]
         skill = Path(home.name) / ".agents" / "skills" / "feature-flow" / "SKILL.md"
         self.write(skill, "# skill\n")
+        environ = mock.patch.dict(os.environ)
+        environ.start()
+        self.addCleanup(environ.stop)
         os.environ.pop("AGENTS_HOME", None)
         rc, lines, err = self.passed("start", HOME=home.name)
         self.assertEqual(rc, 0, (lines, err))
@@ -493,6 +515,7 @@ class FakeLinks:
             mock.patch.object(cls, "is_dir", lambda p: fake.real(p) in fake.folders),
             mock.patch.object(cls, "is_file", lambda p: fake.real(p) in fake.files),
             mock.patch.object(cls, "read_bytes", lambda p: fake.real(p).as_posix().encode("utf-8")),
+            mock.patch("os.readlink", side_effect=lambda p: str(fake.links[fake.real(Path(p).parent) / Path(p).name])),
         ]
 
 
@@ -530,6 +553,14 @@ class LinkedFolders(unittest.TestCase):
         _, linked = self.walk(self.fs({"feature_flow/linked": "outside"}))
         self.assertNotEqual(self.runner.part(without), self.runner.part(linked))
 
+    def test_a_link_to_nothing_is_hashed_by_its_target_text(self):
+        found, each = self.walk(self.fs({"feature_flow/gone": "missing"}))
+        self.assertEqual(found, ["feature_flow/conductor.py", "feature_flow/gone"])
+        target = "link " + str(self.ROOT / "missing")
+        self.assertEqual(each["feature_flow/gone"], hashlib.sha256(target.encode("utf-8")).hexdigest())
+        _, swapped = self.walk(self.fs({"feature_flow/gone": "elsewhere"}))
+        self.assertNotEqual(self.runner.part(each), self.runner.part(swapped))
+
     def test_a_looping_link_is_listed_but_not_entered_again(self):
         found, each = self.walk(self.fs({"feature_flow/loop": "feature_flow"}))
         self.assertEqual(found, ["feature_flow/conductor.py", "feature_flow/loop"])
@@ -540,6 +571,7 @@ class LinkedFolders(unittest.TestCase):
 PYTHON = '"%s"' % sys.executable
 DURING = "STOP flow code changed during %s: %s"
 STATE_CHANGED = "STOP the run state was changed by something other than the conductor during %s"
+NO_REPORT = "STOP the conductor did not report its state (it crashed?) during %s"
 
 
 class HoleC(Base):
@@ -624,10 +656,10 @@ class StateAsSaved(unittest.TestCase):
         self.assertEqual(lines[0], STATE_CHANGED % "next")
         self.assertNotIn("flow-state", err)
 
-    def test_no_flow_state_line_stops(self):
+    def test_no_flow_state_line_stops_saying_the_conductor_did_not_report(self):
         rc, lines, err = self.run_mode("silent")
         self.assertEqual(rc, 1, (lines, err))
-        self.assertEqual(lines[0], STATE_CHANGED % "next")
+        self.assertEqual(lines[0], NO_REPORT % "next")
 
     def test_a_file_that_exists_when_the_report_says_none_stops(self):
         rc, lines, err = self.run_mode("findings")
@@ -647,10 +679,7 @@ FLOOR = "Floor: allow flow-edit\n"
 
 def with_floor(data):
     """The ticket's bytes with the Floor line after `Type: task`, in the file's own line ending."""
-    eol = b"\r\n" if b"\r\n" in data else b"\n"
-    edited = data.replace(b"Type: task" + eol, b"Type: task" + eol + FLOOR.strip().encode() + eol, 1)
-    assert edited != data
-    return edited
+    return helpers.insert_after_line(data, b"Type: task", FLOOR.strip().encode())
 
 
 class FlowEditBase(Base):
@@ -825,6 +854,16 @@ class Handoff(Base):
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.decode("utf-8").splitlines(), ["HANDOFF /feature-flow f"])
+
+    def test_only_a_one_line_handoff_reply_of_next_gets_the_digest(self):
+        runner = load_runner()
+        self.assertEqual(runner.with_digest(b"HANDOFF /feature-flow f\r\n", "next", "f", "d.e"),
+                         b"HANDOFF /feature-flow f d.e\r\n")
+        quoted = b"# a prompt\nHANDOFF /feature-flow f\n"
+        self.assertEqual(runner.with_digest(quoted, "next", "f", "d.e"), quoted)
+        self.assertEqual(runner.with_digest(quoted, "prompt", "f", "d.e"), quoted)
+        self.assertEqual(runner.with_digest(b"HANDOFF /feature-flow f\n", "prompt", "f", "d.e"),
+                         b"HANDOFF /feature-flow f\n")
 
     def test_a_stop_after_the_call_leaves_handoff_without_a_digest(self):
         """A digest is only given when the runner trusts the result: an after-call STOP takes the

@@ -3,7 +3,12 @@
 import sys
 
 if not (sys.flags.isolated or getattr(sys.flags, "safe_path", 0)):
-    del sys.path[0]  # our own folder: nothing in scripts/ may shadow a module
+    first = sys.path.pop(0)  # our own folder, out of the way: nothing in scripts/ may shadow a module
+    import os
+
+    own = os.path.dirname(os.path.realpath(__file__))
+    if os.path.normcase(os.path.realpath(first or os.curdir)) != os.path.normcase(own):
+        sys.path.insert(0, first)  # not our own folder (started some other way): put it back
 sys.dont_write_bytecode = True  # never leave __pycache__ in the user's tree
 import importlib.util
 from pathlib import Path

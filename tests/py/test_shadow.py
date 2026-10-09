@@ -52,11 +52,10 @@ class ShadowTests(unittest.TestCase):
         self.plant("secrets.py", "def token_hex(n):\n    return 'planted'\n")
         self.assert_start_ok()
 
-    def test_planted_json_in_scripts_leaves_check_unchanged(self):
-        normal = self.check()
-        self.assertEqual(normal[0], 0, normal)
+    def test_planted_json_in_scripts_is_not_imported(self):
+        # start imports json (feature_flow.codehash), so this plant breaks it unless scripts/ is off sys.path
         self.plant("scripts/json.py", "raise ImportError('planted json')\n")
-        self.assertEqual(self.check(), normal)
+        self.assert_start_ok()
 
     def test_planted_re_in_scripts_changes_nothing(self):
         normal = self.check()

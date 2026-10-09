@@ -4,8 +4,7 @@
 # exit code is the number of failed checks, capped at 1.
 
 set -uo pipefail
-unset FLOW_INVOKE
-export FLOW_TRUSTED=1 # what scripts/flow-trust.py sets: next, prompt and verdict refuse to run without it
+unset FLOW_INVOKE FLOW_TRUSTED
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
@@ -582,7 +581,7 @@ expect_rc "python3 -m unittest discover -s tests/py passes" 0 $rc
 [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -20
 out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor parses as Python 3.9" 0 $?
-out="$(cd "$ROOT" && grep -rlE '^(import|from) ' feature_flow | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat)\b')"
+out="$(cd "$ROOT" && grep -rlE '^(import|from) ' feature_flow | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat|traceback)\b')"
 if [ -z "$out" ]; then ok "the conductor imports only the standard library"; else bad "the conductor imports only the standard library" "$out"; fi
 
 flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and feature_flow/
@@ -595,7 +594,8 @@ flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and fe
   echo "$d"
 }
 pyflow() { # args... -> sets OUT and RC, run in the current directory
-  OUT="$(python3 scripts/flow.py "$@" 2> /dev/null)"
+  # FLOW_TRUSTED=1 is what scripts/flow-trust.py sets: next, prompt and verdict refuse to run without it
+  OUT="$(FLOW_TRUSTED=1 python3 scripts/flow.py "$@" 2> /dev/null)"
   RC=$?
 }
 setst() { awk -v s="$1" 'FNR<=20 && !d && /^Status:/ {print "Status: " s; d=1; next} {print}' "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
@@ -754,7 +754,7 @@ snap="$(cat .feature-flow/state/flow-f.state; git status --porcelain)"
 pyflow f next
 expect_rc "next without the token exits 1" 1 "$RC"
 expect_has "and names the owner" "owned by another session ($OWNER)" "$OUT"
-OUT="$(FLOW_SESSION=wrong python3 scripts/flow.py f next 2> /dev/null)"
+OUT="$(FLOW_SESSION=wrong FLOW_TRUSTED=1 python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "next with a different token stops too" "STOP f is owned by another session" "$OUT"
 if [ "$snap" = "$(cat .feature-flow/state/flow-f.state; git status --porcelain)" ]; then ok "and neither changes the state or the tree"; else bad "and neither changes the state or the tree"; fi
 pyflow f start
@@ -764,9 +764,9 @@ OUT="$(FLOW_TAKEOVER=1 python3 scripts/flow.py f start 2> /dev/null)"
 TOK2="${OUT#OK }"
 if [ -n "$TOK2" ] && [ "$TOK2" != "$TOK" ] && [ "OK $TOK2" = "$OUT" ]; then ok "FLOW_TAKEOVER=1 start returns a new token"; else bad "FLOW_TAKEOVER=1 start returns a new token" "$OUT"; fi
 if [ "$before" = "$(grep -E '^(ticket|round|attempt)=' .feature-flow/state/flow-f.state)" ]; then ok "and keeps the outstanding phase and counters"; else bad "and keeps the outstanding phase and counters"; fi
-OUT="$(FLOW_SESSION="$TOK" python3 scripts/flow.py f next 2> /dev/null)"
+OUT="$(FLOW_SESSION="$TOK" FLOW_TRUSTED=1 python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "the old token can no longer drive the flow" "STOP f is owned by another session" "$OUT"
-OUT="$(FLOW_SESSION="$TOK2" python3 scripts/flow.py f next 2> /dev/null)"
+OUT="$(FLOW_SESSION="$TOK2" FLOW_TRUSTED=1 python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "after the takeover a claimed ticket is built again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
 expect_has "and reset to open" "Status: open" "$(cat plans/f/tasks/01-a.md)"
 expect_has "and the attempt counts" "attempt=2" "$(cat .feature-flow/state/flow-f.state)"
@@ -797,7 +797,7 @@ cd "$D" || exit 1
 pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
 printf 'REVIEW: PASS\n' > .git/reply.txt; pyflow f verdict .git/reply.txt
 pyflow f next; pyflow f verdict .git/reply.txt
-OUT="$(FLOW_TICKETS_PER_SESSION=1 FLOW_INVOKE='$feature-flow' python3 scripts/flow.py f next 2> /dev/null)"
+OUT="$(FLOW_TICKETS_PER_SESSION=1 FLOW_INVOKE='$feature-flow' FLOW_TRUSTED=1 python3 scripts/flow.py f next 2> /dev/null)"
 expect_has "FLOW_INVOKE sets the line to type" 'HANDOFF $feature-flow f' "$OUT"
 
 D="$(flowrepo pyflow_relay)"
