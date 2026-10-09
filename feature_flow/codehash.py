@@ -7,11 +7,15 @@ from pathlib import Path
 
 from feature_flow import git, prompts
 
+# feature-flow's own scripts; any other .py file in the same folder is the repo's own code
+SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.py", "flow-trust.py")
+
 
 def _files(scripts):
     package = Path(__file__).resolve().parent
     found = [p for p in package.rglob("*.py") if "__pycache__" not in p.parts]
-    found += Path(scripts).resolve().glob("*.py")
+    folder = Path(scripts).resolve()
+    found += [folder / name for name in SCRIPTS if (folder / name).is_file()]
     for phase in ("build", "review", "review-quality"):
         for folder, names in (("agents", prompts.ROLES), ("guides", prompts.GUIDES)):
             try:

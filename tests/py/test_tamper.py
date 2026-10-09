@@ -62,6 +62,14 @@ class Tamper:
             self.assertIn(rel, out)
 
 
+    def test_a_new_script_of_the_repo_s_own_is_not_flow_code(self):
+        self.begin()
+        self.repo.path("scripts/deploy.py").write_bytes(b"print('deploy')\n")
+        rc, out = self.finish()
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("REVIEW "), out)
+
+
 class SourceCheckout(Tamper, unittest.TestCase):
     pass
 
