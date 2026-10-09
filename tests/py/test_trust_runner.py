@@ -225,6 +225,13 @@ class Started(Base):
         self.assertEqual(set(runner.ROLES), set(prompts.ROLES.values()))
         self.assertEqual(set(runner.GUIDES), set(prompts.GUIDES.values()) | {"debug.md"})
 
+    def test_it_names_every_guide_and_template_feature_flow_ships(self):
+        runner = load_runner()
+        guides = helpers.ROOT / "guides"
+        shipped = {p.name for p in guides.iterdir() if p.is_file()}
+        self.assertEqual(set(runner.GUIDES) | set(runner.SKILL_GUIDES), shipped)
+        self.assertEqual(set(runner.TEMPLATES), {p.name for p in (guides / "templates").iterdir() if p.is_file()})
+
 
 class Trips(Base):
     """Each change between calls makes the next call STOP, naming the path."""
@@ -234,6 +241,8 @@ class Trips(Base):
         self.write(self.repo.path(".claude/agents/ticket-builder.md"), "# role\n")
         self.write(self.repo.path(".claude/skills/feature-flow/SKILL.md"), "# skill\n")
         self.write(self.repo.path("guides/build.md"), "# root guide\n")
+        self.write(self.repo.path("guides/brief.md"), "# root brief\n")
+        self.write(self.repo.path("guides/templates/ticket.md"), "# root template\n")
         self.write(self.homes["FEATURE_FLOW_HOME"] / "guides" / "build.md", "# home guide\n")
         self.write(self.repo.path(".agents/skills/feature-flow/SKILL.md"), "# skill\n")
         self.write(self.repo.path(".agents/flow-roles/ticket-builder.md"), "# role\n")
@@ -275,6 +284,16 @@ class Trips(Base):
         self.begin()
         self.append(self.repo.path("guides/build.md"))
         self.assertStops("guides/build.md")
+
+    def test_an_edited_template_in_the_root(self):
+        self.begin()
+        self.append(self.repo.path("guides/templates/ticket.md"))
+        self.assertStops("guides/templates/ticket.md")
+
+    def test_an_edited_skill_guide_in_the_root(self):
+        self.begin()
+        self.append(self.repo.path("guides/brief.md"))
+        self.assertStops("guides/brief.md")
 
     def test_a_missing_guide_in_the_root(self):
         self.begin()

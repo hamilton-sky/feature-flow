@@ -43,6 +43,8 @@ STATE_CHANGED = "STOP the run state was changed by something other than the cond
 NO_REPORT = "STOP the conductor did not report its state (it crashed?) during %s"
 SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.py", "flow-trust.py")
 GUIDES = ("build.md", "review.md", "review-quality.md", "plan.md", "plan-review.md", "debug.md")  # prompts.GUIDES + debug.md
+SKILL_GUIDES = ("brief.md", "show.md")  # read by the skills themselves
+TEMPLATES = ("commands.md", "learnings.md", "map.md", "spec.md", "ticket.md", "ui-mockup.md")  # guides/templates/
 ROLES = ("ticket-builder.md", "ticket-reviewer.md", "feature-planner.md", "plan-reviewer.md")  # prompts.ROLES
 OWNED = (".feature-flow/feature_flow", ".feature-flow/guides", ".feature-flow/agents",
          ".claude/skills/feature-flow", ".agents/skills/feature-flow", ".agents/flow-roles")
@@ -119,7 +121,8 @@ def code_files(here, top):
     """The flow's code files, as spec.md § Design "What is hashed" lists them (missing ones are skipped later)."""
     parent = here.parent
     found = [here / name for name in SCRIPTS] + tree(parent / "feature_flow")
-    found += [parent / "guides" / name for name in GUIDES] + [parent / "agents" / name for name in ROLES]
+    found += [parent / "guides" / name for name in GUIDES + SKILL_GUIDES] + [parent / "agents" / name for name in ROLES]
+    found += [parent / "guides" / "templates" / name for name in TEMPLATES]
     for rel in OWNED:
         found += tree(top / rel)
     found += [top / ".claude" / "agents" / name for name in ROLES]
