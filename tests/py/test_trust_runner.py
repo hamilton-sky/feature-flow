@@ -173,6 +173,19 @@ class FirstCalls(Base):
         path.write_text("{}", encoding="utf-8")
         self.assertGoesOn()
 
+    def test_the_list_replaces_what_is_at_its_path_and_never_writes_through_it(self):
+        # A hard link stands in for a planted symlink (both write through on open) and needs no privileges on Windows.
+        self.begin()
+        target = self.repo.path("scripts/flow-trust.py")
+        before = target.read_bytes()
+        path = self.repo.path(".feature-flow/state/flow-f.trust")
+        path.unlink()
+        os.link(str(target), str(path))
+        self.assertGoesOn()
+        self.assertEqual(target.read_bytes(), before)
+        self.assertNotEqual(path.read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in path.parent.iterdir() if p.name.startswith(".flow-trust-")), [])
+
     def test_the_conductor_exit_code_and_stderr_pass_through(self):
         rc, out, err = self.trust("f", "bogus", FLOW_TRUST="new")
         self.assertEqual(rc, 2, (out, err))

@@ -212,13 +212,28 @@ def named_changes(top, feature, now):
     return ", ".join(names) if names else "(the earlier list names none of them)"
 
 
+def replace_file(path, text):
+    """Write a new regular file beside path and move it into place, so a symlink planted at path is replaced, never followed."""
+    handle, temp = tempfile.mkstemp(dir=str(path.parent), prefix=".flow-trust-")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as out:
+            out.write(text)
+        os.replace(temp, str(path))
+    except BaseException:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
+
+
 def write_list(top, feature, each):
     folder = top / STATE_DIR
     folder.mkdir(parents=True, exist_ok=True)
     ignore = folder / ".gitignore"
-    if not ignore.is_file():
-        ignore.write_text("*\n", encoding="utf-8")
-    trust_path(top, feature).write_text(json.dumps(each, sort_keys=True, indent=1) + "\n", encoding="utf-8")
+    if ignore.is_symlink() or not ignore.is_file():
+        replace_file(ignore, "*\n")
+    replace_file(trust_path(top, feature), json.dumps(each, sort_keys=True, indent=1) + "\n")
 
 
 def run_conductor(here, feature, command, rest):
