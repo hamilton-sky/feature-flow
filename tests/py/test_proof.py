@@ -260,6 +260,7 @@ class TestFirst(unittest.TestCase):
 
     def inproc(self, *args, patches=()):
         env = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
+        env["FLOW_TRUSTED"] = "1"
         out = io.StringIO()
         here = os.getcwd()
         os.chdir(str(self.repo.dir))

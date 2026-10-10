@@ -1,19 +1,69 @@
 """python3 scripts/flow.py <feature> <command>: the conductor's command line."""
 
+import os
 import sys
+import traceback
 from pathlib import Path
 
-from feature_flow import suggest
+from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
 USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt | verdict <file> | reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
 COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset")
 ARGS = {"verdict": (3,), "plan-prompt": (3, 4), "reset": (2, 3)}
+RUNNER_ONLY = ("next", "prompt", "verdict")
 
 
 def main(argv=None, scripts=None):
-    args = list(sys.argv[1:] if argv is None else argv)
+    """With FLOW_TRUSTED=1 (set by scripts/flow-trust.py) the last stderr line is always
+    `flow-state <state sha256 or none> <findings sha256 or none>`, for the bytes the conductor left."""
+    trusted = os.environ.get("FLOW_TRUSTED") == "1"
+    state.SEEN.clear()
+    try:
+        args = list(sys.argv[1:] if argv is None else argv)
+        if trusted:
+            peek(args)
+        return run(args, scripts, trusted)
+    except SystemExit as err:  # say what the interpreter would say, but before the report
+        if not trusted:
+            raise
+        if err.code is None or isinstance(err.code, int):
+            return err.code or 0
+        print(err.code, file=sys.stderr)
+        return 1
+    except BaseException:  # the traceback goes before the report, which stays the last stderr line
+        if not trusted:
+            raise
+        traceback.print_exc()
+        return 1
+    finally:
+        if trusted:
+            sys.stdout.flush()
+            sys.stderr.write("flow-state %s\n" % state.reported())
+            sys.stderr.flush()
+
+
+def peek(args):
+    """Read the feature's state and findings files before anything can return early, so the report
+    names the files that are there even after a usage error. Creates nothing."""
+    if not args or not plain(args[0]):
+        return
+    feature = args[0]
+    top = git.toplevel()
+    if top is not None:
+        folder = top / state.STATE_DIR
+        state.read_bytes(state.state_path(folder, feature), "state")
+        state.read_bytes(state.file_path(folder, feature, "findings"), "findings")
+
+
+def plain(feature):
+    """True when feature is a plain folder name: not empty, no leading -, no path parts."""
+    return (bool(feature) and not feature.startswith("-") and feature not in (".", "..")
+            and not any(c in feature for c in "/\\:"))
+
+
+def run(args, scripts, trusted):
     if len(args) < 2 or args[1] not in COMMANDS or not args[0] or args[0].startswith("-"):
         print(USAGE, file=sys.stderr)
         if len(args) >= 2 and args[0] in COMMANDS:
@@ -22,12 +72,15 @@ def main(argv=None, scripts=None):
             sys.stderr.write(suggest.hint(args[1], COMMANDS))
         return 2
     feature, command = args[0], args[1]
-    if feature in (".", "..") or any(c in feature for c in "/\\:"):
+    if not plain(feature):
         print("the feature must be a plain folder name, not %s" % feature, file=sys.stderr)
         return 2
     if len(args) not in ARGS.get(command, (2,)):
         print(USAGE, file=sys.stderr)
         return 2
+    if command in RUNNER_ONLY and not trusted:
+        print("STOP run the conductor through scripts/flow-trust.py, as the skill says")
+        return 1
     scripts = Path(scripts) if scripts else Path.cwd() / "scripts"
     conductor = None
     try:

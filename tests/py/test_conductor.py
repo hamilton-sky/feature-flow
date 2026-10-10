@@ -1,3 +1,4 @@
+import hashlib
 import os
 import shutil
 import unittest
@@ -267,14 +268,15 @@ class StateOutsideGit(unittest.TestCase):
         self.assertIn("STOP cannot write the flow state in", out)
 
     def test_a_run_kept_under_git_moves_over_with_its_owner(self):
-        self.repo.path(".git/flow-f.state").write_text("owner=abc123\nphase=\nsession_done=0\n", encoding="utf-8")
+        old = "abc1230123456789"  # an earlier version stored the raw 16 hex token
+        self.repo.path(".git/flow-f.state").write_text("owner=%s\nphase=\nsession_done=0\n" % old, encoding="utf-8")
         self.repo.path(".git/flow-f.log").write_text("10:00:00,-,START\n", encoding="utf-8")
         rc, out = self.flow("start")
         self.assertEqual(rc, 1, "the old owner still holds the feature")
-        self.assertIn("owned by session abc123", out)
-        self.assertTrue(self.flow("next", FLOW_SESSION="abc123")[1].startswith("BUILD %s 01 " % T1))
+        self.assertIn("owned by session abc12301.", out)
+        self.assertTrue(self.flow("next", FLOW_SESSION=old)[1].startswith("BUILD %s 01 " % T1))
         self.assertIn("10:00:00,-,START", self.repo.log())
-        self.assertEqual(self.repo.state()["owner"], "abc123")
+        self.assertEqual(self.repo.state()["owner"], hashlib.sha256(old.encode()).hexdigest())
 
 
 class RunLimit(unittest.TestCase):

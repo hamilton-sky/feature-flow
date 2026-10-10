@@ -11,13 +11,29 @@ The first word is the **feature**. `show` means draw the graph. `auto` means ask
 
 The conductor is `python3 scripts/flow.py <feature> <command>`. If `scripts/flow.py` exists in the repo and the feature-flow package is beside it (`.feature-flow/feature_flow/`, or `feature_flow/` in a feature-flow checkout), use it (the repo's own install wins; an unrelated `scripts/flow.py` does not count); otherwise use `python3 "${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/scripts/flow.py"` (`~/.feature-flow/scripts/flow.py`). Wherever this skill or a message names `scripts/flow.py`, `scripts/flow-status.py` or `scripts/flow-view.py`, it means the same folder, and the guides are then in that folder's sibling `guides/` (`~/.feature-flow/guides/`, else `.feature-flow/guides/` in the repo). Run the conductor with the working directory in the repo: state and plans stay there. It decides the order, runs the gate and the floor guard, and keeps its state in `.feature-flow/state/`, a folder git ignores. You ask it, and you do what it says. The guides it uses are in `.feature-flow/guides/` (in a feature-flow checkout, `guides/`). Read the project's `AGENTS.md` for its conventions.
 
+## Calling the conductor
+
+Every conductor command (`start`, `next`, `prompt`, `verdict`, `reset`, `plan-prompt`, `plan-review-prompt`, `plan-accept`) runs through `flow-trust.py`, never `flow.py` itself. `<S>` below is the folder of the `flow.py` picked above: `scripts` for the repo's own install, else `"${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/scripts"`. `flow-trust.py` is started by this loader line, which checks the file against the sha256 pinned here and runs those same bytes. Copy it exactly, replacing only `<S>`:
+
+    python3 -I -c "import hashlib,sys;b=open(sys.argv[1],'rb').read().replace(b'\r\n',b'\n');sys.exit(exec(compile(b,'flow-trust','exec')) if hashlib.sha256(b).hexdigest()==sys.argv[2] else 'flow-trust.py does not match this skill')" <S>/flow-trust.py ec4e2430b3ed4dae4fa5d9190c3e1726294a0f854bf92584c0c756a07b9029d9
+
+A full conductor command, here `next` (any other command and its arguments go where `next` is):
+
+    FLOW_TRUST=<digest> FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 -I -c "import hashlib,sys;b=open(sys.argv[1],'rb').read().replace(b'\r\n',b'\n');sys.exit(exec(compile(b,'flow-trust','exec')) if hashlib.sha256(b).hexdigest()==sys.argv[2] else 'flow-trust.py does not match this skill')" <S>/flow-trust.py ec4e2430b3ed4dae4fa5d9190c3e1726294a0f854bf92584c0c756a07b9029d9 <feature> next
+
+- The first line of the output is `TRUST <digest>`. Keep that digest and pass it as `FLOW_TRUST` on the next conductor call. Treat the rest as the conductor's output and act on it as below (for `prompt`, `plan-prompt` and `plan-review-prompt`, the child agent's prompt is everything after the `TRUST` line). Use `FLOW_TRUST=new` only on this session's first conductor call, or when resuming from an old-style `HANDOFF` line (below).
+- If you no longer have the last `TRUST` digest, stop and say so. Never guess it, and never use `new` in its place.
+- On the `next` right after a `BUILD <ticket> <NN> <sha>`, add `--after-build <ticket> <sha>` before the feature: `... <S>/flow-trust.py ec4e2430b3ed4dae4fa5d9190c3e1726294a0f854bf92584c0c756a07b9029d9 --after-build <ticket> <sha> <feature> next`. If the output has a `FLOW-EDIT <paths>` line after `TRUST`, the build changed feature-flow's own files and its ticket allows that: carry on; without `auto`, first tell the user which flow files changed.
+- If the first line is `STOP` (from `flow-trust.py`), or the loader prints `flow-trust.py does not match this skill` (say to reinstall feature-flow: the skill and `flow-trust.py` do not match), report it, show the `python3 <S>/flow-status.py <feature>` table, and stop. A `STOP` first line may be followed by the conductor's own output: never act on that. Never fix it and carry on.
+- A `HANDOFF` line from `flow-trust.py` has a third field after the invocation and the feature: the digest. When the feature is followed by a `<16 hex>.<16 hex>` word, the user is resuming from a `HANDOFF` line and that word is the digest: pass it as `FLOW_TRUST` on `start`. When a resumed session gets no digest (an old-style `HANDOFF` line), use `FLOW_TRUST=new` and warn the user that the flow's files could not be checked since the last session.
+
 ## Show
 
 With `show`, follow `.feature-flow/guides/show.md` for the feature and stop.
 
 ## Plan
 
-When `plans/<feature>/` does not exist, or you are planning from the conversation, follow `.feature-flow/guides/brief.md` with the user. You write the brief and ask for both yeses (unless `auto`); a child agent plans, another reviews, and you never draft the plan yourself. Once the brief names the feature, run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start` and check that it prints `PLAN`, and check that `feature-planner.md` and `plan-reviewer.md` exist in `.agents/flow-roles/` or in `${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/agents/` (see below).
+When `plans/<feature>/` does not exist, or you are planning from the conversation, follow `.feature-flow/guides/brief.md` with the user. You write the brief and ask for both yeses (unless `auto`); a child agent plans, another reviews, and you never draft the plan yourself. Once the brief names the feature, run `start` through `flow-trust.py` (see Calling the conductor) with `FLOW_INVOKE='$feature-flow'`, and check that it prints `PLAN` after the `TRUST` line, and check that `feature-planner.md` and `plan-reviewer.md` exist in `.agents/flow-roles/` or in `${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/agents/` (see below).
 
 - `plan-prompt <brief>`: start the planner with `spawn_agent(task_name="feature_planner", fork_turns="none", message=...)`. The message is "Work only in <repo>." followed by the whole output. Get its final reply with `wait_agent`. A child cannot be limited to the draft folder, so it works from its instructions, and `plan-accept` is the only way its draft reaches `plans/`. If web search is off in this Codex, the planner plans from the codebase and says so.
 - `plan-review-prompt`: start a new reviewer the same way, with `task_name="plan_reviewer"` and `fork_turns="none"`, never with the planner's reply. Get its final reply with `wait_agent` and save it with the shell into `.feature-flow/state/plan-review-<feature>.txt`.
@@ -35,7 +51,7 @@ With a plan present, check these before `start`, and stop at the first that fail
 - `python3 scripts/flow-status.py <feature> --check` prints `OK`.
 - `ticket-builder.md` and `ticket-reviewer.md` are in `.agents/flow-roles/` in the repo or in `${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/agents/` (`~/.feature-flow/agents/` by default). If not, say to run `uvx feature-flow-cli install . --agent codex` in this repo, or `uvx feature-flow-cli install --user --agent codex` (once for every repo) (or `python3 install.py <repo> --agent codex` from a feature-flow clone).
 
-Then run `FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> start`. It prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'`. The conductor keeps its state in `.feature-flow/state/`, a git-ignored folder in the repo, so it never needs to write `.git`. If it prints `STOP cannot write the flow state`, tell the user this session must be allowed to write that folder.
+Then run `start` through `flow-trust.py` with `FLOW_INVOKE='$feature-flow'`. After the `TRUST` line it prints `OK <token>`. Keep the token and put `FLOW_SESSION=<token>` in front of **every** later conductor command, with `FLOW_INVOKE='$feature-flow'` and the last `FLOW_TRUST`. The conductor keeps its state in `.feature-flow/state/`, a git-ignored folder in the repo, so it never needs to write `.git`. If it prints `STOP cannot write the flow state`, tell the user this session must be allowed to write that folder.
 
 If `start` prints `STOP` naming another owner, another session may still be working this feature. Ask the user whether that session is closed. Only on a clear yes, run `start` once more with `FLOW_TAKEOVER=1`. In `auto` mode, never take over: report and stop.
 
@@ -45,17 +61,13 @@ Say what will happen: for each ticket, a builder subagent and then a reviewer su
 
 ## The loop
 
-Run `next`, act on its one line, and repeat:
+Run `next`, act on its one line after `TRUST` (and any `FLOW-EDIT` line), and repeat:
 
-- `BUILD <ticket> <NN> <sha>`: run `prompt`. Start the builder with `spawn_agent(task_name="ticket_builder_<NN>_<k>", fork_turns="none", message=...)`. The message is "Work only in <repo>." followed by the whole `prompt` output, which already starts with the builder role. Use a new `task_name` for every spawn: keep a count per ticket in this session, and `<k>` is the number of builders already started for this ticket, plus 1 (1 for the first, then up each time `next` sends the ticket back to a builder). Get its final reply with `wait_agent`, then run `next`.
+- `BUILD <ticket> <NN> <sha>`: run `prompt`. Start the builder with `spawn_agent(task_name="ticket_builder_<NN>_<k>", fork_turns="none", message=...)`. The message is "Work only in <repo>." followed by the whole `prompt` output, which already starts with the builder role. Use a new `task_name` for every spawn: keep a count per ticket in this session, and `<k>` is the number of builders already started for this ticket, plus 1 (1 for the first, then up each time `next` sends the ticket back to a builder). Get its final reply with `wait_agent`, then run `next` with `--after-build <ticket> <sha>` from that `BUILD` line.
 - `REVIEW <ticket> <NN> <sha>`: run `prompt`. Start a new reviewer the same way, with `fork_turns="none"` so it never sees the builder's context, and a unique `task_name` per spawn: `ticket_reviewer_<NN>_<pass>_<k>`, where `<pass>` is `spec` or `quality` by the pass the prompt names (`(spec pass)` or `(quality pass)`; `review` if it names none) and `<k>` is the number of reviews already started for this ticket in this session, plus 1 (1 for the first). Count every review, also one that ended in `RETRY` or a failed review followed by a rebuild, so a repeated pass never reuses a name. Get its final reply with `wait_agent`. A child cannot be made read-only, so the reviewer works from its instructions; the conductor catches any edit it makes. Save the whole reply with the shell: `cat > .feature-flow/state/flow-review-<feature>.txt <<'EOF'` ... `EOF`. Then run `verdict .feature-flow/state/flow-review-<feature>.txt` and `next`. If `verdict` prints `RETRY`, just run `next`.
 - `DONE <summary>`: report it and suggest `$feature-flow <feature> show`.
 - `STOP <reason>`: report the reason, run `python3 scripts/flow-status.py <feature>`, show the table, and stop.
-- `HANDOFF <line>`: stop here. Tell the user to open a new session and type exactly `<line>`. The new session resumes where this one stopped.
-
-A conductor command looks like this:
-
-    FLOW_SESSION=<token> FLOW_INVOKE='$feature-flow' python3 scripts/flow.py <feature> next
+- `HANDOFF <line>`: stop here. Tell the user to open a new session and type exactly `<line>`, the whole line with its digest at the end. The new session resumes where this one stopped.
 
 ## Rules while building
 

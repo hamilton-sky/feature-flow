@@ -5,12 +5,52 @@ refused there. The folder ignores itself (its .gitignore is `*`), so it never di
 The state file is key=value lines. It is parsed as plain text, never run as code.
 """
 
+import hashlib
 import shutil
 import time
 from pathlib import Path
 
 STATE_DIR = Path(".feature-flow") / "state"
 KINDS = ("state", "log", "findings")
+SEEN = {}  # "state"/"findings" -> the bytes this process last wrote or read there, None: no file
+
+
+def _remember(kind, data):
+    if kind is not None:
+        SEEN[kind] = data
+
+
+def reported():
+    """`<state sha256 or none> <findings sha256 or none>` for the bytes this process left, as far as it knows."""
+    return " ".join(hashlib.sha256(SEEN[k]).hexdigest() if SEEN.get(k) is not None else "none"
+                    for k in ("state", "findings"))
+
+
+def read_bytes(path, kind=None):
+    """The file's bytes, or None when there is none; remembered for reported() under kind
+    ("state" or "findings"), when given."""
+    path = Path(path)
+    data = path.read_bytes() if path.is_file() else None
+    _remember(kind, data)
+    return data
+
+
+def read_text(path, kind=None):
+    data = read_bytes(path, kind)
+    return None if data is None else data.decode("utf-8")
+
+
+def write_text(path, text, kind=None):
+    data = text.encode("utf-8")
+    Path(path).write_bytes(data)
+    _remember(kind, data)
+
+
+def remove(path, kind=None):
+    path = Path(path)
+    if path.is_file():
+        path.unlink()
+    _remember(kind, None)
 
 
 def state_dir(top):
@@ -50,24 +90,26 @@ def migrate(old_folder, new_folder, feature):
     return True
 
 
-def load(path):
+def load(path, kind=None):
     data = {}
-    path = Path(path)
-    if not path.is_file():
+    text = read_text(path, kind)
+    if text is None:
         return data
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in text.splitlines():
         key, sep, value = line.partition("=")
         if sep and key.strip():
             data[key.strip()] = value
     return data
 
 
-def save(path, data):
+def save(path, data, kind=None):
     path = Path(path)
     lines = ["%s=%s" % (key, str(value).replace("\n", " ")) for key, value in data.items()]
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out = ("\n".join(lines) + "\n").encode("utf-8")
+    tmp.write_bytes(out)
     tmp.replace(path)
+    _remember(kind, out)
 
 
 def log(path, num, event):

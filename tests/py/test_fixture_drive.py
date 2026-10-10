@@ -59,6 +59,7 @@ class FixtureDrive(unittest.TestCase):
 
     def flow(self, *args, **env):
         full = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
+        full["FLOW_TRUSTED"] = "1"
         full.update(env)
         result = subprocess.run([sys.executable, "scripts/flow.py", "f"] + list(args), cwd=str(self.dir),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
@@ -111,6 +112,7 @@ class PlanDrive(unittest.TestCase):
 
     def flow(self, *args, **env):
         full = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
+        full["FLOW_TRUSTED"] = "1"
         full.update(env)
         result = subprocess.run([sys.executable, "scripts/flow.py", "csv"] + list(args), cwd=str(self.dir),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, env=full,
