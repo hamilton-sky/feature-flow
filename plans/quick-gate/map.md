@@ -29,3 +29,4 @@ A plan can set `Quick:` in `commands.md`. After a ticket the gate runs Build, Qu
 02 — conductor.gate_quick picks quick unless FLOW_GATE_FULL=1, no Quick:, last unfinished ticket, or session fills; gate send-back says (quick) or (full).
 03 — planner writes Quick: only from a clearly faster subset of Test (strict subset, never invented); plan reviewer runs it in check 4.
 04 — README documents the quick gate and FLOW_GATE_FULL; version 0.7.0; skills unchanged (they do not describe the gate).
+05 — test_quick_gate_drive.py drives four tickets: quick, quick, quick, test; FLOW_GATE_FULL=1 gives test x4.
