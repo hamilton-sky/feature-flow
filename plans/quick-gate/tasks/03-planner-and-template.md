@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: no
 
@@ -40,3 +40,9 @@ exit 0
 - `guides/templates/commands.md`, `guides/plan.md`, `guides/plan-review.md`
 
 ## Answer
+
+- **Built**: `guides/templates/commands.md` (Quick: line plus intro sentence), `guides/plan.md` Step 2 (Quick: rules, strict subset, never invented), `guides/plan-review.md` check 4 (run Quick, report exit, subset of Test, coverage).
+- **Proof**: the four check-block greps each exited 0. `python3 -m unittest discover -s tests/py -p "test_own_install.py"` ran 2 tests, OK.
+- **Decisions**: no installed copy of the guides exists in this repo (`.feature-flow/` holds only `state`), so nothing to refresh.
+- **Shortcuts taken**: none.
+- **For later tickets**: none.

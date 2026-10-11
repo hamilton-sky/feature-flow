@@ -31,6 +31,8 @@ If your prompt carries review findings from an earlier round, the draft is alrea
 
 **The codebase first.** Find similar features and how they were built, the files that will change, the existing types and APIs the feature touches, and the test conventions. Find the **real** build, test and lint commands: read them from `package.json`, `Makefile`, `Taskfile.yml`, CI config or the project's agent instructions file (CLAUDE.md or AGENTS.md). Do not guess. Pick a **smoke command**: the quickest one that proves the base is healthy (usually build plus the fast tests). The flow runs it before every ticket, and runs Build, Test and Lint after every ticket, so all of them must run without asking anything and exit non zero on failure.
 
+Add a `Quick:` line to `commands.md` only when the project's own config has a clearly faster subset of Test (a unit-only target, a fast marker or folder). It must be a strict subset of `Test`, must exit non zero on failure, and must run without asking anything. Otherwise leave it out: no `Quick:` means the full Test runs every time. The planner never invents one.
+
 **Outside only where the code cannot answer.** For a library or API the feature uses, read the version the lockfile pins, then that version's official documentation. When the brief names a hard problem, look for how others solved it. Never research what the codebase already decides. Write every outside fact you rely on into `map.md` under Decisions so far with its source (`docs: <url>`). If you cannot reach the web, say so in your reply and plan from the codebase.
 
 ## Step 3: Draft the graph
