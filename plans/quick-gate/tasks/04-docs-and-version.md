@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: 02, 03
 Test first: no
 
@@ -36,3 +36,13 @@ exit 0
 - `README.md`, `feature_flow/__init__.py`, `tests/run.sh`
 
 ## Answer
+
+**Built**: `README.md` (new "The gate: full or quick" paragraph, `FLOW_GATE_FULL` row in the settings table), `feature_flow/__init__.py` (0.7.0), `tests/run.sh` (`--version` expects 0.7.0).
+
+**Proof**: version command printed `0.7.0`; `grep -c FLOW_GATE_FULL README.md` gave 2 and `grep -c "Quick:" README.md` gave 2 (exit 0); `test_skill_trust.py` and `test_install.py` pass. The full suite is left to the conductor's gate.
+
+**Decisions**: the four skill files only say the conductor runs the gate and do not describe it, so they are unchanged. No other test pins the version.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: none.
