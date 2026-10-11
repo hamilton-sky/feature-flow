@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -33,3 +33,13 @@ prints OK
 - `feature_flow/gate.py` (`run`, `main`, `command`), `feature_flow/checks.py` (`gate`), `tests/py/test_gate.py`
 
 ## Answer
+
+**Built**: `feature_flow/gate.py` (`run(..., quick=False)`), `feature_flow/checks.py` (`gate(..., quick=False)` passes it on), new `tests/py/test_quick_gate_mode.py` (7 tests). Test-only commit came first.
+
+**Proof**: `python3 -m unittest discover -s tests/py -p "test_quick_gate_mode.py" -v` ran 7 tests, listed `test_quick_mode_with_a_placeholder_runs_test`, printed OK. Before the code it failed with 7 errors (no `quick` argument). `test_gate.py` still passes (11 tests, OK). The full suite is left to the conductor's gate.
+
+**Decisions**: in quick mode the Quick command replaces the Test slot inside the existing loop, so order stays Build, Quick, Lint. It also runs when Test is empty. Full mode never reads `Quick:`.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the failing Quick output uses the same format as the others: `gate: Quick failed. the last lines of its output:`.

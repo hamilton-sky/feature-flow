@@ -60,9 +60,10 @@ def timeout_minutes():
         raise ValueError("FLOW_GATE_TIMEOUT must be a whole number, not %s" % value)
 
 
-def run(feature, out, err, timeout=None):
+def run(feature, out, err, timeout=None, quick=False):
     """Run the gate for feature. out and err take text. timeout is minutes (a float is fine), 0 for none;
-    None reads FLOW_GATE_TIMEOUT. Returns the exit code."""
+    None reads FLOW_GATE_TIMEOUT. With quick, a usable Quick: value runs in the place of Test.
+    Returns the exit code."""
     if not feature:
         err("usage: python3 scripts/gate.py <feature>\n")
         return 2
@@ -77,8 +78,11 @@ def run(feature, out, err, timeout=None):
         out("gate: no commands.md for " + feature + ", nothing to run\n")
         return 0
     ran = 0
+    quick_cmd = command(path, "Quick") if quick else ""
     for key in KEYS:
         cmd = command(path, key)
+        if key == "Test" and quick_cmd != "" and not quick_cmd.startswith("<"):
+            key, cmd = "Quick", quick_cmd
         if cmd == "" or cmd.startswith("<"):
             continue
         ran += 1
