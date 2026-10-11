@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: no
 
@@ -46,3 +46,13 @@ prints Review: auto
 - `guides/plan.md`, `guides/plan-review.md`, `guides/templates/ticket.md`
 
 ## Answer
+
+**Built**: `guides/plan.md` (rule 1a folded, rule 8a `Review: full`, Step 5 lists a bad `Review` value), `guides/plan-review.md` (check 7 folded), `guides/templates/ticket.md` (`Review: auto`).
+
+**Proof**: `grep -c "Review: full" guides/plan.md` printed 1; `grep -c folded` printed 1 for plan.md and 1 for plan-review.md; `grep -n "Review: auto" guides/templates/ticket.md` printed `7:Review: auto`. `python3 -m unittest discover -s tests/py -p test_own_install.py` printed OK (2 tests), so no installed copy needed refreshing. Full suite left to the gate.
+
+**Decisions**: numbered the new rules 1a and 8a so existing rule numbers (12, 13) that may be cited stay stable.
+
+**Shortcuts taken**: none
+
+**For later tickets**: none
