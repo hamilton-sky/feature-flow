@@ -5,11 +5,14 @@ Taskfile, CI). Approved by a human when the plan is approved. Workers read this 
 must not change it.
 
 The flow runs Smoke before every ticket and Build, Test and Lint after every
-ticket, so each must run without asking anything and exit non zero on failure. Delete a line
+ticket, so each must run without asking anything and exit non zero on failure. `Quick:` is
+optional: when set, it runs in place of Test after the tickets in the middle of the plan, and
+Test runs after the last ticket and before each handoff. Delete a line
 you do not have; a line left as a placeholder is skipped.
 
 Build: `<command>`
 Test: `<command>`
+Quick: `<optional: the fast subset of Test, run after the tickets in the middle of the plan; Test runs after the last ticket and before each handoff>`
 Lint: `<command>`
 Smoke: `<the quickest command that proves the base is healthy, run before every ticket>`
 Run: `<command, if the feature has something to start>`

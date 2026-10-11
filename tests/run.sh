@@ -396,7 +396,7 @@ if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] &&
 LEFT="$(find "$BAR/home" -type f)"
 if [ -z "$LEFT" ]; then ok "the user uninstall leaves no files in the home"; else bad "the user uninstall leaves no files in the home" "$LEFT"; fi
 if [ ! -e "$BAR/home/.feature-flow" ]; then ok "and ~/.feature-flow is gone"; else bad "and ~/.feature-flow is gone"; fi
-expect_has "--version prints the version" "feature-flow 0.6.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
+expect_has "--version prints the version" "feature-flow 0.7.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"
@@ -636,11 +636,11 @@ pyflow f next
 resolve plans/f/tasks/01-a.md
 pyflow f next
 expect_has "a failing gate builds the ticket again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
-expect_has "with the gate's findings in the ticket" "## Review findings (round 1, gate)" "$(cat plans/f/tasks/01-a.md)"
+expect_has "with the gate's findings in the ticket" "## Review findings (round 1, gate (full))" "$(cat plans/f/tasks/01-a.md)"
 expect_has "committed" "chore(f): 01 review findings, round 1" "$(git log -1 --format=%s)"
 for r in 2 3 4; do resolve plans/f/tasks/01-a.md; pyflow f next; done
 expect_rc "the 4th gate failure exits 1" 1 "$RC"
-expect_has "and stops after 3 rounds" "STOP 01-a still fails the gate after 3 round(s)" "$OUT"
+expect_has "and stops after 3 rounds" "STOP 01-a still fails the gate (full) after 3 round(s)" "$OUT"
 
 D="$(flowrepo pyflow_dirty)"
 cd "$D" || exit 1
