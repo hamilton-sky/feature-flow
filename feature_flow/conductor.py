@@ -51,6 +51,9 @@ class Conductor:
         self.gate_timeout = _env_int("FLOW_GATE_TIMEOUT", 30)
         self.gate_on = os.environ.get("FLOW_GATE", "on") != "off"
         self.per_session = _env_int("FLOW_TICKETS_PER_SESSION", 4)
+        self.small_files = _env_int("FLOW_SMALL_FILES", 3)
+        self.small_lines = _env_int("FLOW_SMALL_LINES", 60)
+        self.checks_ran = False
         self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
         self.invoke = os.environ.get("FLOW_INVOKE") or "/feature-flow"
         top = git.toplevel()
@@ -266,8 +269,28 @@ class Conductor:
                 return self.send_back("test first", report)
             if note:
                 notes.append(note)
+        self.st["review_pass"] = "spec"
+        if self.gate_on and self.checks_ran:
+            small = self.small_note()
+            if small:
+                self.st["review_pass"] = "single"
+                self.log("REVIEW-SMALL")
+                notes.append(small)
         self.st["review_notes"] = NOTE_SEP.join(notes)
         return self.hand_out_review()
+
+    def small_note(self):
+        """The note for the reviewer when the built diff is small enough for one review, else ""."""
+        base = self.ticket_at_base()
+        if proof.review_mode(base) != "auto" or self.small_lines <= 0:
+            return ""
+        if re.search(r"^Type:[ \t]*convert\b", base.split("\n## ", 1)[0], re.IGNORECASE | re.MULTILINE):
+            return ""
+        files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix())
+        if binary or files > self.small_files or lines > self.small_lines:
+            return ""
+        return ("the conductor judged this ticket small (%d files, %d lines): one review covers the spec and "
+                "quality passes" % (files, lines))
 
     def ticket_at_base(self):
         """The ticket text as it was at the base commit, so a builder cannot change what is checked."""
@@ -286,6 +309,7 @@ class Conductor:
             found = proof.checks_in(self.ticket_at_base())
         except proof.ParseError as err:
             raise Stop("%s has a check block the conductor cannot read: %s" % (self.ticket_name(), err))
+        self.checks_ran = bool(found)
         if not found:
             self.log("DONEWHEN-SKIP")
             return None, "the conductor ran no Done when checks: the ticket has no check block"
@@ -424,7 +448,7 @@ class Conductor:
             raise Stop("the reviewer changed tracked files, which a reviewer must never do")
         verdict = self.get("verdict")
         self.st["verdict"] = ""
-        if verdict == "pass" and self.get("review_pass", "spec") != "quality":
+        if verdict == "pass" and self.get("review_pass", "spec") == "spec":
             self.st["review_pass"] = "quality"
             self.st["review_attempt"] = 0
             return self.hand_out_review()
@@ -436,8 +460,8 @@ class Conductor:
             return self.pick_ticket()
         if verdict == "fail":
             findings = state.read_text(self.findings_file, "findings") or ""
-            return self.send_back("quality review" if self.get("review_pass") == "quality" else "spec review",
-                                  findings)
+            return self.send_back({"quality": "quality review", "single": "single review"}.get(
+                self.get("review_pass"), "spec review"), findings)
         if self.num("review_attempt") >= self.max_retries:
             raise Stop("no review verdict for %s after %d attempt(s)" % (self.ticket_name(), self.max_retries))
         return self.hand_out_review()
@@ -449,8 +473,8 @@ class Conductor:
         if phase not in ("build", "review"):
             raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
         try:
-            if phase == "review" and self.get("review_pass") == "quality":
-                phase = "review-quality"
+            if phase == "review" and self.get("review_pass") in ("quality", "single"):
+                phase = "review-" + self.get("review_pass")
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
                                  [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase != "build" else (),
                                  retry=self.num("round") > 0)

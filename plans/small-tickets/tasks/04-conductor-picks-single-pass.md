@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: 01, 02, 03
 Test first: yes
 
@@ -43,3 +43,16 @@ prints OK
 - `feature_flow/conductor.py` (`judge_build`, `run_done_when`, `hand_out_review`, `judge_review`, `send_back`, `prompt`), `tests/py/test_review_pass.py`, `tests/smoke-real.sh`
 
 ## Answer
+
+**Built**: `feature_flow/conductor.py` (`FLOW_SMALL_FILES`/`FLOW_SMALL_LINES` in `__init__`; `judge_build` sets `review_pass` to `single` or `spec` before `hand_out_review` via new `small_note()`; `judge_review` treats a PASS on `single` like a quality PASS and a FAIL as `single review`; `prompt` uses `review-single`), `tests/py/test_small_review.py` (new, 10 tests, committed first in `c13731e`), `tests/smoke-real.sh` (demo ticket 01 has `Review: full`; log checks expect no `REVIEW-SMALL` and two verdicts for 01, `REVIEW-SMALL` and one verdict for 02).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -p "test_small_review.py"` -> `Ran 10 tests ... OK` (at the test-only commit it had 4 failures, for the missing single pass).
+- Whole suite, run once: `python3 -m unittest discover -s tests/py` -> 405 tests OK; `bash tests/run.sh` -> 465 passed, 0 failed. `bash -n tests/smoke-real.sh` is clean; the real smoke needs a model and was not run.
+
+**Decisions**: `hand_out_review` is unchanged: `judge_build` sets `review_pass` first, and the existing `get(...) or "spec"` keeps it. A 0.5.0 state needs no migration because only `spec` is the first-pass value and `quality` still ends on PASS. `run_done_when` sets `self.checks_ran` so `judge_build` knows a check block ran. `Type: convert` is read from the header lines of the ticket at base with a regex. The "added after base" test uses `Floor: allow ticket-edit` since the floor guard otherwise sends the edit back.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the note goes to the reviewer through `review_notes`, so the single prompt contains it. Ticket 07's drive should expect `FLOW_SMALL_LINES=0` to be read at `judge_build` time (each `next` call), so set it in the env of every call.
+

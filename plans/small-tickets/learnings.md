@@ -6,3 +6,4 @@ ticket number. Never edit or delete another line. Keep it short; a human prunes 
 
 - (01) `feature_flow.git._git` runs in the cwd: tests that call git helpers must `os.chdir` into the throwaway repo and back (see `tests/py/test_diff_size.py`).
 - (03) Editing `scripts/flow-trust.py` means re-pinning its LF sha256 in four SKILL.md files: skills/, adapters/codex/, .claude/skills/, .agents/skills/ (sed the old hash).
+- (04) A test cannot add `Review: full` after base unless the ticket has `Floor: allow ticket-edit`: the floor guard sends a ticket edit back first.
