@@ -128,6 +128,21 @@ class Conductor:
                        % ("timed out after %d minutes" % self.gate_timeout if result.timed_out else "failed",
                           self.ticket_name(), cmd, gate.TAIL, log))
 
+    def gate_quick(self):
+        """True when this ticket's gate may run Quick in place of Test."""
+        if os.environ.get("FLOW_GATE_FULL") == "1":
+            return False
+        if not tickets.commands_value(self.commands, "Quick"):
+            return False
+        if self.per_session > 0 and self.num("session_done") + 1 >= self.per_session:
+            return False
+        counts = {}
+        for word in checks.flow_status(self.scripts, self.feature, "--counts").out.split():
+            key, _, value = word.partition("=")
+            if value.isdigit():
+                counts[key] = int(value)
+        return sum(counts.get(k, 0) for k in ("open", "claimed", "waiting", "unknown")) > 0
+
     def run_limit(self):
         result = checks.flow_status(self.scripts, self.feature, "--counts")
         total = 0
@@ -249,10 +264,12 @@ class Conductor:
         if not git.is_clean():
             raise Stop("working tree is dirty after %s, it should have been committed" % self.ticket_name())
         if self.gate_on:
-            result = checks.gate(self.scripts, self.feature, self.gate_timeout)
+            quick = self.gate_quick()
+            result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=quick)
+            self.log("GATE-QUICK" if quick else "GATE-FULL")
             self.log("GATE-PASS" if result.ok else "GATE-FAIL")
             if not result.ok:
-                return self.send_back("gate", result.out)
+                return self.send_back("gate (quick)" if quick else "gate (full)", result.out)
         result = checks.floor_guard(self.scripts, self.feature, self.get("num"), self.get("base"))
         self.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
         if not result.ok:

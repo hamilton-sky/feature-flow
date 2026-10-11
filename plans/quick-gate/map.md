@@ -26,3 +26,4 @@ A plan can set `Quick:` in `commands.md`. After a ticket the gate runs Build, Qu
 
 - Should the test-first proof be allowed to use `Quick:` when a plan opts in? Left on `Test` for now.
 01 — gate.run/checks.gate take quick=False; quick mode runs Quick in Test's slot when usable, else Test; tests are portable (python logger script, no skips).
+02 — conductor.gate_quick picks quick unless FLOW_GATE_FULL=1, no Quick:, last unfinished ticket, or session fills; gate send-back says (quick) or (full).
