@@ -39,6 +39,24 @@ def head():
     return _git("rev-parse", "HEAD").stdout.strip()
 
 
+def diff_size(base, head, exclude):
+    """(files, lines, binary) of the diff base..head outside the exclude path: the changed paths, the
+    added plus removed lines of the text files, and whether any file is binary (`-` counts in numstat).
+    Renames are off so a renamed file is one delete plus one add whatever `diff.renames` says."""
+    out = _git("diff", "--numstat", "--no-renames", base, head, "--", ".", ":(exclude)%s" % exclude).stdout
+    files, lines, binary = 0, 0, False
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        added, removed = line.split("\t", 2)[:2]
+        files += 1
+        if added == "-" or removed == "-":
+            binary = True
+        else:
+            lines += int(added) + int(removed)
+    return files, lines, binary
+
+
 # the installer's record of what it wrote: the paths, and the sha256 of each as it wrote it
 INSTALLED = Path(".feature-flow") / "installed.txt"
 HASHES = Path(".feature-flow") / "installed.sha256"

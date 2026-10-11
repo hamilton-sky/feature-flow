@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -35,3 +35,24 @@ prints OK
 - `feature_flow/git.py` (`_git`, `changes`), `tests/py/helpers.py`
 
 ## Answer
+
+Work started at commit `58255b6f8b966c6dd34a78a903e7be419ed0f867`; test-only commit `f318af3`.
+
+**Built**
+- `feature_flow/git.py`: new `diff_size(base, head, exclude)` returning `(files, lines, binary)`, via `_git("diff", "--numstat", "--no-renames", base, head, "--", ".", ":(exclude)<exclude>")`.
+- `tests/py/test_diff_size.py`: new, 5 tests in a throwaway `helpers.Repo(local=False)`.
+
+**Proof**
+- `python3 -m unittest discover -s tests/py -p "test_diff_size.py" -v`: `Ran 5 tests ... OK`, lists `test_a_binary_file_is_flagged ... ok`, plus the two-file change (2, 4, False), the excluded-folder-only change (0, 0, False), the rename with `diff.renames=true` (2, 20, False) and a bad revision raising `RuntimeError`. Before the code it failed with `AttributeError: module 'feature_flow.git' has no attribute 'diff_size'` (5 errors).
+- `python3 -m unittest discover -s tests/py`: `Ran 384 tests in 217.136s`, `OK`. Also `bash tests/run.sh`: `465 passed, 0 failed`.
+
+**Decisions**
+- A binary file counts as a changed path but adds no lines (its counts are `-`); `binary` is then `True`.
+- `_git` runs in the current directory, so callers must be inside the repo (the conductor already is); the test chdirs into the throwaway repo like `test_floorguard.py`.
+- Added a `RuntimeError` test for a bad revision, since the ticket names that behaviour.
+
+**Shortcuts taken**
+- none
+
+**For later tickets**
+- 04: pass `exclude` as the plan folder relative to the repo top with a trailing slash (e.g. `plans/<feature>/`); the pathspec `.` is relative to the cwd, so call it from the repo top level.

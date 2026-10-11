@@ -21,6 +21,7 @@ The planner folds changes too small to stand alone into the ticket they belong t
 
 - (plan) `git diff --numstat` prints `-` for the added and removed counts of a binary file; `--no-renames` turns off rename detection even when `diff.renames` is set; a `:(exclude)<path>` pathspec leaves that path out. docs: https://git-scm.com/docs/git-diff (--numstat, --no-renames), https://git-scm.com/docs/gitglossary#Documentation/gitglossary.txt-exclude
 - (plan) The conductor decides "small" from the measured diff, not a planner field or the builder's word. Why and the rejected options: spec.md § Decisions.
+- 01 — `git.diff_size(base, head, exclude)` -> `(files, lines, binary)` from `git diff --numstat --no-renames`, plan folder excluded; binary files count as a path with 0 lines and set `binary`.
 
 ## Open questions
 
