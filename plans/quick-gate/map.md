@@ -20,8 +20,8 @@ A plan can set `Quick:` in `commands.md`. After a ticket the gate runs Build, Qu
 ## Decisions so far
 
 - (plan) Position in the plan, not diff size, decides quick or full; the last ticket and a handoff run the full suite. Why and the rejected options: spec.md § Decisions.
+01 — gate.run and checks.gate take quick=False; quick mode runs Quick in Test's slot when Quick: is usable, else Test.
 
 ## Open questions
 
 - Should the test-first proof be allowed to use `Quick:` when a plan opts in? Left on `Test` for now.
-01 — gate.run and checks.gate take quick=False; quick mode runs Quick in Test's slot when Quick: is usable, else Test.
