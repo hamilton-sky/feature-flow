@@ -1,7 +1,7 @@
 # Acceptance: drive small and large tickets through the conductor
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01, 02, 03, 04, 05, 06
 Test first: no
 
@@ -42,3 +42,15 @@ exit 0
 - `tests/py/test_review_pass.py`, `tests/py/test_fixture_drive.py`, `tests/py/helpers.py`
 
 ## Answer
+
+**Built**: `tests/py/test_small_drive.py` (new, only file changed besides this ticket and map.md).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -p "test_small_drive.py"` printed `Ran 2 tests ... OK`.
+- `python3 -m unittest discover -s tests/py` printed `Ran 407 tests ... OK`; `bash tests/run.sh` printed `465 passed, 0 failed`, exit 0.
+
+**Decisions**: One five-ticket plan (small, `Review: full`, no check block, `Type: convert`, 61-line diff), all with a passing `Test:` and a passing check block except 03. Driven with `start`, `next`, `prompt`, `verdict`; the pass name is read from each REVIEW prompt. Run once normally (1,2,2,2,2 reviews, one `REVIEW-SMALL` in the log) and once with `FLOW_SMALL_LINES=0` (all two, no `REVIEW-SMALL`); both end in `DONE`.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the drive sets `FLOW_TICKETS_PER_SESSION=99`, since the default 4 hands off before the fifth ticket.

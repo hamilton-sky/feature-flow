@@ -32,3 +32,4 @@ The planner folds changes too small to stand alone into the ticket they belong t
 - 04 — `judge_build` picks `review_pass` single/spec from the base ticket (Review, Type), the check block and `git.diff_size`; `FLOW_SMALL_FILES`/`FLOW_SMALL_LINES`; log `REVIEW-SMALL`; smoke-real demo ticket 01 is `Review: full`.
 - 05 — planner guide rules 1a (fold tiny changes) and 8a (`Review: full`), plan-review check 7 folded, ticket template `Review: auto`.
 06 — README documents the single review and its limits, skills say one or two reviews per ticket, version 0.6.0.
+07 — tests/py/test_small_drive.py drives five tickets through the conductor: one REVIEW for the small checked one, two for the rest and for all under FLOW_SMALL_LINES=0.
