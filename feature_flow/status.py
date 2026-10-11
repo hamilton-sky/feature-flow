@@ -162,6 +162,8 @@ def _check(g, ready, nready, unfinished, out):
             errors.append(lab + ": no ## Done when section")
         if t in g.hastf and g.tf[t] not in ("yes", "no"):
             errors.append(lab + ": Test first must be yes or no")
+        if t in g.hasreview and g.review[t] not in ("full", "auto"):
+            errors.append(lab + ": Review must be full or auto")
         for d in g.blk[t]:
             if d == t:
                 errors.append(lab + ": blocked by itself")

@@ -8,7 +8,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import prompts  # the package under test, from this checkout
+from feature_flow import codehash, prompts  # the package under test, from this checkout
 
 GUIDE = "Run `python3 scripts/flow-status.py <feature> --next` for <feature>."
 ROLE = "Planner: `python3 scripts/flow-status.py <feature> --check`."
@@ -109,6 +109,27 @@ class PromptFolderTests(unittest.TestCase):
         self.assertIn("python3 scripts/flow-status.py demo --next", text)
         self.assertIn(ROLE, text)
         self.assertNotIn(self.root.as_posix(), text)
+
+
+class SinglePassTests(unittest.TestCase):
+    def test_the_single_review_prompt_has_scope_quality_and_the_verdict_line(self):
+        text = prompts.build("review-single", helpers.ROOT / "scripts", "demo", "plans/demo/tasks/01-a.md", "01", "abc")
+        self.assertIn("(single pass)", text)
+        self.assertIn("**Scope**", text)
+        self.assertIn("missing handling at boundaries", text)
+        self.assertIn("blocker, major or minor", text)
+        self.assertTrue(text.rstrip().endswith("`REVIEW: PASS` or `REVIEW: FAIL`."))
+
+    def test_flow_code_changes_when_the_single_review_guide_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            for folder, name in (("guides", "review-single.md"), ("agents", "ticket-reviewer.md")):
+                (base / folder).mkdir()
+                (base / folder / name).write_text("one", encoding="utf-8")
+            (base / "scripts").mkdir()
+            before = codehash.flow_code(base / "scripts")[0]
+            (base / "guides" / "review-single.md").write_text("two", encoding="utf-8")
+            self.assertNotEqual(before, codehash.flow_code(base / "scripts")[0])
 
 
 if __name__ == "__main__":

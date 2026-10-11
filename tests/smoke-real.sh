@@ -99,6 +99,7 @@ Type: task
 Status: open
 Blocked by: —
 Test first: yes
+Review: full
 
 Create `hello.py` in the repo root with a function `greet(name)` that returns `Hello, <name>!`, and `test_hello.py` with a unittest for it.
 
@@ -207,6 +208,8 @@ for t in 01 02; do
   for e in BUILD GATE-PASS GUARD-PASS DONEWHEN-PASS REVIEW VERDICT-PASS; do check "ticket $t: the log has $e" "has $t $e"; done
 done
 check "ticket 01: the log has TESTFIRST-PASS" "has 01 TESTFIRST-PASS"
+check "ticket 01 (Review: full): no REVIEW-SMALL, two verdicts" '! has 01 REVIEW-SMALL && [ "$(grep -c ",01,VERDICT-PASS$" .feature-flow/state/flow-hello.log)" = 2 ]'
+check "ticket 02: the log has REVIEW-SMALL, one verdict" 'has 02 REVIEW-SMALL && [ "$(grep -c ",02,VERDICT-PASS$" .feature-flow/state/flow-hello.log)" = 1 ]'
 check "the first session handed off once, between the tickets" '[ "$(grep -c ",HANDOFF$" .feature-flow/state/flow-hello.log)" = 1 ] && [ "$(grep -n ",HANDOFF$" .feature-flow/state/flow-hello.log | cut -d: -f1)" -lt "$(grep -n ",02,BUILD$" .feature-flow/state/flow-hello.log | head -1 | cut -d: -f1)" ]'
 echo
 cat .feature-flow/state/flow-hello.log

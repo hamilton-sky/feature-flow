@@ -51,6 +51,7 @@ Then a lazy pass over your draft. For each ticket ask, in order: does the bar st
 ### Ticket rules
 
 1. **One ticket is one change that leaves the build green**, small enough for one session. If Done when needs more than about 5 bullets, or Not in this ticket spans two areas, split it.
+1a. **A change too small to stand alone is folded in.** A rename, a doc line, a config value or a one-line fix that has no Done when of its own goes into the ticket whose work it belongs to, not a ticket of its own. Every ticket costs a builder, the gate and at least one reviewer, whatever its size.
 2. **`Blocked by` only for a real dependency**: the ticket cannot start without another's output. Independent tickets stay unblocked. Do not chain tickets just because of their numbers.
 3. **Types**:
    - `task`: normal work.
@@ -68,6 +69,7 @@ prints OK
 6. **Survive code drift**: no line numbers. Name functions and classes, and give a search hint for insertion points ("after the call to `parseConfig()`").
 7. **Tests ride with the code they cover**: every ticket adds its own. Frontend tickets come after the API shape is stable.
 8. **Set `Test first:`** on every ticket. `yes` for anything that adds or changes logic (the builder must commit a failing test alone first, and the conductor checks it), `no` for config, docs, renames and migrations that a command already proves. Do not set `yes` on a ticket whose test cannot fail before the code.
+8a. **Set `Review: full`** on a ticket that is small but risky (validation at a trust boundary, security, the flow's own code, data that could be lost). Leave it out otherwise: the conductor gives a small ticket whose check block passed one combined review, and a larger one the spec and quality passes. `Type: convert` always gets both.
 9. **The last ticket is the acceptance ticket**: it runs the map's bar end to end and is blocked by every ticket that leaves the bar unproven.
 10. **Number from 01 and never renumber.** Tickets added later get the next number.
 11. **More than about 12 tickets?** Plan in rounds: `plans/<feature>/` first, then `plans/<feature>-round-two/` with its own map that links back.
@@ -77,7 +79,7 @@ prints OK
 
 ## Step 5: Check
 
-Run `FLOW_DIR=.feature-flow/state/draft python3 scripts/flow-status.py <feature> --check`. It fails on a missing blocker, a cycle, a missing Done when, a duplicate number, a bad `Test first` value, or no ready ticket, and it warns about tickets that name another ticket in their text without being ordered against it. If the script is not installed, check those by hand. Fix every problem and every warning before you reply.
+Run `FLOW_DIR=.feature-flow/state/draft python3 scripts/flow-status.py <feature> --check`. It fails on a missing blocker, a cycle, a missing Done when, a duplicate number, a bad `Test first` value, a bad `Review` value, or no ready ticket, and it warns about tickets that name another ticket in their text without being ordered against it. If the script is not installed, check those by hand. Fix every problem and every warning before you reply.
 
 ## Step 6: Reply
 

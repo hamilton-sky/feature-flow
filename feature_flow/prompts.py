@@ -8,8 +8,10 @@ import shlex
 from pathlib import Path
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
+         "review-single": "ticket-reviewer.md",
          "plan": "feature-planner.md", "plan-review": "plan-reviewer.md"}
-GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md", "plan": "plan.md", "plan-review": "plan-review.md"}
+GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
+          "review-single": "review-single.md", "plan": "plan.md", "plan-review": "plan-review.md"}
 
 
 def find_file(scripts, folder, name):
@@ -83,7 +85,7 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
         task = ("Your task: review ticket %s of the feature `%s` (`%s %s %s`) (%s pass). The ticket is `%s`, and the "
                 "work started at commit `%s`.\n%s\nDo not edit any file or create a commit. Your final reply must end "
                 "with exactly `REVIEW: PASS` or `REVIEW: FAIL`."
-                % (num, feature, feature, num, sha, "quality" if phase == "review-quality" else "spec", ticket, sha,
+                % (num, feature, feature, num, sha, {"review-quality": "quality", "review-single": "single"}.get(phase, "spec"), ticket, sha,
                    fresh))
         for note in notes:
             task += "\nThe conductor notes: %s" % note

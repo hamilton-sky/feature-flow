@@ -4,6 +4,7 @@ Type: task
 Status: open
 Blocked by: —
 Test first: yes
+Review: auto
 
 <What to do and why, in prose. Name files, functions and types. Never use line numbers.
 For Type: settle, say what has to be decided and who decides. For Type: convert, say what
