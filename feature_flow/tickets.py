@@ -109,6 +109,7 @@ class Graph:
         self.hasstatus, self.hasdone, self.blk = {}, {}, {}
         self.hasblk, self.hastype, self.hastf, self.hastitle = set(), set(), set(), set()
         self.typ, self.tf = {}, {}
+        self.hasreview, self.review = set(), {}
         self.mentions = {}
         for p in paths:
             self._read(p)
@@ -147,6 +148,9 @@ class Graph:
             if head and line.startswith("Test first:") and cur not in self.hastf:
                 self.hastf.add(cur)
                 self.tf[cur] = _first_word(line.lower(), "test first:")
+            if head and line.startswith("Review:") and cur not in self.hasreview:
+                self.hasreview.add(cur)
+                self.review[cur] = _first_word(line.lower(), "review:")
             if line.startswith("# ") and cur not in self.hastitle:
                 self.hastitle.add(cur)
                 self.title[cur] = line[2:]

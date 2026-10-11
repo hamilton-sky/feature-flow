@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -37,3 +37,13 @@ prints OK
 - `feature_flow/proof.py` (`wants_test_first`), `feature_flow/tickets.py` (`Graph._read`), `feature_flow/status.py` (`_check`)
 
 ## Answer
+
+**Built**: `feature_flow/proof.py` (`review_mode`), `feature_flow/tickets.py` (`hasreview`/`review` read in `Graph._read`), `feature_flow/status.py` (`_check` error), new `tests/py/test_review_line.py` (9 tests). Test-only commit came first (`test(small-tickets): 02 failing test`, failed with 6 errors and 1 failure).
+
+**Proof**: `python3 -m unittest discover -s tests/py -p "test_review_line.py" -v` ran 9 tests, listed `test_review_mode_*` and `test_maybe_fails_the_plan_check`, and printed `OK`.
+
+**Decisions**: `review_mode` copies `wants_test_first` (header lines only, case insensitive, `\b` after `full`). The check compares the lowercased first word, like `Test first`.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: `Graph.review` holds the lowercased first word per ticket and `Graph.hasreview` says whether the line exists. Ticket 04 should use `proof.review_mode(text)` on the ticket text at base.
