@@ -28,7 +28,7 @@ Tests in `tests/py/test_prompts.py`: `prompts.build("review-single", ...)` conta
 
 - `python3 -m unittest discover -s tests/py -p "test_prompts.py"` prints `OK`, with a test that the `review-single` prompt contains `(single pass)`.
 - `grep -c "REVIEW: PASS" guides/review-single.md` prints a number above 0, and `grep -n "review-single.md" scripts/flow-trust.py` finds the GUIDES line.
-- All existing tests still pass: `python3 -m unittest discover -s tests/py` prints `OK`, and `bash tests/run.sh` exits 0.
+- The whole suite passes: the conductor's gate runs it after the build, so it is not repeated in the check block.
 
 ```check
 # The conductor runs this block before review.
@@ -37,10 +37,6 @@ prints OK
 $ grep -n "review-single.md" scripts/flow-trust.py
 prints review-single.md
 $ grep -c "REVIEW: PASS" guides/review-single.md
-exit 0
-$ python3 -m unittest discover -s tests/py
-prints OK
-$ bash tests/run.sh
 exit 0
 ```
 

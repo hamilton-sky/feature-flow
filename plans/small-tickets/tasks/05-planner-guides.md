@@ -26,7 +26,7 @@ Refresh this repo's installed copy of the guides if `tests/py/test_own_install.p
 ## Done when
 
 - `guides/plan.md` contains `Review: full` and `folded`; `guides/plan-review.md` contains `folded`; `guides/templates/ticket.md` contains `Review: auto`.
-- All existing tests still pass: `python3 -m unittest discover -s tests/py` prints `OK`.
+- The whole suite passes: the conductor's gate runs it after the build, so it is not repeated in the check block.
 
 ```check
 # The conductor runs this block before review.
@@ -38,8 +38,6 @@ $ grep -c "folded" guides/plan-review.md
 exit 0
 $ grep -n "Review: auto" guides/templates/ticket.md
 prints Review: auto
-$ python3 -m unittest discover -s tests/py
-prints OK
 ```
 
 ## Reference

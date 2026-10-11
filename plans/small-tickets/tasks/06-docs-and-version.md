@@ -27,7 +27,7 @@ Set `__version__ = "0.6.0"` in `feature_flow/__init__.py`, and update the `--ver
 
 - `python3 -c "import feature_flow; print(feature_flow.__version__)"` prints `0.6.0`.
 - `README.md` contains `FLOW_SMALL_LINES` and `Review: full`; `adapters/codex/feature-flow/SKILL.md` contains `(single pass)`.
-- All existing tests still pass: `python3 -m unittest discover -s tests/py` prints `OK`, and `bash tests/run.sh` exits 0.
+- The whole suite passes: the conductor's gate runs it after the build, so it is not repeated in the check block.
 
 ```check
 # The conductor runs this block before review.
@@ -39,10 +39,6 @@ $ grep -c "Review: full" README.md
 exit 0
 $ grep -n "(single pass)" adapters/codex/feature-flow/SKILL.md
 prints (single pass)
-$ python3 -m unittest discover -s tests/py
-prints OK
-$ bash tests/run.sh
-exit 0
 ```
 
 ## Reference

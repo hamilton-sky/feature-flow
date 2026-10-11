@@ -29,16 +29,12 @@ Tests in a new `tests/py/test_small_review.py`, using `helpers.Repo` with ticket
 ## Done when
 
 - `python3 -m unittest discover -s tests/py -p "test_small_review.py"` prints `OK`.
-- All existing tests still pass: `python3 -m unittest discover -s tests/py` prints `OK`, and `bash tests/run.sh` exits 0.
+- The whole suite passes: the conductor's gate runs it after the build, so it is not repeated in the check block.
 
 ```check
 # The conductor runs this block before review.
 $ python3 -m unittest discover -s tests/py -p "test_small_review.py"
 prints OK
-$ python3 -m unittest discover -s tests/py
-prints OK
-$ bash tests/run.sh
-exit 0
 ```
 
 ## Reference

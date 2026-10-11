@@ -21,15 +21,13 @@ Tests: `review_mode` on a ticket with `Review: full`, `Review: FULL`, `Review: a
 ## Done when
 
 - `python3 -m unittest discover -s tests/py -p "test_review_line.py" -v` prints `OK`, and lists a test with `review_mode` in its name and one with `maybe` in its name (the plan with `Review: maybe`, whose `--check` output contains `Review must be full or auto`).
-- All existing tests still pass: `python3 -m unittest discover -s tests/py` prints `OK`.
+- The whole suite passes: the conductor's gate runs it after the build, so it is not repeated in the check block.
 
 ```check
 # The conductor runs this block before review.
 $ python3 -m unittest discover -s tests/py -p "test_review_line.py" -v
 prints review_mode
 prints maybe
-prints OK
-$ python3 -m unittest discover -s tests/py
 prints OK
 ```
 
