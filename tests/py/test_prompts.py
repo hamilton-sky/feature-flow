@@ -116,7 +116,7 @@ class SinglePassTests(unittest.TestCase):
         text = prompts.build("review-single", helpers.ROOT / "scripts", "demo", "plans/demo/tasks/01-a.md", "01", "abc")
         self.assertIn("(single pass)", text)
         self.assertIn("**Scope**", text)
-        self.assertIn("boundary bugs", text)
+        self.assertIn("missing handling at boundaries", text)
         self.assertIn("blocker, major or minor", text)
         self.assertTrue(text.rstrip().endswith("`REVIEW: PASS` or `REVIEW: FAIL`."))
 

@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -46,3 +46,16 @@ exit 0
 - `guides/review.md`, `guides/review-quality.md`, `feature_flow/prompts.py` (`build`), `feature_flow/codehash.py` (`_files`), `scripts/flow-trust.py` (`GUIDES`)
 
 ## Answer
+
+**Built**: `guides/review-single.md` (new; review.md's header and "What you may read" / "What you must not do" kept word for word, then one verdict section: Scope, Done when with `MET (conductor)`, Test first, Quality; `SPEC` then `QUALITY` block, same last-line rule). `feature_flow/prompts.py` (`review-single` in `ROLES` and `GUIDES`; task line says `(single pass)`), `feature_flow/codehash.py` (phase added to `_files`), `scripts/flow-trust.py` (`GUIDES`), the pinned flow-trust hash (`ec4e2430...` -> `3a4b28b0...`) in `skills/feature-flow/SKILL.md`, `adapters/codex/feature-flow/SKILL.md`, `.claude/skills/feature-flow/SKILL.md`, `.agents/skills/feature-flow/SKILL.md`, and `tests/py/test_prompts.py` (two new tests, committed first in `eb0d9e4`; one assertion string adjusted afterwards to match the guide's wording).
+
+**Proof**:
+- `python3 -m unittest discover -s tests/py -p "test_prompts.py"` -> `Ran 11 tests ... OK` (it failed with KeyError / equal hashes at the test-only commit).
+- `grep -c "REVIEW: PASS" guides/review-single.md` -> `2`, exit 0; `grep -n "review-single.md" scripts/flow-trust.py` -> line 45, the GUIDES tuple.
+- `test_skill_trust.py` -> OK (9 tests), `test_own_install.py` -> OK (2 tests), run directly. Whole suite, run once: `python3 -m unittest discover -s tests/py` -> 395 tests OK; `bash tests/run.sh` -> 465 passed, 0 failed.
+
+**Decisions**: the phase name in the task line is `single` so the existing `(%s pass)` format gives `(single pass)`. Own-install guides needed no refresh: `test_own_install` passes and the guides are not tracked there.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: any later change to `scripts/flow-trust.py` needs the four pinned hashes updated again (LF sha256). Ticket 04 must pass the conductor notes (check block passed) to `prompts.build("review-single", ..., notes=...)`; the guide relies on a note saying the check block passed to write `MET (conductor)`.

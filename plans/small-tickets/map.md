@@ -28,3 +28,4 @@ The planner folds changes too small to stand alone into the ticket they belong t
 
 - Are 3 files and 60 lines the right limits? Revisit after real runs, counting `REVIEW-SMALL` in the logs.
 - Quick mode for a one-off fix outside a feature: offered to the user as a later step, not planned here.
+- 03 — `guides/review-single.md` plus phase `review-single` in prompts/codehash/flow-trust (task line `(single pass)`); flow-trust hash re-pinned in the four skill copies.
