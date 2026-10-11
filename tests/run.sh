@@ -636,11 +636,11 @@ pyflow f next
 resolve plans/f/tasks/01-a.md
 pyflow f next
 expect_has "a failing gate builds the ticket again" "BUILD plans/f/tasks/01-a.md 01" "$OUT"
-expect_has "with the gate's findings in the ticket" "## Review findings (round 1, gate)" "$(cat plans/f/tasks/01-a.md)"
+expect_has "with the gate's findings in the ticket" "## Review findings (round 1, gate (full))" "$(cat plans/f/tasks/01-a.md)"
 expect_has "committed" "chore(f): 01 review findings, round 1" "$(git log -1 --format=%s)"
 for r in 2 3 4; do resolve plans/f/tasks/01-a.md; pyflow f next; done
 expect_rc "the 4th gate failure exits 1" 1 "$RC"
-expect_has "and stops after 3 rounds" "STOP 01-a still fails the gate after 3 round(s)" "$OUT"
+expect_has "and stops after 3 rounds" "STOP 01-a still fails the gate (full) after 3 round(s)" "$OUT"
 
 D="$(flowrepo pyflow_dirty)"
 cd "$D" || exit 1

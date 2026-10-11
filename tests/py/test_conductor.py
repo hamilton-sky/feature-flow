@@ -61,7 +61,7 @@ class BuildAndChecks(unittest.TestCase):
             self.assertEqual(self.repo.git("log", "-1", "--format=%s"), "chore(f): 01 review findings, round %d" % round_no)
         self.repo.resolve(T1, "feat: round 4")
         rc, out = self.repo.flow("next")
-        self.assertEqual((rc, out), (1, "STOP 01-a still fails the gate after 3 round(s)"))
+        self.assertEqual((rc, out), (1, "STOP 01-a still fails the gate (full) after 3 round(s)"))
 
     def test_an_uncommitted_install_is_not_a_dirty_tree_but_other_files_are(self):
         for rel in (".claude/agents/ticket-builder.md", ".agents/skills/feature-flow/SKILL.md"):
