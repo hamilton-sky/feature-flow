@@ -35,7 +35,7 @@ prints OK
 
 ## Answer
 
-**Built**: `feature_flow/conductor.py` (`Conductor.gate_quick()`; `judge_build` passes `quick=` to `checks.gate`, logs `GATE-QUICK` or `GATE-FULL` before `GATE-PASS`/`GATE-FAIL`, and sends back with source `gate (quick)` or `gate (full)`); new `tests/py/test_quick_gate.py` (7 tests). Test-only commit came first and failed 4 of 7 for the right reason (Test ran, not Quick).
+**Built**: `feature_flow/conductor.py` (`Conductor.gate_quick()`; `judge_build` passes `quick=` to `checks.gate`, logs `GATE-QUICK` or `GATE-FULL` before `GATE-PASS`/`GATE-FAIL`, and sends back with source `gate (quick)` or `gate (full)`); new `tests/py/test_quick_gate.py` (7 tests); `tests/py/test_conductor.py` line 59 now expects `gate (full)` in the findings header (it expected `gate`, which the ticket changes; same assertion otherwise). Test-only commit came first and failed 4 of 7 for the right reason (Test ran, not Quick).
 
 **Proof**: `python3 -m unittest discover -s tests/py -p "test_quick_gate.py" -v` ran 7 tests, listed `test_middle_quick_and_last_ticket_runs_test` and `test_handoff_ticket_runs_test`, printed OK. `test_conductor.py` also still passes. The full suite is left to the conductor's gate.
 

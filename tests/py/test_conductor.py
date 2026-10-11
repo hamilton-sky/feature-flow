@@ -56,7 +56,7 @@ class BuildAndChecks(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
             text = self.repo.path(T1).read_text(encoding="utf-8")
-            self.assertIn("## Review findings (round %d, gate)" % round_no, text)
+            self.assertIn("## Review findings (round %d, gate (full))" % round_no, text)
             self.assertIn("Status: open", text)
             self.assertEqual(self.repo.git("log", "-1", "--format=%s"), "chore(f): 01 review findings, round %d" % round_no)
         self.repo.resolve(T1, "feat: round 4")
