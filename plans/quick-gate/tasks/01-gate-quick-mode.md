@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: resolved
+Status: open
 Blocked by: —
 Test first: yes
 
@@ -43,3 +43,9 @@ prints OK
 **Shortcuts taken**: none.
 
 **For later tickets**: the failing Quick output uses the same format as the others: `gate: Quick failed. the last lines of its output:`.
+
+## Review findings (round 1, floor guard)
+
+floor guard: the diff weakens the bar instead of meeting it
+skip: tests/py/test_quick_gate_mode.py: @unittest.skipUnless(shutil.which("bash") and os.name != "nt",
+if a finding is intended, the ticket needs a line like: Floor: allow <category>
