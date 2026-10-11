@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 
@@ -49,3 +49,17 @@ prints OK
 floor guard: the diff weakens the bar instead of meeting it
 skip: tests/py/test_quick_gate_mode.py: @unittest.skipUnless(shutil.which("bash") and os.name != "nt",
 if a finding is intended, the ticket needs a line like: Floor: allow <category>
+
+## Answer (round 2)
+
+**Built**: `tests/py/test_quick_gate_mode.py` only. The `skipUnless` decorator and the `shutil` import are gone. The throwaway Build, Test, Quick and Lint commands now run a small `logger.py` written into the temp plan folder: `"<sys.executable>" logger.py <Name>`. It uses double quotes only and no shell operators, so it parses the same under bash and cmd.exe. A failing Quick passes a second argument, which makes the script write `quick broke` to stderr and exit 3. Same 7 tests, including `test_quick_mode_with_a_placeholder_runs_test`. No skip anywhere.
+
+**Proof**: `python3 -m unittest discover -s tests/py -p "test_quick_gate_mode.py" -v` ran 7 tests, all ok, listed the placeholder test, printed OK, exit 0. `grep -n "skip\|shutil"` on the file finds nothing.
+
+**Decisions**: a helper script rather than `python -c "..."` inline, because inline code needs nested quotes that differ between bash and cmd.exe. I could not run it on Windows here; it is written to parse under cmd.exe but only the Linux run is proven.
+
+**Shortcuts taken**: none.
+
+**Review fixes**: floor guard finding (skip in the test file): removed the skip and made the commands portable instead of bash only.
+
+**For later tickets**: none new.

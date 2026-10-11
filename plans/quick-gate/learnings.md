@@ -5,3 +5,4 @@ trap, a quirk of the environment. Append one or two lines, newest last, tagged w
 ticket number. Never edit or delete another line. Keep it short; a human prunes it.
 
 (01) Test helpers: tests/py/test_gate.py shows the throwaway plans folder pattern (chdir to a temp dir, clear FLOW_DIR); bash only.
+(01) Gate test commands: use '"<sys.executable>" script.py Name' (double quotes only) so they run under bash and cmd.exe; never skip tests on Windows.

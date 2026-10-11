@@ -1,5 +1,4 @@
 import os
-import shutil
 import sys
 import tempfile
 import unittest
@@ -11,8 +10,6 @@ sys.path.insert(0, str(helpers.ROOT))
 from feature_flow import checks, gate  # the package under test, from this checkout
 
 
-@unittest.skipUnless(shutil.which("bash") and os.name != "nt",
-                     "these commands are bash syntax; the gate runs commands through cmd.exe on Windows")
 class QuickGateModeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -21,6 +18,12 @@ class QuickGateModeTests(unittest.TestCase):
         self.cwd = os.getcwd()
         self.flow_dir = os.environ.pop("FLOW_DIR", None)
         os.chdir(str(self.dir))
+        (self.dir / "logger.py").write_text(
+            "import sys\n"
+            "open('log', 'a').write(sys.argv[1] + '\\n')\n"
+            "if len(sys.argv) > 2:\n"
+            "    sys.stderr.write('quick broke\\n')\n"
+            "    sys.exit(3)\n", encoding="utf-8")
 
     def tearDown(self):
         os.chdir(self.cwd)
@@ -28,10 +31,14 @@ class QuickGateModeTests(unittest.TestCase):
             os.environ["FLOW_DIR"] = self.flow_dir
         self.tmp.cleanup()
 
-    def commands(self, quick_line, quick_cmd="echo Quick >> log"):
-        lines = ["Build: `echo Build >> log`", "Test: `echo Test >> log`", "Lint: `echo Lint >> log`"]
+    def log_cmd(self, name, fail=False):
+        # works under bash and cmd.exe: double quotes only, no shell operators
+        return '"%s" logger.py %s%s' % (sys.executable, name, " fail" if fail else "")
+
+    def commands(self, quick_line, quick_cmd=None):
+        lines = ["%s: `%s`" % (n, self.log_cmd(n)) for n in ("Build", "Test", "Lint")]
         if quick_line:
-            lines.append(quick_line.replace("CMD", quick_cmd))
+            lines.append(quick_line.replace("CMD", quick_cmd or self.log_cmd("Quick")))
         (self.dir / "plans" / "f" / "commands.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def ran(self):
@@ -55,7 +62,7 @@ class QuickGateModeTests(unittest.TestCase):
         code, out = self.run_gate(True)
         self.assertEqual(code, 0)
         self.assertEqual(self.ran(), ["Build", "Quick", "Lint"])
-        self.assertIn("gate: Quick: echo Quick >> log\n", out)
+        self.assertIn("gate: Quick: %s\n" % self.log_cmd("Quick"), out)
         self.assertNotIn("gate: Test:", out)
 
     def test_quick_mode_without_a_quick_line_runs_test(self):
@@ -77,7 +84,7 @@ class QuickGateModeTests(unittest.TestCase):
         self.assertEqual(self.ran(), ["Build", "Test", "Lint"])
 
     def test_a_failing_quick_fails_the_gate_with_its_tail(self):
-        self.commands("Quick: `CMD`", "echo Quick >> log; echo quick broke >&2; exit 3")
+        self.commands("Quick: `CMD`", self.log_cmd("Quick", fail=True))
         code, out = self.run_gate(True)
         self.assertEqual(code, 1)
         self.assertIn("gate: Quick failed. the last lines of its output:\nquick broke\n", out)
