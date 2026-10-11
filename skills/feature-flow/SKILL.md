@@ -57,7 +57,7 @@ If `start` prints `STOP` naming another owner, another session may still be work
 
 If the user says the flow is stuck on a ticket or asks for a reset, run `reset` (or `reset <NN>` to redo one ticket): it reopens a half-built ticket, commits that, and clears the run, then run `start` again. It needs `FLOW_TAKEOVER=1` while a session owns the feature, on the same clear yes. Never reset on your own.
 
-Say what will happen: for each ticket, a builder subagent and then a fresh reviewer subagent for each review pass. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given or you came straight from planning: the plan's yes already covered the build.
+Say what will happen: for each ticket, a builder subagent and then a fresh reviewer subagent for each review pass, one or two per ticket. After every few tickets (`FLOW_TICKETS_PER_SESSION`, default 4) you hand off to a new session. Ask for a yes, unless `auto` was given or you came straight from planning: the plan's yes already covered the build.
 
 ## The loop
 

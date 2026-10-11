@@ -31,3 +31,4 @@ The planner folds changes too small to stand alone into the ticket they belong t
 - 03 — `guides/review-single.md` plus phase `review-single` in prompts/codehash/flow-trust (task line `(single pass)`); flow-trust hash re-pinned in the four skill copies.
 - 04 — `judge_build` picks `review_pass` single/spec from the base ticket (Review, Type), the check block and `git.diff_size`; `FLOW_SMALL_FILES`/`FLOW_SMALL_LINES`; log `REVIEW-SMALL`; smoke-real demo ticket 01 is `Review: full`.
 - 05 — planner guide rules 1a (fold tiny changes) and 8a (`Review: full`), plan-review check 7 folded, ticket template `Review: auto`.
+06 — README documents the single review and its limits, skills say one or two reviews per ticket, version 0.6.0.

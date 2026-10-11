@@ -52,7 +52,7 @@ Then, in your repo, in the agent:
 
 The same command plans when `plans/csv-export/` does not exist yet and builds when it does. After your second yes it commits the new plan folder, and only that folder, then goes straight on to building it; say so if you want it to stop after planning.
 
-**Planning asks you twice.** First the session shows a short feature brief, written from your conversation (what, why, scope, the bar, and anything it had to assume), and waits for yes, edit or cancel. Then a fresh `feature-planner` subagent, given only that brief, reads the code, looks up outside docs where the code cannot answer, and writes a draft plan into the git-ignored `.feature-flow/state/draft/`. A fresh `plan-reviewer` checks the draft against the brief. The session shows you the goal, the commands, the ticket graph, what was dropped and the review result, and waits for a second yes. Only then does `flow.py plan-accept` copy the draft into `plans/<feature>/`, and the session commits it and starts the build.
+**Planning asks you twice.** First the session shows a short feature brief, written from your conversation (what, why, scope, the bar, and anything it had to assume), and waits for yes, edit or cancel. Then a fresh `feature-planner` subagent, given only that brief, reads the code, looks up outside docs where the code cannot answer, and writes a draft plan into the git-ignored `.feature-flow/state/draft/`. The planner folds changes too small to stand alone into the ticket they belong to, and sets `Review: full` on a ticket that deserves both reviews whatever its size. A fresh `plan-reviewer` checks the draft against the brief. The session shows you the goal, the commands, the ticket graph, what was dropped and the review result, and waits for a second yes. Only then does `flow.py plan-accept` copy the draft into `plans/<feature>/`, and the session commits it and starts the build.
 
 Try the graph first, with no setup and no agent: `bash examples/demo.sh --open`.
 
@@ -102,6 +102,8 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
                                               │ PASS                │
                                               ▼                     │
  quality review: a second fresh reviewer subagent             FAIL ─┤
+   (a small ticket whose check block passed gets one combined
+    review instead of these two; see below)
                                               │ PASS                ▼
                                               ▼        findings written into the ticket,
                                      next ticket       reopened, built again (3 rounds max);
@@ -111,7 +113,9 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
 
 `scripts/flow.py` is the conductor. The session asks it `next`, and it answers with one line: `BUILD`, `REVIEW`, `DONE`, `STOP` or `HANDOFF`. It prints the full prompt for each subagent from runtime-neutral guides, so the session never writes one itself.
 
-**What the script checks and what it trusts.** The conductor verifies the build from the repo: the ticket file must say `resolved`, the tree must be clean and committed, and it runs the gate and the floor guard itself. It also runs the `check` block under each ticket's Done when and compares the exit code and printed text, and for a `Test first: yes` ticket it proves the red test commit itself: it checks out the test-only commit, runs Test, and requires it to fail before the code. A failure of either goes back to the builder before any reviewer is started. It also checks that the reviewer changed no tracked file and made no commit. The review verdicts are different: each reviewer's reply (spec review, then quality review) is relayed by the session, which saves it to a file and hands it to `flow.py verdict`. The script reads `REVIEW: PASS` or `REVIEW: FAIL` from that reply; it cannot prove the session passed it on unedited. A ticket moves on only after two PASS verdicts.
+**What the script checks and what it trusts.** The conductor verifies the build from the repo: the ticket file must say `resolved`, the tree must be clean and committed, and it runs the gate and the floor guard itself. It also runs the `check` block under each ticket's Done when and compares the exit code and printed text, and for a `Test first: yes` ticket it proves the red test commit itself: it checks out the test-only commit, runs Test, and requires it to fail before the code. A failure of either goes back to the builder before any reviewer is started. It also checks that the reviewer changed no tracked file and made no commit. The review verdicts are different: each reviewer's reply (spec review, then quality review) is relayed by the session, which saves it to a file and hands it to `flow.py verdict`. The script reads `REVIEW: PASS` or `REVIEW: FAIL` from that reply; it cannot prove the session passed it on unedited. A ticket moves on only after two PASS verdicts, or one for a ticket the conductor judged small. The size is measured from the repo (`git diff` against the commit the ticket started from), never taken from the builder.
+
+**One review for a small ticket.** A ticket whose built diff is 3 files and 60 changed lines at most (the plan folder left out), and whose `check` block ran and passed, gets one combined review instead of the spec and quality reviews. The conductor measures the diff itself. `Review: full` in the ticket (as it was at the start), `Type: convert`, no `check` block, or `FLOW_GATE=off` keep both reviews. Every other conductor check still runs on every ticket.
 
 ## The skill and the roles
 
@@ -247,13 +251,15 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops |
 | `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks |
+| `FLOW_SMALL_FILES` | `3` | most files a ticket may change and still get the single review |
+| `FLOW_SMALL_LINES` | `60` | most changed lines for the single review; `0` turns the single review off |
 | `FLOW_GATE_TIMEOUT` | `30` | minutes each gate command and the smoke test may run; `0` means no limit. A failed smoke test writes `.feature-flow/state/<feature>.smoke.log` |
 | `FLOW_SMOKE` | the `Smoke:` line of `commands.md` | command run before every ticket; the run stops if it fails |
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
 | `FLOW_NO_OPEN` | unset | `1` makes `flow-view.py` never open a browser |
 | `FLOW_WATCH_SECONDS` | `3` | how often `flow-view.py --watch` rewrites the page |
 
-The run also stops on its own after a number of phases (`BUILD` and `REVIEW` hand-outs, the spec review and the quality review each counting as one) that grows with the ticket count, recomputed at every pick, so a loop of failures cannot go on forever.
+The run also stops on its own after a number of phases (`BUILD` and `REVIEW` hand-outs, the spec review and the quality review each counting as one, a single review counting as one) that grows with the ticket count, recomputed at every pick, so a loop of failures cannot go on forever.
 
 ## What is tested
 

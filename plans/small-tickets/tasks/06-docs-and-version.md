@@ -2,7 +2,7 @@
 
 Type: task
 Floor: allow flow-edit
-Status: open
+Status: resolved
 Blocked by: 04
 Test first: no
 
@@ -47,3 +47,13 @@ prints (single pass)
 - `README.md`, `adapters/codex/feature-flow/SKILL.md`, `skills/feature-flow/SKILL.md`, `feature_flow/__init__.py`
 
 ## Answer
+
+**Built**: `README.md` (flow diagram note, single-review paragraph with the rule, trust sentence, `FLOW_SMALL_FILES`/`FLOW_SMALL_LINES` rows, run-limit sentence, planner sentence), `adapters/codex/feature-flow/SKILL.md` (`REVIEW` bullet `spec`/`quality`/`single`; "Say what will happen" line), `skills/feature-flow/SKILL.md` (one or two per ticket), the `.claude/skills` and `.agents/skills` copies (cp from the sources), `feature_flow/__init__.py` (0.6.0), `tests/run.sh` (`--version` expectation).
+
+**Proof**: `python3 -c "import feature_flow; ..."` printed `0.6.0`. `grep -c FLOW_SMALL_LINES README.md` printed 1, `grep -c "Review: full" README.md` printed 2, `grep -n "(single pass)"` on the codex skill matched line 67. `python3 -m unittest discover -s tests/py -p "test_skill*.py"` ran 11 tests, OK. `python3 -m feature_flow --version` prints `feature-flow 0.6.0`. No other test names 0.5.0. The full suite was not run: the conductor's gate does that.
+
+**Decisions**: the installed skill copies were identical to their sources, so I copied the edited sources over them. The pinned runner hash did not need refreshing (flow-trust.py untouched here).
+
+**Shortcuts taken**: none
+
+**For later tickets**: ticket 07 should run the full suite; `tests/run.sh` was changed but not run by me.
