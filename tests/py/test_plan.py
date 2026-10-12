@@ -34,7 +34,8 @@ class Planning(unittest.TestCase):
         draft = self.repo.path(DRAFT)
         (draft / "tasks").mkdir(parents=True, exist_ok=True)
         for slug, title, blocked in tickets:
-            (draft / "tasks" / ("%s.md" % slug)).write_text(ticket_text(title, "open", blocked), encoding="utf-8")
+            (draft / "tasks" / ("%s.md" % slug)).write_text(ticket_text(title, "open", blocked).replace("Test first: no\n", "Test first: no\nCheck: none a fixture\n"),
+                encoding="utf-8")
         for name, text in (("spec.md", "# Spec\n"), ("map.md", "# Map: g\n"), ("learnings.md", "# Learnings: g\n"),
                            ("commands.md", "# Commands: g\n\nTest: `true`\n")):
             (draft / name).write_text(text, encoding="utf-8")

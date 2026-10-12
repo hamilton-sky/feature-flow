@@ -9,7 +9,7 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, cli, install, status, suggest, uninstall, view
+from feature_flow import __version__, cli, install, report, status, suggest, uninstall, view
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
@@ -17,15 +17,17 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow status <feature> [--next | --counts | --check | --mermaid [plain] | --json]
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
        feature-flow reset <feature> [NN]
+       feature-flow report <feature>
        feature-flow --version
 install copies the skill, its roles, scripts and guides into a repo; --user installs them once for every repo, in ~/.claude, ~/.agents and ~/.feature-flow, and writes nothing into a repo. feature-flow install --help says more.
 uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude, ~/.agents and ~/.feature-flow.
 status and view read plans/<feature>/ in the current directory, like scripts/flow-status.py and scripts/flow-view.py.
 reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.
+report prints what a run did (builds, reviews, failed checks, stops) from its log in .feature-flow/state/. Read-only.
 """
 
 
-COMMANDS = ("install", "uninstall", "status", "view", "reset", "--version", "--help")
+COMMANDS = ("install", "uninstall", "status", "view", "reset", "report", "--version", "--help")
 
 
 def main(argv=None):
@@ -46,6 +48,8 @@ def main(argv=None):
         return status.main(rest)
     if command == "view":
         return view.main(rest, here=os.path.join(install.source_root(), "scripts"))
+    if command == "report":
+        return report.main(rest)
     if command == "reset":
         if not rest or len(rest) > 2:
             sys.stderr.write(USAGE)

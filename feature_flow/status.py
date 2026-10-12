@@ -1,16 +1,17 @@
 """The ticket graph reader, ported from the bash script of the same name.
 
-usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --mermaid [plain] | --json]
+usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --mermaid [plain] | --json]
 Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready.
 """
 
 import os
 import re
+import shutil
 import sys
 
 from feature_flow import suggest, tickets
 
-USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --mermaid [plain] | --json]"
+USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --mermaid [plain] | --json]"
 
 
 def _env(name, default):
@@ -55,7 +56,7 @@ def run(argv, out, err):
         err.write("no tickets in %s\n" % folder)
         return 2
 
-    if mode == "--check":
+    if mode in ("--check", "--lint"):
         learnings = "%s/%s/learnings.md" % (root, feature)
         if os.path.isfile(learnings):
             lines = sum(1 for line in tickets.records(learnings) if line.strip(" \t\n\v\f\r") != "")
@@ -64,10 +65,10 @@ def run(argv, out, err):
                           % lines)
 
     g = tickets.Graph(paths)
-    return _report(g, mode, opt, feature, out, err)
+    return _report(g, mode, opt, feature, out, err, root)
 
 
-def _report(g, mode, opt, feature, out, err):
+def _report(g, mode, opt, feature, out, err, root="plans"):
     n = len(g.order)
     count = {"resolved": 0, "open": 0, "claimed": 0, "waiting": 0, "parked": 0, "unknown": 0}
     ready = {}
@@ -138,8 +139,9 @@ def _report(g, mode, opt, feature, out, err):
                       "  classDef parked fill:#eeeeee,stroke:#bbbbbb,stroke-dasharray:4 3\n")
         return 0
 
-    if mode == "--check":
-        return _check(g, ready, nready, unfinished, out)
+    if mode in ("--check", "--lint"):
+        extra = lint(g, "%s/%s" % (root, feature)) if mode == "--lint" else ([], [])
+        return _check(g, ready, nready, unfinished, out, extra)
 
     for t in g.order:
         bl = ",".join("%02d" % d for d in g.blk[t])
@@ -148,8 +150,44 @@ def _report(g, mode, opt, feature, out, err):
     return 0
 
 
-def _check(g, ready, nready, unfinished, out):
-    errors = []
+def lint(g, plan_dir):
+    """(errors, warnings) the stricter plan lint adds to --check: every ticket carries a check block or
+    says `Check: none <why>`, and commands.md names a Test command that can be found."""
+    errors, warnings = [], []
+    for t in g.order:
+        lab = g.lab[t]
+        if g.typ.get(t) == "settle":
+            continue
+        lines = tickets.records(g.path[t])
+        has_block = any(line.startswith("```check") for line in lines)
+        none = next((line for line in lines[:20] if line.startswith("Check:")), None)
+        if none is not None:
+            reason = none[len("Check:"):].strip()
+            if not reason.lower().startswith("none") or not reason[4:].strip(" \t:-"):
+                errors.append(lab + ": `Check:` must read `Check: none <why>`")
+        elif not has_block:
+            errors.append(lab + ": no check block. add one under Done when, or `Check: none <why>` in the header")
+        for line in lines:
+            if line.strip().startswith("##"):
+                continue
+            for ref in re.findall(r"`([A-Za-z0-9_./-]+/[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)`", line):
+                if "new" not in line.lower() and "plans/" not in ref and not os.path.exists(ref):
+                    warnings.append("%s: names `%s`, which does not exist here (say `new` if it will be created)" % (lab, ref))
+    commands = "%s/commands.md" % plan_dir
+    test = tickets.commands_value(commands, "Test")
+    if not os.path.isfile(commands):
+        errors.append("commands.md is missing")
+    elif not test:
+        errors.append("commands.md has no Test command (a placeholder in angle brackets does not count)")
+    else:
+        first = test.split()[0]
+        if "=" not in first and shutil.which(first) is None and first not in ("cd", "set", "export"):
+            warnings.append("commands.md Test starts with `%s`, which is not on PATH here" % first)
+    return errors, list(dict.fromkeys(warnings))
+
+
+def _check(g, ready, nready, unfinished, out, extra=([], [])):
+    errors = list(extra[0])
     for t in g.order:
         lab = g.lab[t]
         if t in g.dup:
@@ -209,6 +247,8 @@ def _check(g, ready, nready, unfinished, out):
                 continue
             out.write("warning: %s: mentions ticket %s but is not ordered against it. add it to Blocked by, or reword\n"
                       % (g.lab[t], g.lab[m]))
+    for w in extra[1]:
+        out.write("warning: " + w + "\n")
     if errors:
         for e in errors:
             out.write(e + "\n")

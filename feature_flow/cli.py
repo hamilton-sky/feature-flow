@@ -107,7 +107,7 @@ def run(args, scripts, trusted):
     except Stop as stop:
         line = "STOP %s" % stop
         if conductor is not None:
-            conductor.log("STOP")
+            conductor.log("STOP " + " ".join(str(stop).split())[:200])
         print(line)
         return 1
     out = sys.stdout

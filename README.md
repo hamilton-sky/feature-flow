@@ -9,7 +9,7 @@ Plan a feature as a graph of small tickets, then build them in the session you a
 One skill, 4 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-trust`, `flow-status`, `flow-view`, `gate`, `floor-guard`), an installer for both agents, a demo and a test suite. All of it is Python (standard library only), so it runs on Linux, macOS and Windows. MIT licensed.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets)
-- [See the graph](#see-the-graph) · [Long features and handoff](#long-features-and-handoff) · [What is tested](#what-is-tested) · [Upgrading](#upgrading) · [Caution](#caution)
+- [See the graph](#see-the-graph) · [Long features and handoff](#long-features-and-handoff) · [What is tested](#what-is-tested) · [Limits](#limits) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
 
@@ -32,7 +32,7 @@ Without a clone, the same installer runs from [PyPI](https://pypi.org/project/fe
 uvx feature-flow-cli install /path/to/your/repo --agent all   # or: pipx run feature-flow-cli install ...
 ```
 
-The package puts a `feature-flow` command on your PATH with `install`, `uninstall`, `status <feature>`, `view <feature>` and `reset <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
+The package puts a `feature-flow` command on your PATH with `install`, `uninstall`, `status <feature>`, `view <feature>`, `reset <feature>` and `report <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
 
 The installer lists what it wrote in `.feature-flow/installed.txt`, with each file's hash in `.feature-flow/installed.sha256`. Commit those files (`git add --pathspec-from-file=.feature-flow/installed.txt`); until you do, the flow does not count them as uncommitted changes. Installing a newer version over an older one updates every file nobody edited since it was installed, and keeps (and names) the ones you changed; `--force` replaces those too.
 
@@ -184,7 +184,7 @@ prints OK
 - **The Answers are the handoff between subagents.** The next builder reads the Answers of the tickets it depends on.
 - `settle` tickets record a decision. `convert` tickets migrate something and must be safe to run twice.
 - **A worker may change only** its own Status line and Answer, lines appended to `map.md` and `learnings.md`, and the code the ticket calls for. Rewriting its own Done when, editing another ticket, or touching `commands.md` fails the guard.
-- `Floor:` categories: `skip`, `suppress`, `empty-catch`, `test-delete`, `threshold`, `config`, `ticket-edit`, `commands-edit`, and `flow-edit` (allows the conductor's code check below, for the build only). `skip` covers skipped, expected-fail and focused tests (`.only(`, `fit(`, `fdescribe(` on test paths); `config` covers more lint and test config files, the lint and test sections of `pyproject.toml` and `setup.cfg`, scripts and test keys in `package.json`, new skip or xfail words in `conftest.py`, and a `Makefile` only when `commands.md` uses `make`. A test file that loses assertions is shown to the reviewer as a warning, not a finding. The line is read from the ticket as it was before the work started, so a worker cannot excuse itself.
+- `Floor:` categories: `skip`, `suppress`, `empty-catch`, `test-delete`, `threshold`, `trivial-assert` (an assertion that cannot fail, added to a test file: `assert True`, `assertEqual(x, x)`, `expect(v).toBe(v)`), `config`, `ticket-edit`, `commands-edit`, and `flow-edit` (allows the conductor's code check below, for the build only). `skip` covers skipped, expected-fail and focused tests (`.only(`, `fit(`, `fdescribe(` on test paths); `config` covers more lint and test config files, the lint and test sections of `pyproject.toml` and `setup.cfg`, scripts and test keys in `package.json`, new skip or xfail words in `conftest.py`, and a `Makefile` only when `commands.md` uses `make`. A test file that loses assertions is shown to the reviewer as a warning, not a finding. The line is read from the ticket as it was before the work started, so a worker cannot excuse itself.
 - The guard needs the plan to be tracked by git. If you keep tickets in an ignored folder, it cannot see changes to them.
 - The commands in `commands.md` run with nobody watching and must exit non zero on failure.
 
@@ -236,6 +236,8 @@ python3 scripts/flow-status.py <feature>                  table of tickets and w
 python3 scripts/flow-status.py <feature> --next           path of the next ready ticket (exit 10 = done, 11 = stuck)
 python3 scripts/flow-status.py <feature> --counts         one line of counts
 python3 scripts/flow-status.py <feature> --check          cycles, missing blockers, missing Done when, unordered mentions
+python3 scripts/flow-status.py <feature> --lint           --check plus: a check block (or `Check: none <why>`) on every ticket, a Test command
+feature-flow report <feature>                             what a run did, from its log: builds, reviews, failed checks, stops
 python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
 python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser
@@ -298,6 +300,17 @@ Offline and free: no model is called. The suite covers the conductor's every ans
 A `package` job builds the wheel and the sdist and runs `tests/package_smoke.py` on Ubuntu (Python 3.9 and the latest), macOS and Windows: it installs the wheel in a fresh virtual environment, runs `feature-flow install`, and checks that the repo gets the same files as from `install.py` in a clone. Run it locally with `python3 -m pip install build && python3 tests/package_smoke.py`.
 
 `RUN_REAL=1 bash tests/smoke-real.sh --interactive` is the acceptance run with Claude Code. It runs real sessions on the demo project and spends money, which is why it asks for `RUN_REAL=1`.
+
+## Limits
+
+feature-flow's layers are tripwires, not a security boundary. They catch accidents and lazy shortcuts by an agent; a determined agent that controls the session could still get around them.
+
+- **The verdict relay is trusted.** The session saves a reviewer's reply and hands it to `flow.py verdict`. The conductor reads `REVIEW: PASS` or `REVIEW: FAIL` from that file and cannot prove the session passed it on unedited.
+- **The floor guard reads diffs with patterns.** It does not see a test made trivially true by other means (a mock that returns the expected answer, an `assert` on something that is always set, a test that no longer exercises the code), or an assertion weakened without being deleted. It does catch assertions that cannot fail (`trivial-assert`) and warns the reviewer when a test file loses assertions. A new test with no assertion at all is not caught. The red-first proof only covers tickets with `Test first: yes`.
+- **A plan can be wrong and still pass.** The plan lint checks that every ticket has a way to be proven and that `commands.md` has a Test command. It cannot tell whether the plan builds the right thing; the second yes is yours.
+- **The trust runner stops accidents, not the session.** It catches a builder editing the conductor mid-run. The session that runs it is the thing it cannot check; a hand-run `flow-trust.py` is unprotected (see above).
+- **Little real-world use so far.** Almost everything has been built by feature-flow on its own repo. The Codex skill and the Codex planner have not been run by hand, and the Quick gate has only been run by tests. See [docs/field-run.md](docs/field-run.md) for how to try it on your own repo and what to send back.
+- **One ticket at a time**, with a handoff to a new session every few tickets.
 
 ## Upgrading
 
