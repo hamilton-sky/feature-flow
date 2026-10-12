@@ -6,7 +6,7 @@
 
 Plan a feature as a graph of small tickets, then build them in the session you are already in. One command, `/feature-flow`, does both. Every ticket is built by one fresh subagent and checked by another that never saw the builder's reasoning. A script, not the agent, decides the order of the steps, runs the build and tests, and watches for work that weakens the checks, and the whole run has limits.
 
-One skill, 2 agent roles, a Python conductor, 4 Python scripts, an installer for both agents, a demo and a test suite. All of it is Python (standard library only), so it runs on Linux, macOS and Windows. MIT licensed.
+One skill, 4 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-trust`, `flow-status`, `flow-view`, `gate`, `floor-guard`), an installer for both agents, a demo and a test suite. All of it is Python (standard library only), so it runs on Linux, macOS and Windows. MIT licensed.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets)
 - [See the graph](#see-the-graph) · [Long features and handoff](#long-features-and-handoff) · [What is tested](#what-is-tested) · [Upgrading](#upgrading) · [Caution](#caution)
@@ -32,7 +32,7 @@ Without a clone, the same installer runs from [PyPI](https://pypi.org/project/fe
 uvx feature-flow-cli install /path/to/your/repo --agent all   # or: pipx run feature-flow-cli install ...
 ```
 
-The package puts a `feature-flow` command on your PATH with `install`, `status <feature>` and `view <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
+The package puts a `feature-flow` command on your PATH with `install`, `uninstall`, `status <feature>`, `view <feature>` and `reset <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
 
 The installer lists what it wrote in `.feature-flow/installed.txt`, with each file's hash in `.feature-flow/installed.sha256`. Commit those files (`git add --pathspec-from-file=.feature-flow/installed.txt`); until you do, the flow does not count them as uncommitted changes. Installing a newer version over an older one updates every file nobody edited since it was installed, and keeps (and names) the ones you changed; `--force` replaces those too.
 
@@ -190,8 +190,12 @@ prints OK
 
 ## See the graph
 
+![The animated ticket graph for the demo plan: five of ten tickets resolved, two ready, one in progress](docs/flow-view.png)
+
+*The page `flow-view` writes, shown for the demo plan from `examples/demo.sh`: resolved tickets in green, ready ones in amber, the one being worked in blue, the rest waiting. Press Replay to watch the run back from git history.*
+
 ```bash
-python3 scripts/flow-view.py csv-export            write the page and open it
+python3 scripts/flow-view.py csv-export            write the page and open it (or: feature-flow view csv-export)
 python3 scripts/flow-view.py csv-export --watch    keep it updating while tickets are built
 bash examples/demo.sh --open                    try it on a made up project, no setup needed
 ```
