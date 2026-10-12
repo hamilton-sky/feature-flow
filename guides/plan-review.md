@@ -12,7 +12,7 @@ You cannot edit or write anything. You may read, search, run the plan check, and
 4. **The commands are real.** Each command in `commands.md` exists in the project's own config, and Smoke runs and exits 0 now. Run it. If `commands.md` has `Quick:`, run it too and report that it exits 0, that it is part of what `Test` runs, and whether it covers the areas the tickets touch.
 5. **Done when is checkable by a stranger.** Each bullet names a command and the result it should print, or an outcome someone who has not read the plan can observe.
 6. **Forks belong to the right person.** A choice that changes what the user gets is a `settle` ticket or an open question, not a decision the planner made quietly.
-7. **The graph is sound.** Run `FLOW_DIR=.feature-flow/state/draft python3 scripts/flow-status.py <feature> --check` and report any problem or warning. Tickets are small (about 5 Done when bullets at most), and `Blocked by` lists only real dependencies. No ticket is so small it should have been folded into another: name it and the ticket it belongs with.
+7. **The graph is sound.** Run `FLOW_DIR=.feature-flow/state/draft python3 scripts/flow-status.py <feature> --lint` and report any problem or warning. Tickets are small (about 5 Done when bullets at most), and `Blocked by` lists only real dependencies. No ticket is so small it should have been folded into another: name it and the ticket it belongs with.
 8. **Outside facts have sources.** Each fact about a library or outside API that a ticket relies on has a source line in `map.md`.
 
 Do not check style, wording or ticket order beyond what the list says.

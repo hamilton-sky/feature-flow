@@ -7,7 +7,7 @@ lowered thresholds, edited lint or test config.
 it also protects the plan from the worker: only the ticket's own Status line and Answer,
 appended lines in map.md and learnings.md may change, and nothing else under the plans folder.
 a ticket can allow categories with a line "Floor: allow skip, suppress" (skip, suppress,
-empty-catch, test-delete, threshold, config, ticket-edit, commands-edit). the line is
+empty-catch, test-delete, threshold, trivial-assert, config, ticket-edit, commands-edit). the line is
 read from the ticket as it was at base-commit, so a worker cannot excuse itself.
 run it from the repo root. exit 0 clean, 1 findings, 2 usage error.
 
@@ -29,6 +29,13 @@ FOCUSED = re.compile(r"\.only\(|(?<!def )(?<![A-Za-z0-9_.])(fit|fdescribe)\(")
 SUPPRESS = re.compile(r"# noqa|# type: ignore|# pylint: disable|# pragma: no cover|# fmt: off|# ruff: noqa"
                       r"|eslint-disable|@ts-ignore|@ts-expect-error|// nolint|#\[allow\(|--no-verify")
 EMPTY_CATCH = re.compile(r"except[^:]*:[ \t]*pass[ \t]*$|catch[ \t]*(\([^)]*\))?[ \t]*\{[ \t]*\}")
+# an assertion that cannot fail, added to a test file: assert True, assertEqual(x, x), expect(true), expect(x).toBe(x)
+TRIVIAL = (re.compile(r"(^|[^A-Za-z_.])assert\s+(True|1\s*==\s*1|not\s+False)\s*(#.*)?$"),
+           re.compile(r"assertTrue\(\s*True\s*[,)]"),
+           re.compile(r"assertEqual\(\s*([A-Za-z_][\w.]*|\d+)\s*,\s*\1\s*[,)]"),
+           re.compile(r"(^|[^A-Za-z_.])assert\s+([A-Za-z_][\w.]*)\s*==\s*\2\s*(#.*)?$"),
+           re.compile(r"expect\(\s*true\s*\)\.(toBe\(\s*true\s*\)|toBeTruthy\(\))"),
+           re.compile(r"expect\(\s*([A-Za-z_][\w.]*)\s*\)\.toBe\(\s*\1\s*\)"))
 THRESHOLD = re.compile(r"fail_under|fail-under|coverageThreshold|cov-fail-under")
 DELETED_TEST = re.compile(r"(^|/)(test_[^/]*\.py|[^/]*_test\.[a-z]+|[^/]*\.(test|spec)\.[a-z]+|tests?/|__tests__/)")
 # Makefile is judged by content, not name: a Makefile change only counts when the plan's commands.md has a
@@ -77,7 +84,7 @@ def allow_line(source):
 
 
 def diff_findings(diff, allow):
-    """The pass over added lines: skip, suppress, empty-catch and threshold."""
+    """The pass over added lines: skip, suppress, empty-catch, threshold and trivial-assert."""
     allow = " " + allow + " "
     out = []
     file = ""
@@ -105,6 +112,8 @@ def diff_findings(diff, allow):
                 report("empty-catch", line)
             if THRESHOLD.search(line):
                 report("threshold", line)
+            if DELETED_TEST.search(file) and any(r.search(line) for r in TRIVIAL):
+                report("trivial-assert", line)
     return "".join(out)
 
 

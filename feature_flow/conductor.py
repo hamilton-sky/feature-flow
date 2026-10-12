@@ -573,7 +573,7 @@ class Conductor:
         self.no_plan_yet()
         if not self.draft.is_dir():
             raise Stop("no draft plan in %s. run the planner first" % self.draft_text())
-        check = checks.flow_status(self.scripts, self.feature, "--check", root=self.draft_root)
+        check = checks.flow_status(self.scripts, self.feature, "--lint", root=self.draft_root)
         if not check.ok:
             raise Stop("the draft fails the plan check, fix it first: %s"
                        % " ".join(check.out.split())[:400])

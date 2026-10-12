@@ -128,8 +128,10 @@ class PlanDrive(unittest.TestCase):
         self.assertTrue(out.startswith("You are the planner."))
 
         draft = self.dir / ".feature-flow" / "state" / "draft" / "csv"
-        (draft / "tasks" / "01-a.md").write_text(TICKET_TEXT % ("A", "open", "—"), encoding="utf-8")
-        (draft / "tasks" / "02-b.md").write_text(TICKET_TEXT % ("B", "open", "01"), encoding="utf-8")
+        for slug, title, blocked in (("01-a", "A", "—"), ("02-b", "B", "01")):
+            (draft / "tasks" / ("%s.md" % slug)).write_text(
+                (TICKET_TEXT % (title, "open", blocked)).replace("Test first: no\n", "Test first: no\nCheck: none a fixture\n", 1),
+                encoding="utf-8")
         for name, text in (("spec.md", "# Spec\n"), ("map.md", "# Map: csv\n"), ("learnings.md", "# Learnings\n"),
                            ("commands.md", COMMANDS)):
             (draft / name).write_text(text, encoding="utf-8")
