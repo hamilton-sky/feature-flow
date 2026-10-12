@@ -6,6 +6,7 @@ Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinis
 
 import os
 import re
+import shlex
 import shutil
 import sys
 
@@ -180,7 +181,10 @@ def lint(g, plan_dir):
     elif not test:
         errors.append("commands.md has no Test command (a placeholder in angle brackets does not count)")
     else:
-        first = test.split()[0]
+        try:
+            first = shlex.split(test, posix=(os.name != "nt"))[0].strip("\"'")
+        except (ValueError, IndexError):
+            first = test.split()[0]
         if "=" not in first and shutil.which(first) is None and first not in ("cd", "set", "export"):
             warnings.append("commands.md Test starts with `%s`, which is not on PATH here" % first)
     return errors, list(dict.fromkeys(warnings))
