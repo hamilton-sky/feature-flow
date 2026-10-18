@@ -81,12 +81,14 @@ For every bullet in **Done when**, in this order:
 
 The conductor also runs the ticket's `check` block (the `$` commands in Done when) before review, so run that block yourself first.
 
+**Tests while you work.** Run the tests that cover your change as you go (your new tests, the package you changed). For the whole suite, run `Quick:` from `commands.md` when it has one, and leave the full `Test` to the conductor's gate, which runs right after you: two full suites at once can overload the machine, and the gate repeats it anyway. With no `Quick:`, run the full Test once, after your last change.
+
 Fix failures that are inside the ticket. If a fix needs changes outside it, go to Failure handling.
 
 | You think | What is true |
 |---|---|
 | "It passed before my last edit." | Run it again after the last edit. |
-| "The suite is slow, I will run it once at the end." | A late failure costs more. Run it now. |
+| "The suite is slow, I will skip the tests." | Run the tests for what you changed now, and Quick (or the full Test once at the end). |
 | "I will loosen this check a little." | That is weakening the bar. Stop and report. |
 | "This neighbouring file is messy, I will tidy it." | Not in the ticket. Leave it. |
 | "The reviewer will catch it." | You are the first check. Prove it yourself. |
@@ -118,7 +120,7 @@ If you learned something a fresh worker would waste time rediscovering (a comman
 
 You wrote this change, so you are the wrong one to judge it.
 
-- **Auto**: do not review your own work. The flow runs the gate, the floor guard and two fresh reviewers (neither saw your reasoning): first a spec review, then a quality review, each following its own guide. Findings from either come back as `## Review findings`.
+- **Auto**: do not review your own work. The flow runs the gate, the floor guard and the ticket's check block, then, unless the ticket says `Review: gate`, one or two fresh reviewers (none saw your reasoning). Before the acceptance ticket, two or three phase reviewers read the whole feature at once. Findings from any of them come back as `## Review findings`; one marked `class:` asks you to fix every site of that kind (the debugging guide says how).
 - **Manual**: after the commit, offer to run the independent review now. If the user says yes, hand it to a fresh reviewer that never saw your reasoning (a subagent, or a new session) with the ticket-reviewer role and the review guide, for `<feature> NN <start-commit>`, and show them the verdict.
 
   Use the commit you noted in Step 5. Never review it in this conversation yourself.

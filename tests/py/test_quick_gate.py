@@ -89,6 +89,14 @@ class QuickGateTests(unittest.TestCase):
         self.assertEqual(self.gate_of(1, FLOW_TICKETS_PER_SESSION="2"), ["test"])
         self.assertIn("GATE-FULL", self.repo.log())
 
+    def test_a_gate_full_ticket_runs_test(self):
+        self.commands()
+        path = self.repo.path(T[0])
+        path.write_text(path.read_text(encoding="utf-8").replace("Test first: no\n", "Test first: no\nGate: full\n"),
+                        encoding="utf-8")
+        self.repo.commit("01 is a phase ticket")
+        self.assertEqual(self.drive(), [["test"], ["quick"], ["test"]])
+
     def test_full_gate_env_runs_test_for_every_ticket(self):
         self.commands()
         self.assertEqual(self.drive(FLOW_GATE_FULL="1"), [["test"], ["test"], ["test"]])

@@ -13,13 +13,15 @@ The author writes the `## Answer` into the ticket itself, so the ticket as it st
 **The ticket, as it was before the work.** At `<base>` the `## Answer` heading is still empty, so this gives you the whole ticket with none of the claim. Resolve the exact filename first, then ask for that one blob:
 
 ```
-TICKET=$(git ls-files 'plans/<feature>/tasks/NN-*.md')   # exactly one path, or fix the pattern
-git show "<base>:$TICKET"
+TICKET=$(ls plans/<feature>/tasks/<NN>-*.md)   # exactly one path, or fix the pattern
+if git cat-file -e "<base>:$TICKET" 2>/dev/null; then git show "<base>:$TICKET"; else sed '/^## Answer/q' "$TICKET"; fi
 ```
+
+The `else` branch is for a ticket git does not have at `<base>`: one added later, or a plan folder that git ignores. It reads the working copy and stops at the Answer heading, so you still never see the claim.
 
 Never put a `*` inside the `<rev>:<path>` argument. `git show '<base>:plans/<feature>/tasks/NN-*.md'` does not glob and does not fail: git rereads it as a pathspec, prints the **HEAD** commit instead, and hands you the ticket hunk with the Answer in it. Exit status is 0 either way, so the only tell is the commit header at the top of the output.
 
-Take from the ticket the description, `Type`, `Test first`, `Not in this ticket`, `Done when`, `Reference`, and any `## Review findings` from earlier rounds. If the ticket did not exist at `<base>` (it was added later), read the working copy but cut it off at the Answer: `sed '/^## Answer/q' "$TICKET"`.
+Take from the ticket the description, `Type`, `Test first`, `Not in this ticket`, `Done when`, `Reference`, and any `## Review findings` from earlier rounds (in an untracked ticket they sit below the Answer: read them with `sed -n '/^## Review findings/,$p' "$TICKET"`).
 
 **The range: stop at the ticket's own last commit, not at `HEAD`.** `HEAD` keeps moving. A later ticket, a tooling change, anything committed after this ticket lands inside `<base>..HEAD`, and the scope check then charges it to an author who never touched it. Find where this ticket's work actually ends:
 
@@ -27,6 +29,8 @@ Take from the ticket the description, `Type`, `Test first`, `Not in this ticket`
 END=$(git log --format=%H "<base>..HEAD" -- "$TICKET" | head -1)   # newest commit touching this ticket
 [ -n "$END" ] || END=HEAD                                          # none found: fall back, and say so
 ```
+
+A ticket git does not track has no commits, so `$END` is `HEAD`: the flow hands you the review right after the build, so nothing later is in the range.
 
 Every commit for a ticket touches its ticket file, because the author commits the code, the ticket and the map together. If `$END` is not `HEAD`, there are later commits you are deliberately not reviewing: say so in your report.
 
@@ -37,7 +41,7 @@ git diff --stat "<base>..$END"                                   # every changed
 git diff "<base>..$END" -- . ':(exclude)plans/<feature>/tasks/'  # the content you review
 ```
 
-Read the files that diff touches. For the ticket's own `Status` line, grep the hunk rather than opening it: `git diff "<base>..$END" -- "$TICKET" | grep '^[+-]Status:'`.
+Read the files that diff touches. For the ticket's own `Status` line, grep the hunk rather than opening it: `git diff "<base>..$END" -- "$TICKET" | grep '^[+-]Status:'` (for an untracked ticket: `grep -m1 '^Status:' "$TICKET"`).
 
 (Substitute the repo's own ticket folder if it keeps them elsewhere.)
 

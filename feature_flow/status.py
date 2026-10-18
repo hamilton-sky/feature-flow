@@ -1,6 +1,6 @@
 """The ticket graph reader, ported from the bash script of the same name.
 
-usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --mermaid [plain] | --json]
+usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --estimate | --mermaid [plain] | --json]
 Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready.
 """
 
@@ -8,11 +8,13 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 
 from feature_flow import suggest, tickets
 
-USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --mermaid [plain] | --json]"
+USAGE = ("usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --estimate | "
+         "--mermaid [plain] | --json]")
 
 
 def _env(name, default):
@@ -144,6 +146,9 @@ def _report(g, mode, opt, feature, out, err, root="plans"):
         extra = lint(g, "%s/%s" % (root, feature)) if mode == "--lint" else ([], [])
         return _check(g, ready, nready, unfinished, out, extra)
 
+    if mode == "--estimate":
+        return estimate(g, out)
+
     for t in g.order:
         bl = ",".join("%02d" % d for d in g.blk[t])
         out.write("%s  %-9s %-6s %-12s %s\n" % (g.lab[t], g.stat[t], "READY" if ready[t] else "-",
@@ -151,15 +156,157 @@ def _report(g, mode, opt, feature, out, err, root="plans"):
     return 0
 
 
+PATH_REF = re.compile(r"`([A-Za-z0-9_./-]+/[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)`")
+NAME_REF = re.compile(r"`([A-Za-z_][A-Za-z0-9_]{3,}(?:\(\))?)`")
+CREATES = re.compile(r"\b(new|adds?|creates?|introduces?|defines?)\b", re.IGNORECASE)
+# a Done when bullet must pass or fail; these let it do neither
+ESCAPE = re.compile(r"\b(or explain|explain why|if possible|where possible|if feasible|where feasible|if practical|"
+                    r"as far as possible|ideally|unless|otherwise (?:explain|note|document|say)|"
+                    r"or (?:document|note|say|describe) (?:why|the reason))\b|"
+                    r"\bif\b[^.]*\b(?:differ|differs|mismatch|do not match|don't match)\b[^.]*\b(?:explain|note|say|document)\b",
+                    re.IGNORECASE)
+# what a test runner or checker prints, for the commands whose output is only a summary
+RUNNERS = (
+    (re.compile(r"\bpytest\b"), ("passed", "failed", "error", "skipped", "deselected", "xfail", "no tests ran",
+                                  "warning", "test", "::")),
+    (re.compile(r"-m\s+unittest\b"), ("ok", "ran ", "failed", "error", "skipped", "test")),
+    (re.compile(r"\bmypy\b"), ("success", "no issues", "error", "note", "found")),
+    (re.compile(r"\bgo\s+test\b"), ("ok", "pass", "fail", "test", "---", "no test files")),
+    (re.compile(r"\bcargo\s+test\b"), ("test result", "ok", "passed", "failed", "test")),
+    (re.compile(r"\b(jest|vitest)\b"), ("tests:", "test suites", "passed", "failed", "pass", "fail", "test")),
+    (re.compile(r"\b(ruff|flake8|eslint)\b"), ("all checks passed", "found", "error", "warning", "problem")),
+)
+QUIET_WORDS = ("test", "[", "true", "false", ":")
+
+
+def _sections(lines):
+    """[(section heading or "", line)] for the ticket's lines up to its Answer, review findings or Attempt note."""
+    out, heading = [], ""
+    for line in lines:
+        if re.match(r"^## (Answer|Review findings|Attempt note)", line):
+            break
+        if line.startswith("## "):
+            heading = line[3:].strip().lower()
+            continue
+        out.append((heading, line))
+    return out
+
+
+def _quiet(command):
+    """True when the command can print nothing: a test, a quiet grep or git, or all output thrown away."""
+    if re.search(r"(&>\s*/dev/null|>\s*/dev/null\s+2>(&1|\s*/dev/null))\s*$", command):
+        return True
+    last = re.split(r"(?<!\|)\|(?!\|)", command)[-1].strip()
+    words = last.split()
+    if not words:
+        return False
+    if words[0] in QUIET_WORDS or (words[0] == "tsc" and "--noEmit" in words):
+        return True
+    if words[0] in ("grep", "egrep", "fgrep", "rg") and any(
+            w in ("--quiet", "--silent") or re.fullmatch(r"-[A-Za-z]*q[A-Za-z]*", w) for w in words[1:]):
+        return True
+    return words[0] == "git" and "--quiet" in words
+
+
+def _cannot_print(lab, check):
+    """A warning when a check expects output its command cannot print, else None."""
+    for text in check.prints:
+        if _quiet(check.command):
+            return ("%s: check `$ %s` expects `%s`, but the command prints nothing (a quiet flag, or the output is "
+                    "thrown away). drop the prints line or the quiet flag" % (lab, check.command, text))
+        if re.search(r"(^|\s)(-s|--capture=no)(\s|$)", check.command):
+            continue
+        for runner, words in RUNNERS:
+            if runner.search(check.command) and not any(w in text.lower() for w in words):
+                return ("%s: check `$ %s` expects `%s`, which that command does not print: it prints its own summary "
+                        "(%s). name text the command really prints" % (lab, check.command, text,
+                                                                        ", ".join(words[:3])))
+    return None
+
+
+def _exists_in_repo(name):
+    """True when git finds the name as a word in a tracked file; None when git cannot tell."""
+    try:
+        found = subprocess.run(["git", "grep", "-q", "-F", "-w", "--", name.rstrip("()")],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        return None
+    return {0: True, 1: False}.get(found.returncode)
+
+
+def _reach(g):
+    """{ticket: every ticket it waits for, directly or not}."""
+    before = {t: set(d for d in g.blk[t] if d in g.seen and d != t) for t in g.order}
+    changed = True
+    while changed:
+        changed = False
+        for t in g.order:
+            more = set().union(*(before[d] for d in before[t])) if before[t] else set()
+            if not more <= before[t]:
+                before[t] |= more
+                changed = True
+    return before
+
+
+def estimate(g, out):
+    """The fresh subagents the tickets still to build will take on the first try, by the conductor's rules:
+    one builder each; no reviewer for `Review: gate` with a check block (unless its diff turns out big), one
+    or two for `auto` (one when the diff is small and the check block passes), two for `full`, `Type: convert`
+    or no check block; and the phase reviewers before a `Type: acceptance` ticket."""
+    areas = [a for a in (os.environ.get("FLOW_PHASE_AREAS") or "correctness,security,performance").split(",")
+             if a.strip()]
+    builders = low = high = phase = 0
+    for t in g.order:
+        if g.stat[t] in ("resolved", "parked"):
+            continue
+        checked = any(line.startswith("```check") for line in tickets.records(g.path[t]))
+        mode, kind = g.review.get(t, "auto"), g.typ.get(t) or "task"
+        if kind == "convert" or mode == "full" or not checked:
+            span = (2, 2)
+        elif mode == "gate":
+            span = (0, 0)
+        else:
+            span = (1, 2)
+        if kind == "acceptance" and os.environ.get("FLOW_PHASE_REVIEW", "on") != "off":
+            phase = len(areas)
+        builders += 1
+        low, high = low + span[0], high + span[1]
+        out.write("%s  builder 1  reviewers %s  Review: %s%s\n"
+                  % (g.lab[t], span[0] if span[0] == span[1] else "%d-%d" % span, mode,
+                     "" if checked else ", no check block"))
+    total = "%d" % (builders + low + phase) if low == high else "%d-%d" % (builders + low + phase,
+                                                                        builders + high + phase)
+    out.write("estimate: %d ticket(s) to build: %d builder(s), %s ticket reviewer(s), %d phase reviewer(s): %s fresh "
+              "subagents on the first try. each send-back adds a builder and its reviewers\n"
+              % (builders, builders, low if low == high else "%d-%d" % (low, high), phase, total))
+    return 0
+
+
 def lint(g, plan_dir):
     """(errors, warnings) the stricter plan lint adds to --check: every ticket carries a check block or
-    says `Check: none <why>`, and commands.md names a Test command that can be found."""
+    says `Check: none <why>`, and commands.md names a Test command that can be found. It warns about a
+    Done when with an escape clause, a check that expects output its command cannot print, and a ticket
+    that uses a file or name another ticket creates without being blocked by it."""
+    from feature_flow import proof  # proof imports the gate and git; only the lint needs it
+
     errors, warnings = [], []
+    creates, uses = {}, {}  # a file or name -> the tickets whose lines create or use it
     for t in g.order:
         lab = g.lab[t]
+        lines = tickets.records(g.path[t])
+        body = _sections(lines)
+        for heading, line in body:
+            if line.strip().startswith("##"):
+                continue
+            create = CREATES.search(line) is not None
+            for ref in PATH_REF.findall(line):
+                if "plans/" not in ref and not os.path.exists(ref):
+                    (creates if create else uses).setdefault(ref, set()).add(t)
+            for name in NAME_REF.findall(line):
+                if "_" in name or name.endswith("()") or re.search(r"[a-z][A-Z]", name):
+                    (creates if create else uses).setdefault(name, set()).add(t)
         if g.typ.get(t) == "settle":
             continue
-        lines = tickets.records(g.path[t])
         has_block = any(line.startswith("```check") for line in lines)
         none = next((line for line in lines[:20] if line.startswith("Check:")), None)
         if none is not None:
@@ -168,12 +315,39 @@ def lint(g, plan_dir):
                 errors.append(lab + ": `Check:` must read `Check: none <why>`")
         elif not has_block:
             errors.append(lab + ": no check block. add one under Done when, or `Check: none <why>` in the header")
-        for line in lines:
-            if line.strip().startswith("##"):
-                continue
-            for ref in re.findall(r"`([A-Za-z0-9_./-]+/[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)`", line):
-                if "new" not in line.lower() and "plans/" not in ref and not os.path.exists(ref):
-                    warnings.append("%s: names `%s`, which does not exist here (say `new` if it will be created)" % (lab, ref))
+        fence = False
+        for heading, line in body:
+            if line.startswith("```"):
+                fence = not fence
+            if heading == "done when" and not fence:
+                escape = ESCAPE.search(line)
+                if escape:
+                    warnings.append("%s: Done when has an escape clause (`%s`). a bullet must pass or fail; it never asks "
+                                    "for an explanation instead" % (lab, escape.group(0)))
+        try:
+            found = proof.checks_in("\n".join(lines))
+        except proof.ParseError as err:
+            errors.append("%s: %s" % (lab, err))
+            found = []
+        for check in found:
+            problem = _cannot_print(lab, check)
+            if problem:
+                warnings.append(problem)
+    reach = _reach(g)
+    for ref in sorted(set(creates) | set(uses)):
+        makers = creates.get(ref, set())
+        if PATH_REF.fullmatch("`%s`" % ref) and not makers:
+            for t in sorted(uses[ref]):
+                warnings.append("%s: names `%s`, which does not exist here (say `new` if it will be created)"
+                                % (g.lab[t], ref))
+            continue
+        users = uses.get(ref, set()) - makers
+        if not makers or not users or (not PATH_REF.fullmatch("`%s`" % ref) and _exists_in_repo(ref) is not False):
+            continue
+        for t in sorted(users):
+            if not any(m in reach[t] for m in makers):
+                warnings.append("%s: uses `%s`, which ticket %s creates, but is not blocked by it. add it to Blocked by"
+                                % (g.lab[t], ref, ", ".join(g.lab[m] for m in sorted(makers))))
     commands = "%s/commands.md" % plan_dir
     test = tickets.commands_value(commands, "Test")
     if not os.path.isfile(commands):
@@ -190,6 +364,56 @@ def lint(g, plan_dir):
     return errors, list(dict.fromkeys(warnings))
 
 
+def package(path):
+    """The folder a path or glob names, at most two levels deep: `src/api/**` and `src/api/x.py` give
+    `src/api`, `feature_flow/gate.py` gives `feature_flow`, a file at the top gives `.`."""
+    parts = path.replace("\\", "/").strip("/").split("/")
+    kept = []
+    for part in parts:
+        if any(c in part for c in "*?["):
+            break
+        kept.append(part)
+    if len(kept) == len(parts) and kept and "." in kept[-1]:
+        kept.pop()  # a file: its folder is the package
+    return "/".join(kept[:2]) or "."
+
+
+TEST_PATH = re.compile(r"(^|/)tests?(/|$)|(^|/)test_[^/]*$|_test\.[^/]+$|\.(test|spec)\.[^/]+$")
+
+
+def packages(g, t):
+    """The packages ticket t changes: from its `Touches:` line, else from the files its description names.
+    Test files are left out: every ticket brings its own tests."""
+    if g.touches.get(t):
+        refs = g.touches[t]
+    else:
+        refs = [ref for heading, line in _sections(tickets.records(g.path[t]))
+                if heading == "" and not line.startswith("#") for ref in PATH_REF.findall(line)]
+    return {package(ref) for ref in refs if not TEST_PATH.search(ref.replace("\\", "/"))}
+
+
+def same_package_chains(g):
+    """[(tickets, package)]: each run of three or more unresolved tickets with numbers one after another, each
+    blocked by the one before, that all change the same package. Such a run usually belongs in fewer tickets."""
+    todo = [t for t in g.order if g.stat[t] != "resolved" and g.typ.get(t) not in ("settle", "acceptance")]
+    found, run, common = [], [], set()
+
+    def close():
+        if len(run) >= 3:
+            found.append((list(run), sorted(common)[0]))
+
+    for t in todo:
+        mine = packages(g, t)
+        if run and t == run[-1] + 1 and run[-1] in g.blk[t] and common & mine:
+            run.append(t)
+            common &= mine
+            continue
+        close()
+        run, common = [t], set(mine)
+    close()
+    return found
+
+
 def _check(g, ready, nready, unfinished, out, extra=([], [])):
     errors = list(extra[0])
     for t in g.order:
@@ -204,8 +428,10 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
             errors.append(lab + ": no ## Done when section")
         if t in g.hastf and g.tf[t] not in ("yes", "no"):
             errors.append(lab + ": Test first must be yes or no")
-        if t in g.hasreview and g.review[t] not in ("full", "auto"):
-            errors.append(lab + ": Review must be full or auto")
+        if t in g.hasreview and g.review[t] not in ("gate", "auto", "full"):
+            errors.append(lab + ": Review must be gate, auto or full")
+        if t in g.hasgate and g.gate[t] not in ("quick", "full"):
+            errors.append(lab + ": Gate must be quick or full")
         for d in g.blk[t]:
             if d == t:
                 errors.append(lab + ": blocked by itself")
@@ -251,6 +477,13 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
                 continue
             out.write("warning: %s: mentions ticket %s but is not ordered against it. add it to Blocked by, or reword\n"
                       % (g.lab[t], g.lab[m]))
+    todo = sum(1 for t in g.order if g.stat[t] != "resolved")
+    if todo > 8:
+        out.write("warning: %d tickets to build in one plan. aim for 4 to 6: merge chained tickets that touch the same "
+                  "files, or plan the rest as a second round\n" % todo)
+    for chain, pkg in same_package_chains(g):
+        out.write("warning: %s are chained one after another and all change `%s`. merge them into fewer tickets "
+                  "unless each needs its own review\n" % (", ".join(g.lab[t] for t in chain), pkg))
     for w in extra[1]:
         out.write("warning: " + w + "\n")
     if errors:

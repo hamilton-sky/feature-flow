@@ -14,7 +14,7 @@ from feature_flow import __version__, cli, install, report, status, suggest, uni
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
        feature-flow uninstall [target-repo] [--user] [--force] [--dry-run]
-       feature-flow status <feature> [--next | --counts | --check | --mermaid [plain] | --json]
+       feature-flow status <feature> [--next | --counts | --check | --lint | --estimate | --mermaid [plain] | --json]
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
        feature-flow reset <feature> [NN]
        feature-flow report <feature>

@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,13 @@ import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
 from feature_flow import checks, gate  # the package under test, from this checkout
+
+TIME = re.compile(r"\b\d+(?:[hm]\d{2})?[sm]\b")
+
+
+def untimed(text):
+    """The gate's output with each duration (7s, 5m12s, 1h03m) written as <t>."""
+    return TIME.sub("<t>", text)
 
 
 @unittest.skipUnless(shutil.which("bash") and os.name != "nt",
@@ -35,21 +43,22 @@ class GateTests(unittest.TestCase):
     def run_gate(self, feature="f"):
         out, err = [], []
         code = gate.run(feature, out.append, err.append)
-        return code, "".join(out), "".join(err)
+        return code, untimed("".join(out)), "".join(err)
 
     def test_all_three_pass_in_order(self):
         self.commands(b"# Commands: f\n\nLint: `echo l`\nTest: `echo t`\nBuild: `echo b`\n")
         code, out, _ = self.run_gate()
         self.assertEqual(code, 0)
-        self.assertEqual(out, "gate: Build: echo b\ngate: Test: echo t\ngate: Lint: echo l\n"
+        self.assertEqual(out, "gate: Build: echo b\ngate: Build passed in <t>\ngate: Test: echo t\n"
+                              "gate: Test passed in <t>\ngate: Lint: echo l\ngate: Lint passed in <t>\n"
                               "gate: 3 command(s) passed\n")
 
     def test_a_failure_stops_and_shows_the_output(self):
         self.commands(b"Build: `echo b`\nTest: `echo it broke >&2; exit 3`\nLint: `echo l`\n")
         code, out, _ = self.run_gate()
         self.assertEqual(code, 1)
-        self.assertEqual(out, "gate: Build: echo b\ngate: Test: echo it broke >&2; exit 3\n"
-                              "gate: Test failed. the last lines of its output:\nit broke\n")
+        self.assertEqual(out, "gate: Build: echo b\ngate: Build passed in <t>\ngate: Test: echo it broke >&2; exit 3\n"
+                              "gate: Test failed after <t>. the last lines of its output:\nit broke\n")
 
     def test_placeholders_and_empty_values_are_skipped(self):
         self.commands(b"Build: `<command>`\nTest:\nSmoke: `<x>`\n")
@@ -69,7 +78,7 @@ class GateTests(unittest.TestCase):
             code, out, _ = self.run_gate()
         finally:
             del os.environ["FLOW_DIR"]
-        self.assertEqual((code, out), (0, "gate: Test: echo moved\ngate: 1 command(s) passed\n"))
+        self.assertEqual((code, out), (0, "gate: Test: echo moved\ngate: Test passed in <t>\ngate: 1 command(s) passed\n"))
 
     def test_the_value_is_the_first_matching_line_without_backticks(self):
         path = self.dir / "commands.md"
@@ -87,7 +96,7 @@ class GateTests(unittest.TestCase):
         self.commands(b"Test: `seq 100; exit 1`\n")
         code, out, _ = self.run_gate()
         self.assertEqual(code, 1)
-        self.assertTrue(out.endswith("failed. the last lines of its output:\n" +
+        self.assertTrue(out.endswith("failed after <t>. the last lines of its output:\n" +
                                      "".join("%d\n" % i for i in range(61, 101))))
 
     def test_checks_gate_runs_in_process_with_stderr_folded_in(self):
@@ -105,7 +114,8 @@ class GateTests(unittest.TestCase):
         env.pop("FLOW_DIR", None)
         shim = str(helpers.ROOT / "scripts" / "gate.py")
         expected = (
-            (["f"], 1, "gate: Build: echo b\ngate: Test: echo t; exit 2\ngate: Test failed. the last lines of its output:\nt\n", ""),
+            (["f"], 1, "gate: Build: echo b\ngate: Build passed in <t>\ngate: Test: echo t; exit 2\n"
+                       "gate: Test failed after <t>. the last lines of its output:\nt\n", ""),
             ([], 2, "", "usage: python3 scripts/gate.py <feature>\n"),
             (["nofeature"], 0, "gate: no commands.md for nofeature, nothing to run\n", ""),
         )
@@ -113,7 +123,16 @@ class GateTests(unittest.TestCase):
             run = subprocess.run([sys.executable, shim] + args, cwd=str(self.dir),
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
                                  universal_newlines=True)
-            self.assertEqual((run.returncode, run.stdout, run.stderr), (code, out, err))
+            self.assertEqual((run.returncode, untimed(run.stdout), run.stderr), (code, out, err))
+
+    def test_each_command_says_how_long_it_took(self):
+        self.assertEqual([gate.took(s) for s in (0.4, 7, 312, 3725)], ["0s", "7s", "5m12s", "1h02m"])
+
+    def test_the_commands_see_the_base_commit(self):
+        out = []
+        self.commands(b'Test: `test "$FLOW_BASE" = abc123 || exit 9`\n')
+        self.assertEqual(gate.run("f", out.append, out.append, base="abc123"), 0)
+        self.assertEqual(gate.run("f", out.append, out.append), 1)
 
 
 if __name__ == "__main__":

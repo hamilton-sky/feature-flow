@@ -126,15 +126,14 @@ def tracked_clean():
             and _git("diff", "--cached", "--quiet", check=False).returncode == 0)
 
 
-def commit_paths(paths, message):
-    """Commit these paths only, whatever else is staged."""
+def ignored(path):
+    """True when git ignores path (.gitignore, .git/info/exclude or core.excludesFile) and does not track it."""
+    return _git("check-ignore", "-q", "--", str(path), check=False).returncode == 0
+
+
+def commit_paths(paths, message, force=False):
+    """Commit these paths only, whatever else is staged. force adds them even where git ignores them."""
     paths = [str(p) for p in paths]
-    if _git("add", "--", *paths, check=False).returncode != 0:
+    if _git(*(["add", "-f", "--"] if force else ["add", "--"]) + paths, check=False).returncode != 0:
         return False
     return _git("commit", "-q", "-m", message, "--", *paths, check=False).returncode == 0
-
-
-def commit_file(path, message):
-    if _git("add", "--", str(path), check=False).returncode != 0:
-        return False
-    return _git("commit", "-q", "-m", message, check=False).returncode == 0

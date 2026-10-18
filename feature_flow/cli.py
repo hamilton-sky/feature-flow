@@ -8,11 +8,13 @@ from pathlib import Path
 from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
-USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt | verdict <file> | reset [NN]\n"
+USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt [--file] [area] | verdict <file> [area] | "
+         "review-phase | reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
-COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset")
-ARGS = {"verdict": (3,), "plan-prompt": (3, 4), "reset": (2, 3)}
-RUNNER_ONLY = ("next", "prompt", "verdict")
+COMMANDS = ("start", "next", "prompt", "verdict", "review-phase", "plan-prompt", "plan-review-prompt", "plan-accept",
+            "reset")
+ARGS = {"verdict": (3, 4), "prompt": (2, 3, 4), "plan-prompt": (3, 4), "reset": (2, 3)}
+RUNNER_ONLY = ("next", "prompt", "verdict", "review-phase")
 
 
 def main(argv=None, scripts=None):
@@ -85,8 +87,12 @@ def run(args, scripts, trusted):
     conductor = None
     try:
         conductor = Conductor(feature, scripts)
+        if command != "reset":
+            conductor.spent()
         if command == "verdict":
-            line = conductor.verdict(args[2])
+            line = conductor.verdict(args[2], args[3] if len(args) == 4 else None)
+        elif command == "review-phase":
+            line = conductor.review_phase()
         elif command == "plan-prompt":
             line = conductor.plan_prompt(args[2], args[3] if len(args) == 4 else None)
         elif command == "plan-review-prompt":
@@ -94,7 +100,11 @@ def run(args, scripts, trusted):
         elif command == "plan-accept":
             line = conductor.plan_accept()
         elif command == "prompt":
-            line = conductor.prompt()
+            rest = [a for a in args[2:] if a != "--file"]
+            if len(rest) > 1 or len(args) - len(rest) > 3:
+                print(USAGE, file=sys.stderr)
+                return 2
+            line = conductor.prompt(rest[0] if rest else None, len(rest) < len(args) - 2)
         elif command == "reset":
             line = conductor.reset(args[2] if len(args) == 3 else None)
         elif command == "start":

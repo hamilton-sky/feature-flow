@@ -152,14 +152,26 @@ def wants_test_first(text):
     return False
 
 
-def review_mode(text):
-    """`full` when the ticket's header lines (before its first `## ` heading) say `Review: full`, else `auto`."""
+def header(text, key):
+    """The first word of the ticket's `<key>:` header line (before its first `## ` heading), lower case, or ""."""
     for line in text.split("\n"):
         if line.startswith("## "):
             break
-        if re.match(r"^Review:[ \t]*full\b", line, re.IGNORECASE):
-            return "full"
-    return "auto"
+        match = re.match(r"^%s:[ \t]*([A-Za-z-]*)" % re.escape(key), line, re.IGNORECASE)
+        if match:
+            return match.group(1).lower()
+    return ""
+
+
+def review_mode(text):
+    """`full` or `gate` when the ticket's header says `Review: full` or `Review: gate`, else `auto`."""
+    mode = header(text, "Review")
+    return mode if mode in ("full", "gate") else "auto"
+
+
+def gate_mode(text):
+    """`full` when the ticket's header says `Gate: full` (it always gets the full Test), else `quick`."""
+    return "full" if header(text, "Gate") == "full" else "quick"
 
 
 def repo_relative(path):

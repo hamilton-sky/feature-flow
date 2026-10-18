@@ -18,11 +18,12 @@ def kill_tree(proc):
             proc.kill()
 
 
-def run(args, use_shell, log, minutes):
+def run(args, use_shell, log, minutes, env=None):
     """Run args (from gate.shell) with stdout and stderr to the open file log. minutes is a float, 0 or None for
-    no limit. Returns (exit code, False), or (None, True) when the limit ran out and the tree was killed."""
+    no limit; env, when given, replaces the environment. Returns (exit code, False), or (None, True) when the
+    limit ran out and the tree was killed."""
     extra = {} if sys.platform == "win32" else {"start_new_session": True}
-    proc = subprocess.Popen(args, shell=use_shell, stdout=log, stderr=subprocess.STDOUT, **extra)
+    proc = subprocess.Popen(args, shell=use_shell, stdout=log, stderr=subprocess.STDOUT, env=env, **extra)
     try:
         return proc.wait(timeout=minutes * 60 if minutes else None), False
     except subprocess.TimeoutExpired:

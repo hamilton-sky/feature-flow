@@ -55,11 +55,12 @@ def flow_status(scripts, feature, mode, root=None):
     return Result(code, out.text())
 
 
-def gate(scripts, feature, timeout=None, quick=False):
+def gate(scripts, feature, timeout=None, quick=False, base=None):
     """The gate, run in process. stderr is folded into the output as the subprocess call did.
-    timeout is minutes, None for FLOW_GATE_TIMEOUT. quick runs Quick in the place of Test."""
+    timeout is minutes, None for FLOW_GATE_TIMEOUT. quick runs Quick in the place of Test. base goes to
+    the commands as FLOW_BASE."""
     chunks = []
-    code = gate_module.run(str(feature), chunks.append, chunks.append, timeout, quick)
+    code = gate_module.run(str(feature), chunks.append, chunks.append, timeout, quick, base)
     out = "".join(chunks).encode("utf-8", "surrogateescape").decode("utf-8", "replace")
     out = out.replace("\r\n", "\n").replace("\r", "\n")
     return Result(code, out)

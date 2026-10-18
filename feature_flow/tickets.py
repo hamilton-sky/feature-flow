@@ -110,6 +110,8 @@ class Graph:
         self.hasblk, self.hastype, self.hastf, self.hastitle = set(), set(), set(), set()
         self.typ, self.tf = {}, {}
         self.hasreview, self.review = set(), {}
+        self.hasgate, self.gate = set(), {}
+        self.touches = {}
         self.mentions = {}
         for p in paths:
             self._read(p)
@@ -151,6 +153,11 @@ class Graph:
             if head and line.startswith("Review:") and cur not in self.hasreview:
                 self.hasreview.add(cur)
                 self.review[cur] = _first_word(line.lower(), "review:")
+            if head and line.startswith("Gate:") and cur not in self.hasgate:
+                self.hasgate.add(cur)
+                self.gate[cur] = _first_word(line.lower(), "gate:")
+            if head and line.startswith("Touches:") and cur not in self.touches:
+                self.touches[cur] = [g.strip("`") for g in re.split(r"[,\s]+", line[len("Touches:"):]) if g.strip("`")]
             if line.startswith("# ") and cur not in self.hastitle:
                 self.hastitle.add(cur)
                 self.title[cur] = line[2:]

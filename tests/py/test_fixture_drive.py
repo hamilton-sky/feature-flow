@@ -137,6 +137,9 @@ class PlanDrive(unittest.TestCase):
             (draft / name).write_text(text, encoding="utf-8")
         rc, out = self.flow("plan-review-prompt")
         self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("SKIP plan review: the draft has 2 ticket(s)"), out)
+        rc, out = self.flow("plan-review-prompt", FLOW_PLAN_REVIEW_SKIP="0")
+        self.assertEqual(rc, 0, out)
         self.assertTrue(out.startswith("You are the plan reviewer"))
         self.assertEqual(self.git("status", "--porcelain"), "")
 

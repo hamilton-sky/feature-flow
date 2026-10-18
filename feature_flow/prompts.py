@@ -8,10 +8,11 @@ import shlex
 from pathlib import Path
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
-         "review-single": "ticket-reviewer.md",
+         "review-single": "ticket-reviewer.md", "review-phase": "ticket-reviewer.md",
          "plan": "feature-planner.md", "plan-review": "plan-reviewer.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
-          "review-single": "review-single.md", "plan": "plan.md", "plan-review": "plan-review.md"}
+          "review-single": "review-single.md", "review-phase": "review-phase.md", "plan": "plan.md",
+          "plan-review": "plan-review.md"}
 
 
 def find_file(scripts, folder, name):
@@ -68,7 +69,12 @@ def _templates(text, guides):
                   lambda m: "%s (%s)" % (m.group(1), span(base + "/templates/" + m.group(2))), text)
 
 
-def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
+CLASS_FIX = ("A review finding names a class of defect (`class: <pattern>`). Fix the class, not the instance: search the "
+             "whole codebase for every site of that pattern, add one guard test that fails on any site (a later one "
+             "included), then fix every site. Never fix only the sites the finding lists.")
+
+
+def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, class_fix=False):
     role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
     guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
@@ -80,6 +86,8 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
         task = ("Your task: build ticket %s of the feature `%s`, in auto mode (`%s auto %s`). The ticket is `%s`. "
                 "The work starts at commit `%s`.\n%s\nWhen you are done, reply with what you built and the "
                 "commit. Do not review your own work." % (num, feature, feature, num, ticket, sha, fresh))
+        if class_fix:
+            task += "\n" + CLASS_FIX
         intro = "The build guide follows. Follow it exactly."
     else:
         task = ("Your task: review ticket %s of the feature `%s` (`%s %s %s`) (%s pass). The ticket is `%s`, and the "
@@ -94,6 +102,21 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
     if retry and phase == "build":
         parts += ["The debugging guide follows. Follow it before you change any code.",
                   _body(find_file(scripts, "guides", "debug.md"))]
+    return "\n\n".join(parts) + "\n"
+
+
+def phase(scripts, feature, plan_dir, area, areas, base, head):
+    """The prompt for one phase reviewer: its area, and the whole range base..head of the feature."""
+    role = _runner(_body(find_file(scripts, "agents", ROLES["review-phase"])), scripts)
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES["review-phase"])), scripts)
+    for placeholder, value in (("<feature>", feature), ("<plan>", plan_dir), ("<area>", area), ("<base>", base),
+                               ("<head>", head)):
+        guide = guide.replace(placeholder, value)
+    task = ("Your task: the phase review of the feature `%s`, area `%s`. You are one of %d fresh reviewers working at "
+            "the same time, one per area (%s). The range is `%s..%s`.\nRun `git log` and `git status` yourself before "
+            "you start.\nDo not edit any file or create a commit. Your final reply must end with exactly "
+            "`REVIEW: PASS` or `REVIEW: FAIL`." % (feature, area, len(areas), ", ".join(areas), base, head))
+    parts = [role, "---", "The phase review guide follows. Follow it exactly.", guide, "---", task]
     return "\n\n".join(parts) + "\n"
 
 

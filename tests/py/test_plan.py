@@ -84,10 +84,21 @@ class Planning(unittest.TestCase):
         rc, out, _ = self.flow("plan-review-prompt")
         self.assertEqual((rc, out), (1, "STOP no brief for g. run plan-prompt first"))
 
-    def test_plan_review_prompt_prints_the_reviewer_role_and_the_brief_only(self):
+    def test_a_small_draft_skips_the_plan_review(self):
         self.flow("plan-prompt", "brief.md")
         self.write_draft()
         rc, out, _ = self.flow("plan-review-prompt")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(out, "SKIP plan review: the draft has 2 ticket(s), and a plan of 5 or fewer goes straight to "
+                              "the user's approval (FLOW_PLAN_REVIEW_SKIP)")
+        self.write_draft(tuple(("%02d-t" % n, "T", "—") for n in range(1, 7)))
+        rc, out, _ = self.flow("plan-review-prompt")
+        self.assertTrue(out.startswith("You are the plan reviewer"), out[:80])
+
+    def test_plan_review_prompt_prints_the_reviewer_role_and_the_brief_only(self):
+        self.flow("plan-prompt", "brief.md")
+        self.write_draft()
+        rc, out, _ = self.flow("plan-review-prompt", FLOW_PLAN_REVIEW_SKIP="0")
         self.assertEqual(rc, 0, out)
         self.assertTrue(out.startswith("You are the plan reviewer, not the planner."), out[:80])
         self.assertIn("# Review a draft plan", out)

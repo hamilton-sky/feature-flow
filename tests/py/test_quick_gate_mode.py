@@ -87,7 +87,7 @@ class QuickGateModeTests(unittest.TestCase):
         self.commands("Quick: `CMD`", self.log_cmd("Quick", fail=True))
         code, out = self.run_gate(True)
         self.assertEqual(code, 1)
-        self.assertIn("gate: Quick failed. the last lines of its output:\nquick broke\n", out.replace("\r\n", "\n"))
+        self.assertIn("gate: Quick failed after 0s. the last lines of its output:\nquick broke\n", out.replace("\r\n", "\n"))
         self.assertEqual(self.ran(), ["Build", "Quick"])
 
     def test_checks_gate_passes_quick_on(self):

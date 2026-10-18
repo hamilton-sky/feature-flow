@@ -62,7 +62,17 @@ class ReviewCheckTests(unittest.TestCase):
     def test_maybe_fails_the_plan_check(self):
         code, text = self.check("Review: maybe\n")
         self.assertNotEqual(code, 0)
-        self.assertIn("01: Review must be full or auto", text)
+        self.assertIn("01: Review must be gate, auto or full", text)
+
+    def test_gate_passes_the_plan_check(self):
+        code, text = self.check("Review: gate\n")
+        self.assertEqual(code, 0, text)
+
+    def test_a_gate_line_must_be_quick_or_full(self):
+        self.assertEqual(self.check("Gate: full\n")[0], 0)
+        code, text = self.check("Gate: sometimes\n")
+        self.assertNotEqual(code, 0)
+        self.assertIn("01: Gate must be quick or full", text)
 
     def test_full_passes_the_plan_check(self):
         code, text = self.check("Review: full\n")
