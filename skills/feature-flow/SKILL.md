@@ -69,6 +69,15 @@ Run `next`, act on its one line after `TRUST` (and any `FLOW-EDIT` line), and re
 - `STOP <reason>`: report the reason, run `python3 scripts/flow-status.py <feature>`, show the table, and stop.
 - `HANDOFF <line>`: stop here. Tell the user to open a new session and type exactly `<line>`, the whole line with its digest at the end. The new session resumes where this one stopped.
 
+## Lanes
+
+With `FLOW_LANES=2` (up to 4) on `start`, the conductor builds tickets whose `Touches:` lines do not overlap at the same time, each in its own git worktree (a lane) on its own branch, and merges each one onto the feature branch itself once it passes. Use it only when the user asks for tickets side by side. Then every `BUILD` and `REVIEW` line carries a fifth word, the lane, and the loop is:
+
+- `BUILD <ticket> <NN> <sha> <lane>` or `REVIEW <ticket> <NN> <sha> <lane>`: run `prompt <lane>` and spawn the builder or reviewer with that output as its whole prompt, in the background (the prompt names the lane's folder, and the subagent works only there). Do not wait for it: run `next` with no lane straight away, to fill the other lanes. `WAIT <lanes>` means every lane that can work is busy: wait for the first subagent to finish, whichever it is.
+- A builder for lane `<k>` finished: run `next <k>`, with `--after-build <ticket> <sha>` from its `BUILD` line. A reviewer for lane `<k>` finished: save its whole reply into `.feature-flow/state/flow-review-<feature>-<k>.txt` as the loop says, then run `verdict <that file> <k>` and `next <k>`, with no other conductor call between them (on `RETRY`, just `next <k>`).
+- Act on whatever line comes back, for whichever lane it names. The conductor merges a passed ticket before it answers; a merge that conflicts or fails the gate comes back as a new `BUILD` of that ticket, built once more from the feature branch.
+- Run one conductor command at a time, never two at once, and keep passing the latest `TRUST` digest. `DONE`, `STOP` and `HANDOFF` mean what the loop says; after a `STOP`, run no other conductor command while children still run. `reset` removes the lanes and their branches.
+
 ## Rules while building
 
 These apply from `start` on, once a plan exists.

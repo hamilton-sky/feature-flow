@@ -5,6 +5,7 @@ Status: open
 Blocked by: —
 Test first: yes
 Level: 2
+Touches: <the paths this ticket changes, comma separated: a folder ends with /, a * glob crosses folders. e.g. src/export/, tests/test_export.py>
 
 <What to do and why, in prose. Name files, functions and types. Never use line numbers.
 For Type: settle, say what has to be decided and who decides. For Type: convert, say what

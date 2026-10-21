@@ -177,6 +177,7 @@ Status: open               open | claimed | resolved | parked
 Blocked by: 01, 02         or —
 Test first: yes            yes | no
 Level: 2                   1 light | 2 standard | 3 boundary
+Touches: src/export/       the paths it changes; a build outside them goes back
 Floor: allow config        optional, only when a human decides the guard may let it through
 
 ...what to do and why...
@@ -228,6 +229,21 @@ One self contained HTML file: no server, no libraries, no network, light and dar
 - **Safe by construction:** ticket text comes from files an agent wrote, so it is escaped when embedded and only ever inserted as text.
 - `flow-status.py <feature> --json` prints the same data for other tools. Mermaid (`--mermaid`) remains the choice for pull requests, because GitHub renders it.
 
+## Tickets side by side (lanes)
+
+With `FLOW_LANES=2` (up to 4) on `start`, tickets that do not touch the same files are built at the same time, each with its own builder and reviewers in its own git worktree. Only the start and the end of a ticket change: the build, the gate, the floor guard and the reviews are the same as with one lane.
+
+- **Plan.** Each ticket lists the paths it changes on a `Touches:` line (a folder ends with `/`, a `*` glob crosses folders). `commands.md` may name `Shared:` paths that many tickets change, and a `Setup:` command a fresh checkout needs. The plan reviewer checks the footprints; you approve them with the plan.
+- **Schedule.** The conductor leases a ready ticket to a free lane only when its `Touches:` (read from the feature branch, never from a builder) does not overlap any running ticket's, it touches nothing on `Shared:`, and, when either ticket is level 3, the two keep to different top-level folders. A ticket with no `Touches:` line runs alone.
+- **Lanes.** The lanes are worktrees in `.feature-flow/lanes/<feature>/` (git ignores the folder), created on first use, with `Setup:` run once in each. Each ticket gets a branch `ff/<feature>/<NN>` from the feature head.
+- **Footprint check.** After every build, with or without lanes, a change to a path outside the ticket's `Touches:` sends the ticket back (`FOOTPRINT-FAIL` in the log).
+- **Merge.** A ticket that passes its review is merged by the conductor, one at a time, in `.feature-flow/lanes/<feature>/integrate` with `git merge --no-ff`, so the reviewed commits land unchanged. The gate runs on the merge (Quick mid-plan, the full Test for the last ticket). Only a green merge fast-forwards the feature branch; then the ticket's branch is deleted with `git branch -d`. When two lanes both appended to `map.md`, `learnings.md` or `followups.md`, the conductor keeps both sides' lines; no agent ever resolves a conflict.
+- **Rebuild.** Any other conflict, or a gate that fails on the merge, sends the ticket back to be built again from the feature branch as it is now, with what went wrong and its earlier commit in the ticket. A second collision stops the run for you: the plan's `Touches:` are likely wrong.
+- **Level 3.** When another ticket merged after a level 3 ticket started, it is merged with the new feature head in its lane, gated, and given its quality review again before it merges.
+- **The end.** After the last merge the lanes are removed. `reset` removes them too, with the ticket branches.
+
+The session runs `prompt`, `next` and `verdict` with the lane from the `BUILD` or `REVIEW` line, and `next` answers `WAIT <lanes>` when every lane that can work is busy (see `## Lanes` in the skill).
+
 ## Long features and handoff
 
 A session's context fills up, so the flow moves to a fresh session every few tickets. After `FLOW_TICKETS_PER_SESSION` tickets (default 4) pass review, `next` prints a `HANDOFF` line instead of the next ticket, for example `HANDOFF /feature-flow csv-export 3f9c0a1b2c3d4e5f.0a1b2c3d4e5f6a7b` (the last word is the runner's digest, which lets the new session check that the flow's files did not change in between). The session stops and tells you to open a new session and type that line. The new session picks up exactly where the last one stopped. Set `FLOW_TICKETS_PER_SESSION=0` to never hand off.
@@ -247,6 +263,7 @@ python3 scripts/flow.py <feature> start|reset [NN]          the conductor (the s
 FLOW_TRUST=<digest|new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py <feature> next|prompt|verdict <file>   loop commands by hand, through the runner: prints TRUST <digest> first (no hash check, see below)
 python3 scripts/flow-status.py <feature>                  table of tickets and which are READY
 python3 scripts/flow-status.py <feature> --next           path of the next ready ticket (exit 10 = done, 11 = stuck)
+python3 scripts/flow-status.py <feature> --ready          every ready ticket, one per line (the same exit codes)
 python3 scripts/flow-status.py <feature> --counts         one line of counts
 python3 scripts/flow-status.py <feature> --check          cycles, missing blockers, missing Done when, unordered mentions
 python3 scripts/flow-status.py <feature> --lint           --check plus: a check block (or `Check: none <why>`) on every ticket, a Test command
@@ -268,6 +285,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 |---|---|---|
 | `FLOW_TICKETS_PER_SESSION` | `4` | tickets per session before `HANDOFF`; `0` never hands off |
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
+| `FLOW_LANES` | `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`) |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |
@@ -323,7 +341,8 @@ feature-flow's layers are tripwires, not a security boundary. They catch acciden
 - **A plan can be wrong and still pass.** The plan lint checks that every ticket has a way to be proven and that `commands.md` has a Test command. It cannot tell whether the plan builds the right thing; the second yes is yours.
 - **The trust runner stops accidents, not the session.** It catches a builder editing the conductor mid-run. The session that runs it is the thing it cannot check; a hand-run `flow-trust.py` is unprotected (see above).
 - **Little real-world use so far.** Almost everything has been built by feature-flow on its own repo. The Codex skill and the Codex planner have not been run by hand, and the Quick gate has only been run by tests. See [docs/field-run.md](docs/field-run.md) for how to try it on your own repo and what to send back.
-- **One ticket at a time**, with a handoff to a new session every few tickets.
+- **One ticket at a time**, with a handoff to a new session every few tickets, unless you turn on lanes.
+- **Lanes share one disk.** A builder in one lane can still write into another lane's folder or the main worktree. The conductor sees that as a dirty tree and stops, but only afterwards. Overlap of `Touches:` is judged from the patterns, so two tickets that could never meet may still run one after the other.
 
 ## Upgrading
 

@@ -39,8 +39,20 @@ def set_open(path):
     Path(path).write_text("".join(lines), encoding="utf-8")
 
 
+def title(path):
+    """The text of the ticket's `# ` title line, or ""."""
+    for line in _lines(path)[:20]:
+        if line.startswith("# "):
+            return line[2:].strip()
+    return ""
+
+
 def append_findings(path, round_no, source, findings):
-    text = "\n## Review findings (round %d, %s)\n\n%s\n" % (round_no, source, findings.rstrip("\n"))
+    append_section(path, "Review findings (round %d, %s)" % (round_no, source), findings)
+
+
+def append_section(path, heading, body):
+    text = "\n## %s\n\n%s\n" % (heading, body.rstrip("\n"))
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(text)
 
@@ -135,6 +147,7 @@ class Graph:
         self.typ, self.tf = {}, {}
         self.hasreview, self.review = set(), {}
         self.haslevel, self.level = set(), {}
+        self.hastouches, self.touches = set(), {}
         self.mentions = {}
         for p in paths:
             self._read(p)
@@ -179,6 +192,10 @@ class Graph:
             if head and line.startswith("Level:") and cur not in self.haslevel:
                 self.haslevel.add(cur)
                 self.level[cur] = _first_word(line.lower(), "level:")
+            if head and line.startswith("Touches:") and cur not in self.hastouches:
+                self.hastouches.add(cur)
+                self.touches[cur] = [w for w in re.split(r"[,\s]+", line[len("Touches:"):].replace("`", ""))
+                                     if w and w != "—"]
             if line.startswith("# ") and cur not in self.hastitle:
                 self.hastitle.add(cur)
                 self.title[cur] = line[2:]
