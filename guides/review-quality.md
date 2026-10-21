@@ -56,7 +56,11 @@ Look for, in this order:
 - code that need not exist: something the standard library, the platform or the codebase already provides; a feature nobody asked for; a longer way of doing a shorter thing
 - anything a later ticket will trip over
 
+If the conductor's notes say the ticket is **level 3** (boundary), also probe the change as a hostile caller. For every input it adds or touches (each field, argument, file, environment value and route), ask what a caller who controls that input can make it do: skip a check, act as someone else, read or print a secret, go past a cost or run limit, win a race, or lose data. Name each input you probed, and report each way through as a `blocker` or `major` finding.
+
 Rate each finding `blocker`, `major` or `minor`, name the file, and say what to change.
+
+Rate honestly: a `blocker` is a bug, a hole or lost data; a `major` is something that should be fixed before the feature ships; a `minor` is a nicety. From a level 2 ticket's third round, the conductor sends the ticket back only for a `blocker`, and writes the majors to the plan's `followups.md`.
 
 ## Output
 

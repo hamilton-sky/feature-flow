@@ -55,6 +55,10 @@ Then scope: over `<base>..$END` only, list every changed file that the ticket do
 
 If the ticket says `Test first: yes`: check that the diff adds or changes a test, and say whether that test would fail without the production change.
 
+## Raising the ticket's level
+
+The conductor's notes say the ticket's level (1 light, 2 standard, 3 boundary). If the change touches a trust boundary the level does not account for (auth, tokens or secrets, who may do what, money, cost or run limits, data that could be lost, the flow's own code, anything a hostile caller reaches), put a line `LEVEL: 3` (or `LEVEL: 2` for a level 1 ticket that is really ordinary code) flush left above your verdict line, and say why in a finding. A level can only go up: a lower `LEVEL:` line is ignored. A raise to 3 during a single pass adds a quality review after it.
+
 ## Output
 
 Use exactly this shape. Keep it short; no praise.

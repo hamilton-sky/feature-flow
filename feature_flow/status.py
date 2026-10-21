@@ -159,6 +159,9 @@ def lint(g, plan_dir):
         lab = g.lab[t]
         if g.typ.get(t) == "settle":
             continue
+        if t not in g.haslevel:
+            warnings.append("%s: no `Level:` line. set 1, 2 or 3 (plan guide, ticket rule 8a); without it the "
+                            "ticket gets the review rules of 0.8.0" % lab)
         lines = tickets.records(g.path[t])
         has_block = any(line.startswith("```check") for line in lines)
         none = next((line for line in lines[:20] if line.startswith("Check:")), None)
@@ -206,6 +209,8 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
             errors.append(lab + ": Test first must be yes or no")
         if t in g.hasreview and g.review[t] not in ("full", "auto"):
             errors.append(lab + ": Review must be full or auto")
+        if t in g.haslevel and g.level[t] not in ("1", "2", "3"):
+            errors.append(lab + ": Level must be 1, 2 or 3")
         for d in g.blk[t]:
             if d == t:
                 errors.append(lab + ": blocked by itself")

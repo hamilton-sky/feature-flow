@@ -17,6 +17,27 @@ from feature_flow import checks, codehash, floorguard, gate, git, prompts, proof
 NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
 OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
+LEVEL_LINE = re.compile(r"^LEVEL: ([123])[ \t\r\f\v]*$")  # a reviewer raising the ticket's level
+FINDING = re.compile(r"^[ \t]*[0-9]+\.[ \t]+(blocker|major|minor)\b", re.IGNORECASE)
+CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
+LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}
+FULL_ROUNDS = 2  # a level 2 ticket's rounds in which a major finding still sends it back
+
+
+def followups_only(findings):
+    """True when a FAIL reply's only reasons are major or minor findings: no blocker, no NOT MET bullet,
+    no missing test first and no scope problem. Such a level 2 ticket may pass with follow-ups."""
+    severities = []
+    for line in findings.splitlines():
+        match = FINDING.match(line)
+        if match:
+            severities.append(match.group(1).lower())
+        if "NOT MET" in line or re.match(r"^[ \t]*-[ \t]*test first:[ \t]*MISSING", line, re.IGNORECASE):
+            return False
+        scope = re.match(r"^[ \t]*-[ \t]*scope:[ \t]*(.*)$", line, re.IGNORECASE)
+        if scope and scope.group(1).strip().upper() != "OK":
+            return False
+    return bool(severities) and "blocker" not in severities
 
 
 def owner_hash(token):
@@ -178,11 +199,19 @@ class Conductor:
         self.save()
         return self.emit("REVIEW %s %s %s" % (self.ticket(), self.get("num"), self.get("base")))
 
+    def round_cap(self):
+        """The send-back rounds this ticket may have: 1 at level 1, else FLOW_MAX_REVIEW_ROUNDS."""
+        return min(1, self.max_rounds) if self.num("level") == 1 else self.max_rounds
+
     def send_back(self, source, findings):
         """Write the findings into the ticket, reopen it, commit, and build again."""
         round_no = self.num("round") + 1
-        if round_no > self.max_rounds:
-            raise Stop("%s still fails the %s after %d round(s)" % (self.ticket_name(), source, self.max_rounds))
+        cap = self.round_cap()
+        if round_no > cap:
+            level = self.num("level")
+            raise Stop("%s still fails the %s after %d round(s)%s" % (
+                self.ticket_name(), source, cap,
+                " at level %d. the user decides what happens next" % level if level else ""))
         self.st["round"] = round_no
         tickets.append_findings(self.ticket(), round_no, source, findings)
         tickets.set_open(self.ticket())
@@ -194,6 +223,31 @@ class Conductor:
         self.st["review_attempt"] = 0
         self.st["review_pass"] = "spec"
         return self.hand_out_build()
+
+    def pass_ticket(self):
+        self.st["phase"] = ""
+        self.st["done"] = self.num("done") + 1
+        self.st["session_done"] = self.num("session_done") + 1
+        self.save()
+        return self.pick_ticket()
+
+    def pass_with_followups(self, source, findings):
+        """A level 2 ticket past its full rounds whose review found no blocker: append the findings to the
+        plan's followups.md, commit it, and pass the ticket."""
+        path = self.plan / "followups.md"
+        found = [line.strip() for line in findings.splitlines() if FINDING.match(line)]
+        text = "" if path.is_file() else (
+            "# Follow-ups: %s\n\nFindings a level 2 ticket passed with after %d review rounds. Each is a candidate "
+            "for a cleanup ticket.\n" % (self.feature, FULL_ROUNDS))
+        text += "\n## %s (round %d, %s)\n\n%s\n" % (self.ticket_name(), self.num("round") + 1, source,
+                                                    "\n".join("- " + line for line in found))
+        with open(str(path), "a", encoding="utf-8") as handle:
+            handle.write(text)
+        if not git.commit_file(path, "chore(%s): %s follow-ups from the %s" % (self.feature, self.get("num"), source)):
+            raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
+        self.st["followups"] = self.num("followups") + 1
+        self.log("PASS-FOLLOWUPS")
+        return self.pass_ticket()
 
     def pick_ticket(self):
         """Hand out the next ready ticket, or finish."""
@@ -207,10 +261,13 @@ class Conductor:
         nxt = checks.flow_status(self.scripts, self.feature, "--next")
         if nxt.code == 10:
             done = self.num("done")
+            followups = self.num("followups")
             self.st["phase"] = ""
             self.st["owner"] = ""
             self.save()
-            return self.emit("DONE %s is complete: %d ticket(s) resolved in this run" % (self.feature, done))
+            return self.emit("DONE %s is complete: %d ticket(s) resolved in this run%s" % (
+                self.feature, done, "; %d passed with follow-ups in %s" % (followups, (self.plan / "followups.md").as_posix())
+                if followups else ""))
         if nxt.code == 11:
             raise Stop("stuck: unfinished tickets remain but none is ready. run: python3 scripts/flow-status.py %s"
                        % self.feature)
@@ -221,7 +278,9 @@ class Conductor:
         path = nxt.out.strip().splitlines()[-1]
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
-                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec"})
+                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
+                        "spec_ok": "", "level_note": ""})
+        self.st["level"] = self.base_level()
         self.snapshot_code()
         self.run_smoke()
         return self.hand_out_build()
@@ -286,22 +345,88 @@ class Conductor:
                 return self.send_back("test first", report)
             if note:
                 notes.append(note)
+        level = self.measure_level()
         self.st["review_pass"] = "spec"
-        if self.gate_on and self.checks_ran:
-            small = self.small_note()
-            if small:
+        if level == 0:
+            if self.gate_on and self.checks_ran:
+                small = self.small_note()
+                if small:
+                    self.st["review_pass"] = "single"
+                    self.log("REVIEW-SMALL")
+                    notes.append(small)
+        else:
+            notes.append(self.get("level_note"))
+            if level < 3:
                 self.st["review_pass"] = "single"
-                self.log("REVIEW-SMALL")
-                notes.append(small)
+                self.log("REVIEW-SINGLE")
+                notes.append("one review covers the spec and quality passes: do the spec checklist first")
+        if self.st["review_pass"] == "spec" and self.get("spec_ok"):
+            self.st["review_pass"] = "quality"
+            notes.append("the spec review passed in an earlier round, so this round has the quality review only")
+        if level == 2 and self.num("round") >= FULL_ROUNDS:
+            notes.append("this is round %d: from now on only a blocker finding sends the ticket back. majors and "
+                         "minors go to the plan's followups.md and the ticket passes" % (self.num("round") + 1))
         self.st["review_notes"] = NOTE_SEP.join(notes)
         return self.hand_out_review()
+
+    def base_level(self):
+        """The level known before the build, from the ticket at base: its `Level:` line, raised to 3 by
+        `Review: full`, `Type: convert` or `Floor: allow flow-edit`. 0 when none of these is there."""
+        text = self.ticket_at_base()
+        level = proof.declared_level(text)
+        why = ""
+        if level < 3:
+            if proof.review_mode(text) == "full":
+                why = "the ticket says Review: full"
+            elif CONVERT.search(text.split("\n## ", 1)[0]):
+                why = "the ticket is Type: convert"
+            elif self.flow_edit_allowed():
+                why = "the ticket edits the flow's own code (Floor: allow flow-edit)"
+        if why:
+            level = 3
+        self.st["level_note"] = self.describe_level(level, why) if level else ""
+        return level
+
+    def describe_level(self, level, why=""):
+        return "this ticket is level %d (%s)%s" % (level, LEVEL_NAMES[level], ", raised because " + why if why else "")
+
+    def commands_at_base(self):
+        """commands.md as it was at the base commit, or "" when it was not there."""
+        rel = proof.repo_relative(self.commands)
+        try:
+            return git.show_text("%s:%s" % (self.get("base"), rel))
+        except RuntimeError:
+            return ""
+
+    def measure_level(self):
+        """Raise the ticket's level from the built diff, never lower it: a path on commands.md's
+        `Sensitive:` line makes it 3, and a level 1 diff over the small limits makes it 2."""
+        level = self.num("level")
+        why = ""
+        patterns = tickets.sensitive_patterns(self.commands_at_base())
+        if patterns and level < 3:
+            hit = [p for p in git.diff_names(self.get("base"), "HEAD", self.plan.as_posix())
+                   if tickets.matches_sensitive(p, patterns)]
+            if hit:
+                level, why = 3, "the diff touches a Sensitive path in commands.md: %s" % ", ".join(hit[:3])
+        if level == 1:
+            files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix())
+            if binary or files > self.small_files or lines > self.small_lines:
+                level, why = 2, "the diff (%d files, %d lines%s) is over the small limits" % (
+                    files, lines, ", a binary file" if binary else "")
+        if why:
+            self.st["level_note"] = self.describe_level(level, why)
+        self.st["level"] = level
+        if level:
+            self.log("LEVEL-%d" % level)
+        return level
 
     def small_note(self):
         """The note for the reviewer when the built diff is small enough for one review, else ""."""
         base = self.ticket_at_base()
         if proof.review_mode(base) != "auto" or self.small_lines <= 0:
             return ""
-        if re.search(r"^Type:[ \t]*convert\b", base.split("\n## ", 1)[0], re.IGNORECASE | re.MULTILINE):
+        if CONVERT.search(base.split("\n## ", 1)[0]):
             return ""
         files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix())
         if binary or files > self.small_files or lines > self.small_lines:
@@ -465,20 +590,22 @@ class Conductor:
             raise Stop("the reviewer changed tracked files, which a reviewer must never do")
         verdict = self.get("verdict")
         self.st["verdict"] = ""
-        if verdict == "pass" and self.get("review_pass", "spec") == "spec":
+        review_pass = self.get("review_pass", "spec")
+        raised = review_pass == "single" and self.num("level") == 3  # a reviewer raised it in this pass
+        if verdict == "pass" and (review_pass == "spec" or raised):
             self.st["review_pass"] = "quality"
             self.st["review_attempt"] = 0
+            self.st["spec_ok"] = "1"
             return self.hand_out_review()
         if verdict == "pass":
-            self.st["phase"] = ""
-            self.st["done"] = self.num("done") + 1
-            self.st["session_done"] = self.num("session_done") + 1
-            self.save()
-            return self.pick_ticket()
+            return self.pass_ticket()
         if verdict == "fail":
             findings = state.read_text(self.findings_file, "findings") or ""
-            return self.send_back({"quality": "quality review", "single": "single review"}.get(
-                self.get("review_pass"), "spec review"), findings)
+            source = {"quality": "quality review", "single": "single review"}.get(review_pass, "spec review")
+            if (self.num("level") == 2 and self.num("round") >= FULL_ROUNDS and review_pass != "spec"
+                    and followups_only(findings)):
+                return self.pass_with_followups(source, findings)
+            return self.send_back(source, findings)
         if self.num("review_attempt") >= self.max_retries:
             raise Stop("no review verdict for %s after %d attempt(s)" % (self.ticket_name(), self.max_retries))
         return self.hand_out_review()
@@ -508,10 +635,21 @@ class Conductor:
         except OSError as err:
             raise Stop("cannot read the review reply %s: %s" % (reply, err.strerror))
         found = ""
+        asked = 0
         for line in text.splitlines():
             match = VERDICT.match(line)
             if match:
                 found = match.group(1).lower()
+            match = LEVEL_LINE.match(line)
+            if match:
+                asked = max(asked, int(match.group(1)))
+        level = self.num("level")
+        if asked > (level or 2):  # a ticket without a Level line already gets level 2 reviews or more
+            self.st["level"] = asked
+            self.st["level_note"] = self.describe_level(asked, "a reviewer raised it")
+            notes = [n for n in self.get("review_notes").split(NOTE_SEP) if n and not n.startswith("this ticket is level")]
+            self.st["review_notes"] = NOTE_SEP.join([self.st["level_note"]] + notes)
+            self.log("LEVEL-RAISE")
         if found == "fail":
             state.write_text(self.findings_file, "\n".join(text.splitlines()[:120]) + "\n", "findings")
         self.st["verdict"] = found or "none"

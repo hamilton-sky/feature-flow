@@ -1,5 +1,6 @@
 """Reading and changing ticket files."""
 
+import fnmatch
 import os
 import re
 from pathlib import Path
@@ -49,11 +50,34 @@ def commands_value(path, key):
     path = Path(path)
     if not path.is_file():
         return ""
-    for line in path.read_text(encoding="utf-8").splitlines():
+    return commands_text_value(path.read_text(encoding="utf-8"), key)
+
+
+def commands_text_value(text, key):
+    """commands_value over the text of a commands.md, for a copy read from git."""
+    for line in text.splitlines():
         if re.match(r"^%s:" % re.escape(key), line):
             value = re.sub(r"^%s:[ \t]*" % re.escape(key), "", line).replace("`", "")
             return "" if value.startswith("<") else value
     return ""
+
+
+def sensitive_patterns(text):
+    """The path patterns on the `Sensitive:` line of a commands.md text, split on commas and spaces."""
+    return [p for p in re.split(r"[,\s]+", commands_text_value(text, "Sensitive")) if p]
+
+
+def matches_sensitive(path, patterns):
+    """True when the repo-relative path matches a pattern: `dir/` is that folder and everything under it,
+    anything else is an fnmatch glob over the whole path (`*` crosses `/`)."""
+    for pattern in patterns:
+        pattern = pattern[2:] if pattern.startswith("./") else pattern
+        if pattern.endswith("/"):
+            if path.startswith(pattern):
+                return True
+        elif fnmatch.fnmatchcase(path, pattern):
+            return True
+    return False
 
 
 # The ticket graph, read the way the bash flow-status script's awk program reads it.
@@ -110,6 +134,7 @@ class Graph:
         self.hasblk, self.hastype, self.hastf, self.hastitle = set(), set(), set(), set()
         self.typ, self.tf = {}, {}
         self.hasreview, self.review = set(), {}
+        self.haslevel, self.level = set(), {}
         self.mentions = {}
         for p in paths:
             self._read(p)
@@ -151,6 +176,9 @@ class Graph:
             if head and line.startswith("Review:") and cur not in self.hasreview:
                 self.hasreview.add(cur)
                 self.review[cur] = _first_word(line.lower(), "review:")
+            if head and line.startswith("Level:") and cur not in self.haslevel:
+                self.haslevel.add(cur)
+                self.level[cur] = _first_word(line.lower(), "level:")
             if line.startswith("# ") and cur not in self.hastitle:
                 self.hastitle.add(cur)
                 self.title[cur] = line[2:]

@@ -50,14 +50,19 @@ def render(feature, rows):
     tickets, run, stops = summarize(rows)
     out = ["report for %s: %d log line(s)" % (feature, len(rows)), ""]
     if tickets:
-        out.append("ticket  builds  reviews  small  quick-gate  full-gate  failures")
+        out.append("ticket  level  builds  reviews  single  quick-gate  full-gate  failures")
         for num, row in tickets.items():
             fails = ", ".join("%s x%d" % (name, row[name]) for name in FAILS if row.get(name))
-            out.append("%-6s  %6d  %7d  %5d  %10d  %9d  %s"
-                       % (num, row.get("BUILD", 0), row.get("REVIEW", 0), row.get("REVIEW-SMALL", 0),
+            level = max([n for n in (1, 2, 3) if row.get("LEVEL-%d" % n)] or [0])
+            out.append("%-6s  %5s  %6d  %7d  %6d  %10d  %9d  %s"
+                       % (num, level or "-", row.get("BUILD", 0), row.get("REVIEW", 0),
+                          row.get("REVIEW-SMALL", 0) + row.get("REVIEW-SINGLE", 0),
                           row.get("GATE-QUICK", 0), row.get("GATE-FULL", 0), fails or "none"))
         reworked = [n for n, row in tickets.items() if row.get("BUILD", 0) > 1]
+        followups = [n for n, row in tickets.items() if row.get("PASS-FOLLOWUPS")]
         out += ["", "tickets built more than once (reworked): %s" % (", ".join(reworked) or "none")]
+        if followups:
+            out.append("tickets passed with follow-ups (see the plan's followups.md): %s" % ", ".join(followups))
     else:
         out.append("no ticket events yet")
     out += ["", "starts %d, takeovers %d, resets %d, handoffs %d, stops %d"

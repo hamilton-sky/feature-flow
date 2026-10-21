@@ -162,6 +162,17 @@ def review_mode(text):
     return "auto"
 
 
+def declared_level(text):
+    """1, 2 or 3 from the ticket's `Level:` header line (before its first `## ` heading), else 0 (none)."""
+    for line in text.split("\n"):
+        if line.startswith("## "):
+            break
+        match = re.match(r"^Level:[ \t]*([123])\b", line)
+        if match:
+            return int(match.group(1))
+    return 0
+
+
 def repo_relative(path):
     """path as a posix path relative to the repository root (git's own spelling), when it is inside it."""
     top = git.toplevel()
