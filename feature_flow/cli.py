@@ -8,10 +8,10 @@ from pathlib import Path
 from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
-USAGE = ("usage: python3 scripts/flow.py <feature> start | next | prompt | verdict <file> | reset [NN]\n"
+USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] | verdict <file> [lane] | reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
 COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset")
-ARGS = {"verdict": (3,), "plan-prompt": (3, 4), "reset": (2, 3)}
+ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3)}
 RUNNER_ONLY = ("next", "prompt", "verdict")
 
 
@@ -86,7 +86,7 @@ def run(args, scripts, trusted):
     try:
         conductor = Conductor(feature, scripts)
         if command == "verdict":
-            line = conductor.verdict(args[2])
+            line = conductor.verdict(*args[2:])
         elif command == "plan-prompt":
             line = conductor.plan_prompt(args[2], args[3] if len(args) == 4 else None)
         elif command == "plan-review-prompt":
@@ -94,13 +94,13 @@ def run(args, scripts, trusted):
         elif command == "plan-accept":
             line = conductor.plan_accept()
         elif command == "prompt":
-            line = conductor.prompt()
+            line = conductor.prompt(*args[2:])
         elif command == "reset":
             line = conductor.reset(args[2] if len(args) == 3 else None)
         elif command == "start":
             line = conductor.start()
         else:
-            line = conductor.next()
+            line = conductor.next(*args[2:])
     except NoPhase as err:
         print(err, file=sys.stderr)
         return 2

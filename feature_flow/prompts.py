@@ -14,13 +14,16 @@ GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-
           "review-single": "review-single.md", "plan": "plan.md", "plan-review": "plan-review.md"}
 
 
+REPO = "."  # where an install's .feature-flow/ is: the working folder, or the main worktree while a lane works
+
+
 def find_file(scripts, folder, name):
     """folder/name beside the scripts folder (a checkout), else in .feature-flow/ (an install).
 
     A candidate counts only when it holds the file, so an unrelated guides/ or agents/ folder
     in the user's repo does not hide the installed one.
     """
-    for root in (Path(scripts).parent, Path(".feature-flow")):
+    for root in (Path(scripts).parent, Path(REPO) / ".feature-flow"):
         path = root / folder / name
         if path.is_file():
             return path
@@ -68,7 +71,7 @@ def _templates(text, guides):
                   lambda m: "%s (%s)" % (m.group(1), span(base + "/templates/" + m.group(2))), text)
 
 
-def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
+def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None):
     role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
     guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
@@ -90,6 +93,14 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False):
         for note in notes:
             task += "\nThe conductor notes: %s" % note
         intro = "The review guide follows. Follow it exactly."
+    if workdir is not None:
+        folder, branch = workdir
+        task = ("Work in the folder `%s`: a git worktree on the branch `%s`, made for this ticket while other tickets "
+                "are built beside it in their own folders. Change to it first (`cd %s`) and run every command there. "
+                "The ticket, the plan and every path in this prompt are relative to it. %s outside it, and do not "
+                "switch its branch.\n%s" % (folder, branch, shlex.quote(folder),
+                                            "Never change a file" if phase == "build" else "Read only; never change a file",
+                                            task))
     parts = [role, "---", intro, guide, "---", task]
     if retry and phase == "build":
         parts += ["The debugging guide follows. Follow it before you change any code.",

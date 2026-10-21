@@ -1,7 +1,8 @@
 """The ticket graph reader, ported from the bash script of the same name.
 
-usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --mermaid [plain] | --json]
+usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json]
 Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready.
+--ready prints every ready ticket path, one per line, with the same exit codes.
 """
 
 import os
@@ -12,7 +13,7 @@ import sys
 
 from feature_flow import suggest, tickets
 
-USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --counts | --check | --lint | --mermaid [plain] | --json]"
+USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json]"
 
 
 def _env(name, default):
@@ -87,9 +88,9 @@ def _report(g, mode, opt, feature, out, err, root="plans"):
             unfinished += 1
     nready = sum(1 for t in g.order if ready[t])
 
-    if mode == "--next":
+    if mode in ("--next", "--ready"):
         if first is not None:
-            out.write(g.path[first] + "\n")
+            out.write("\n".join(g.path[t] for t in g.order if ready[t] and (mode == "--ready" or t == first)) + "\n")
             return 0
         if unfinished == 0:
             err.write("COMPLETE\n")
@@ -211,6 +212,8 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
             errors.append(lab + ": Review must be full or auto")
         if t in g.haslevel and g.level[t] not in ("1", "2", "3"):
             errors.append(lab + ": Level must be 1, 2 or 3")
+        if t in g.hastouches and not g.touches[t]:
+            errors.append(lab + ": Touches must name at least one path")
         for d in g.blk[t]:
             if d == t:
                 errors.append(lab + ": blocked by itself")

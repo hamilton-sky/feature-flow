@@ -242,7 +242,7 @@ class PlantedBytecode(Drive):
     """A .pyc compiled from an edited conductor.py, with the source's mtime and size and the source
     put back, is never run by the drive."""
 
-    HONEST, FORGED = b'"BUILD %s %s %s"', b'"BXILD %s %s %s"'
+    HONEST, FORGED = b'"BUILD %s %s %s%s"', b'"BXILD %s %s %s%s"'
 
     def plant(self):
         source = self.repo.path("feature_flow/conductor.py")
