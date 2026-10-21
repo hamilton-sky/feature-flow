@@ -57,6 +57,12 @@ def diff_size(base, head, exclude):
     return files, lines, binary
 
 
+def diff_names(base, head, exclude):
+    """The paths changed in base..head outside the exclude path, renames off as in diff_size."""
+    out = _git("diff", "--name-only", "--no-renames", base, head, "--", ".", ":(exclude)%s" % exclude).stdout
+    return [line for line in out.splitlines() if line.strip()]
+
+
 # the installer's record of what it wrote: the paths, and the sha256 of each as it wrote it
 INSTALLED = Path(".feature-flow") / "installed.txt"
 HASHES = Path(".feature-flow") / "installed.sha256"

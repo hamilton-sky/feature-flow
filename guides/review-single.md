@@ -64,7 +64,11 @@ This is a small ticket, so one pass covers both the spec and the quality. Do the
 - code that need not exist: something the standard library, the platform or the codebase already provides; a feature nobody asked for; a longer way of doing a shorter thing
 - anything a later ticket will trip over
 
-Rate each finding blocker, major or minor, name the file, and say what to change.
+Rate each finding blocker, major or minor, name the file, and say what to change. A `blocker` is a bug, a hole or lost data; a `major` is something that should be fixed before the feature ships; a `minor` is a nicety. From a level 2 ticket's third round, the conductor sends the ticket back only for a `blocker`, or a Done when, scope or test first failure, and writes the majors to the plan's `followups.md`.
+
+## Raising the ticket's level
+
+The conductor's notes say the ticket's level (1 light, 2 standard, 3 boundary). If the change touches a trust boundary the level does not account for (auth, tokens or secrets, who may do what, money, cost or run limits, data that could be lost, the flow's own code, anything a hostile caller reaches), put a line `LEVEL: 3` (or `LEVEL: 2` for a level 1 ticket that is really ordinary code) flush left above your verdict line, and say why in a finding. A level can only go up: a lower `LEVEL:` line is ignored. A raise to 3 during a single pass adds a quality review after it.
 
 ## Output
 

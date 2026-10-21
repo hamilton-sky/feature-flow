@@ -75,13 +75,24 @@ class ReviewPasses(unittest.TestCase):
         self.assertIn("## Review findings (round 1, quality review)", self.repo.path(T1).read_text(encoding="utf-8"))
         self.assertEqual(self.repo.state()["review_pass"], "spec")
 
-    def test_review_pass_after_a_send_back_the_review_starts_with_the_spec_pass(self):
+    def test_review_pass_after_a_quality_send_back_only_the_quality_pass_runs_again(self):
         self.to_quality()
         self.assertEqual(self.reply("1. major x.py: bad\nREVIEW: FAIL\n"), (0, "OK"))
         self.repo.flow("next")
         self.repo.resolve(T1, "feat: again")
         rc, out = self.repo.flow("next")
         self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        prompt = self.repo.flow("prompt")[1]
+        self.assertIn("Verdict 2: is it good?", prompt)
+        self.assertIn("the spec review passed in an earlier round", prompt)
+
+    def test_review_pass_after_a_spec_send_back_the_review_starts_with_the_spec_pass(self):
+        self.repo.flow("next")
+        self.assertEqual(self.reply("not met\nREVIEW: FAIL\n"), (0, "OK"))
+        self.repo.flow("next")
+        self.repo.resolve(T1, "feat: again")
+        rc, out = self.repo.flow("next")
         self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
         self.assertIn("Verdict 1: does it meet the ticket?", self.repo.flow("prompt")[1])
 
