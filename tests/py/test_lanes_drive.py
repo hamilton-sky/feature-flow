@@ -123,7 +123,7 @@ class LanesDrive(unittest.TestCase):
         self.assertEqual(drive.fill(), "WAIT 1,2")
         self.assertEqual([p[:2] for p in drive.pending], [["BUILD", "1"], ["BUILD", "2"]])
         prompt = drive.call("prompt", "1")[1]
-        self.assertIn("Work in the folder `%s`" % drive.lane_dir(1), prompt)
+        self.assertIn("Work in the folder `%s`" % drive.lane_dir(1).resolve(), prompt)  # macOS: /var is /private/var
         self.assertIn("ff/f/01", prompt)
         self.assertEqual(drive.build("02", {"b/y.txt": "y\n"}, append="- (02) b learned"), "WAIT 1,2")
         self.assertEqual(drive.build("01", {"a/x.txt": "x\n"}, append="- (01) a learned"), "WAIT 1,2")
