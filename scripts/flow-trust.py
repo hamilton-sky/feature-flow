@@ -46,7 +46,7 @@ GUIDES = ("build.md", "review.md", "review-quality.md", "review-single.md", "rev
 SKILL_GUIDES = ("brief.md", "show.md")  # read by the skills themselves
 TEMPLATES = ("commands.md", "learnings.md", "map.md", "spec.md", "ticket.md", "ui-mockup.md")  # guides/templates/
 ROLES = ("ticket-builder.md", "ticket-reviewer.md", "feature-planner.md", "plan-reviewer.md", "flow-scout.md",
-         "flow-web.md")  # prompts.ROLES and the scouts
+         "flow-web.md", "flow-architect.md", "flow-designer.md", "flow-po.md")  # prompts.ROLES
 OWNED = (".feature-flow/feature_flow", ".feature-flow/guides", ".feature-flow/agents",
          ".claude/skills/feature-flow", ".agents/skills/feature-flow", ".agents/flow-roles")
 STATE_DIR = Path(".feature-flow") / "state"

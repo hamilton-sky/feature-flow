@@ -23,7 +23,7 @@ Write only inside `<draft>` (on a findings round, rewrite the draft files there)
 
 ## Step 1: Read the brief
 
-The brief is the whole ask. Plan what it says: its What, Why, scope and bar. Each line under Unsure is an assumption you may keep or replace with what the code shows; say which in your reply. Lines under `Decided:` are the user's answers and win over everything above them. A gap the code cannot close goes under Open questions in `map.md`, or becomes a `settle` ticket when later tickets depend on it. If the brief has no bar, stop and reply `PLAN: QUESTIONS`.
+The brief is the whole ask. Plan what it says: its What, Why, scope and bar. Each line under Unsure is an assumption you may keep or replace with what the code shows; say which in your reply. Lines under `Decided:` are the user's answers and win over everything above them. Lines under `Consulted:` are answers from the architect, designer or product owner: follow them unless the code shows they are wrong, and say so in your reply. A gap the code cannot close goes under Open questions in `map.md`, or becomes a `settle` ticket when later tickets depend on it. If the brief has no bar, stop and reply `PLAN: QUESTIONS`.
 
 If your prompt carries review findings from an earlier round, the draft is already there: fix each finding in it, or say in your reply why it stays.
 
@@ -106,8 +106,8 @@ GRAPH:
 DROPPED: <each dropped ticket and why, or none>
 ASSUMED: <each Unsure line: kept, or replaced by what the code showed>
 SOURCES: <outside sources relied on, or none; say if you had no web access>
-OPEN QUESTIONS: <what only the user can decide, or none>
+OPEN QUESTIONS: <each starting `architect:`, `designer:`, `po:` or `user:`, or none>
 PLAN: READY
 ```
 
-End with `PLAN: QUESTIONS` instead when the draft cannot be finished without an answer from the user. Then list the questions under OPEN QUESTIONS and leave the draft as far as you got.
+End with `PLAN: QUESTIONS` instead when the draft cannot be finished without an answer. Start each open question with who should answer it: `architect:` (a technical design choice), `designer:` (how something looks or behaves for its user), `po:` (what the feature must do where the brief is silent) or `user:` (anything that changes what the user gets). The flow asks the first three and plans again with their answers under `Consulted:` in the brief; only the `user:` ones reach the user. Then list the questions under OPEN QUESTIONS and leave the draft as far as you got.

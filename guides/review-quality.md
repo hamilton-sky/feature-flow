@@ -62,6 +62,10 @@ Rate each finding `blocker`, `major` or `minor`, name the file, and say what to 
 
 Rate honestly: a `blocker` is a bug, a hole or lost data; a `major` is something that should be fixed before the feature ships; a `minor` is a nicety. From a level 2 ticket's third round, the conductor sends the ticket back only for a `blocker`, and writes the majors to the plan's `followups.md`.
 
+## Asking instead of judging
+
+If you cannot reach a verdict without an answer that is not yours to give (a design choice the spec does not settle: the architect's; how something should look or behave for its user: the designer's; what the feature must do where the spec is silent: the product owner's), do not guess. Write the question under a `## Question` heading (what you need, what you checked, the options you see) and end your reply with exactly `REVIEW: ASK architect`, `REVIEW: ASK designer` or `REVIEW: ASK po` as its last line, in place of the verdict. The flow asks that role and hands you the review again with the answer. A question only the user can answer is `REVIEW: ASK user`.
+
 ## Output
 
 Use exactly this shape. Keep it short; no praise.
