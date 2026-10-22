@@ -11,10 +11,10 @@ ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-q
          "review-single": "ticket-reviewer.md",
          "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md",
          "scout": "flow-scout.md", "web": "flow-web.md", "ask-architect": "flow-architect.md",
-         "ask-designer": "flow-designer.md", "ask-po": "flow-po.md"}
+         "ask-designer": "flow-designer.md", "ask-po": "flow-po.md", "replan": "feature-planner.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
           "review-single": "review-single.md", "review-feature": "review-feature.md", "plan": "plan.md",
-          "plan-review": "plan-review.md"}
+          "plan-review": "plan-review.md", "replan": "replan.md"}
 
 
 REPO = "."  # where an install's .feature-flow/ is: the working folder, or the main worktree while a lane works
@@ -157,3 +157,17 @@ def plan(phase, scripts, feature, draft, brief, findings=""):
         parts += ["## Review findings from the last round", "The draft is already in `%s`. Fix each finding in it, "
                   "or say in your reply why it stays." % draft, findings.strip("\n")]
     return "\n\n".join(parts) + "\n"
+
+
+def replan(scripts, feature, plan, open_tickets):
+    """The feature-planner's prompt to fold a running feature's open tickets into fewer, in place."""
+    role_text = role(scripts, ROLES["replan"])
+    guide_file = find_file(scripts, "guides", GUIDES["replan"])
+    guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent)
+    guide = guide.replace("<feature>", feature).replace("<plan>", plan)
+    task = ("Your task: the feature `%s` is over its time budget. Re-plan its open tickets in `%s` into fewer, as "
+            "the re-plan guide says. Edit only the ticket files listed below and add new ones beside them. Do not "
+            "commit. Your final reply must end with exactly `PLAN: READY` or `PLAN: QUESTIONS`." % (feature, plan))
+    listing = "\n".join("- `%s`" % path for path in open_tickets)
+    return "\n\n".join([role_text, "---", "The re-plan guide follows. Follow it exactly.", guide, "---", task,
+                         "## The open tickets", listing]) + "\n"

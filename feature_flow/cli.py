@@ -9,15 +9,17 @@ from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
 USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] | verdict <file> [lane] | fast on|off\n"
+         "       python3 scripts/flow.py <feature> budget [<minutes>|+<minutes>|off] | replan-prompt\n"
          "       python3 scripts/flow.py <feature> scouts [lane] | scout-prompt <k> [lane] | plan-scouts <brief> | plan-scout-prompt <k>\n"
          "       python3 scripts/flow.py <feature> consult-prompt architect|designer|po <question file>\n"
          "       python3 scripts/flow.py <feature> reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
 COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset", "fast", "scouts",
-            "scout-prompt", "plan-scouts", "plan-scout-prompt", "consult-prompt")
+            "scout-prompt", "plan-scouts", "plan-scout-prompt", "consult-prompt", "budget", "replan-prompt")
 ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
-        "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,)}
-RUNNER_ONLY = ("next", "prompt", "verdict", "fast", "scouts", "scout-prompt")
+        "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,), "budget": (2, 3),
+        "replan-prompt": (2,)}
+RUNNER_ONLY = ("next", "prompt", "verdict", "fast", "scouts", "scout-prompt", "budget", "replan-prompt")
 
 
 def main(argv=None, scripts=None):
@@ -114,6 +116,10 @@ def run(args, scripts, trusted):
             line = conductor.consult_prompt(args[2], args[3])
         elif command == "fast":
             line = conductor.fast_switch(args[2])
+        elif command == "budget":
+            line = conductor.budget_cmd(*args[2:])
+        elif command == "replan-prompt":
+            line = conductor.replan_prompt()
         elif command == "start":
             line = conductor.start()
         else:
@@ -128,7 +134,7 @@ def run(args, scripts, trusted):
         print(line)
         return 1
     out = sys.stdout
-    if command in ("plan-prompt", "plan-review-prompt", "plan-scout-prompt", "consult-prompt") and hasattr(out, "reconfigure"):
+    if command in ("plan-prompt", "plan-review-prompt", "plan-scout-prompt", "consult-prompt", "replan-prompt") and hasattr(out, "reconfigure"):
         # the plan guides hold non-ASCII text, which a Windows console code page cannot print
         out.reconfigure(encoding="utf-8")
     print(line, end="" if line.endswith("\n") else "\n", file=out)
