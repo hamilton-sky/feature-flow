@@ -41,6 +41,14 @@ def review(base, tasks):
              % (base, base, tasks))]
 
 
+def consult(role, question):
+    """[(agent, role, question)] before the architect, designer or product owner answers a question."""
+    lens = {"po": "product owner"}.get(role, role)
+    return [("flow-scout", lens,
+             "The %s is about to answer the question below for a ticket of this feature. Gather what it needs from "
+             "the repository and the plan, without answering it yourself.\n\nThe question:\n\n%s" % (lens, question))]
+
+
 def plan(brief):
     """[(agent, role, question)] before the planner drafts a plan from the brief."""
     tail = "\n\n## The brief\n\n" + brief.strip("\n")

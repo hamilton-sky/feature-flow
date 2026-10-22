@@ -259,6 +259,16 @@ Before a planner, builder or reviewer starts, the session can spawn cheap helper
 
 `scouts [lane]` lists `SCOUT <k> <agent> <reply file>` lines (or `NONE`) and clears the last ones' replies; `scout-prompt <k> [lane]` prints one scout's prompt. The session saves each reply into its file, and the phase's `prompt` adds them under `## Scout findings (unverified)`, cut to 60 lines each. A reply saved for one phase never reaches another. Retries and later rounds get no scouts. `FLOW_SCOUTS=off` turns them off.
 
+## Questions for the architect, designer or product owner
+
+A builder, reviewer or planner that hits a question it should not decide alone asks it instead of guessing, and the flow pauses that job until the right role answers.
+
+- **Who answers.** `flow-architect` answers technical design questions, `flow-designer` answers UI and UX questions, and `flow-po` answers what the feature must do where the spec is silent. Each is a fresh, read only agent that sees the plan, the ticket as it was planned and the code, never the asker's reasoning or a ticket's Answer. Each gets one scout with its own lens first.
+- **A builder** appends `## Ask: architect|designer|po` with the question to its ticket and stops. `next` hands out `ASK <role> <ticket> <NN> <sha>`. The answer goes into the ticket under `## Consulted (<role>)`, and the ticket is built again. The question does not count as a failed attempt.
+- **A reviewer** ends with a `## Question` and `REVIEW: ASK <role>`. The answer comes back in the next review's notes. On the fast path's feature review, the reviewer writes the question as a finding, and the fix ticket's builder can ask it.
+- **The planner** starts each open question with `architect:`, `designer:`, `po:` or `user:`. The session runs `consult-prompt <role> <question file>` for the first three, adds the answers to the brief under `Consulted:`, kept apart from your `Decided:` lines, and plans again.
+- **What still comes to you.** Any question the asker marks `user`, any answer a consultant ends with `ANSWER: USER` (it changes what you get, so its options come to you), and a third consultant question on one ticket all stop the run with the question, written into the ticket under `## Ask: user`. You answer under `## Consulted (user)` at the end of the ticket, commit, and run `next`. A reviewer's question for you reopens the ticket, so its builder builds again with your answer.
+
 ## The fast path
 
 `/feature-flow <feature> fast` trades per-ticket reviews for speed. The planner gets `Pace: fast` in the brief and writes a short plan of fewer, larger tickets, and the plan reviewer is skipped. With `FLOW_FAST=1` on `start`, a ticket below level 3 (one with no `Level:` line too) that passes the gate, the floor guard and its Done when checks passes at once (`REVIEW-DEFERRED` in the log). With `FLOW_GATE=off` nothing would check it, so every ticket keeps its review. A level 3 ticket, or one that touches a `Sensitive:` path, still gets its own reviews.

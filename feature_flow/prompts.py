@@ -10,7 +10,8 @@ from pathlib import Path
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
          "review-single": "ticket-reviewer.md",
          "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md",
-         "scout": "flow-scout.md", "web": "flow-web.md"}
+         "scout": "flow-scout.md", "web": "flow-web.md", "ask-architect": "flow-architect.md",
+         "ask-designer": "flow-designer.md", "ask-po": "flow-po.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
           "review-single": "review-single.md", "review-feature": "review-feature.md", "plan": "plan.md",
           "plan-review": "plan-review.md"}

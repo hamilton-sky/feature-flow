@@ -59,6 +59,10 @@ If the ticket says `Test first: yes`: check that the diff adds or changes a test
 
 The conductor's notes say the ticket's level (1 light, 2 standard, 3 boundary). If the change touches a trust boundary the level does not account for (auth, tokens or secrets, who may do what, money, cost or run limits, data that could be lost, the flow's own code, anything a hostile caller reaches), put a line `LEVEL: 3` (or `LEVEL: 2` for a level 1 ticket that is really ordinary code) flush left above your verdict line, and say why in a finding. A level can only go up: a lower `LEVEL:` line is ignored. A raise to 3 during a single pass adds a quality review after it.
 
+## Asking instead of judging
+
+If you cannot reach a verdict without an answer that is not yours to give (a design choice the spec does not settle: the architect's; how something should look or behave for its user: the designer's; what the feature must do where the spec is silent: the product owner's), do not guess. Write the question under a `## Question` heading (what you need, what you checked, the options you see) and end your reply with exactly `REVIEW: ASK architect`, `REVIEW: ASK designer` or `REVIEW: ASK po` as its last line, in place of the verdict. The flow asks that role and hands you the review again with the answer. A question only the user can answer is `REVIEW: ASK user`.
+
 ## Output
 
 Use exactly this shape. Keep it short; no praise.

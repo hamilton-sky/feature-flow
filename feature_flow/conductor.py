@@ -9,6 +9,7 @@ import hashlib
 import os
 import re
 import secrets
+import shlex
 import shutil
 from pathlib import Path
 
@@ -16,7 +17,10 @@ from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts
 
 
 NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
-VERDICT = re.compile(r"^REVIEW: (PASS|FAIL)[ \t\r\f\v]*$")
+VERDICT = re.compile(r"^REVIEW: (PASS|FAIL|ASK (?:architect|designer|po|user))[ \t\r\f\v]*$")
+ANSWER = re.compile(r"^ANSWER: (GIVEN|USER)[ \t\r\f\v]*$")  # the last line of a consultant's reply
+ASK_HEADING = re.compile(r"^## Ask: (architect|designer|po|user)[ \t]*$", re.MULTILINE)  # a builder's question
+MAX_ASKS = 2  # questions one ticket may send to a consultant before the next one goes to the user
 OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
 LEVEL_LINE = re.compile(r"^LEVEL: ([123])[ \t\r\f\v]*$")  # a reviewer raising the ticket's level
 FINDING = re.compile(r"^[ \t]*[0-9]+\.[ \t]+(blocker|major|minor)\b", re.IGNORECASE)
@@ -40,6 +44,25 @@ def followups_only(findings):
         if scope and scope.group(1).strip().upper() != "OK":
             return False
     return bool(severities) and "blocker" not in severities
+
+
+def section_after(text, heading):
+    """The text under the last line that is exactly heading, up to the next `## ` heading or a verdict line."""
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.strip() == heading]
+    if not starts:
+        return ""
+    out = []
+    for line in lines[starts[-1] + 1:]:
+        if line.startswith("## ") or VERDICT.match(line) or ANSWER.match(line):
+            break
+        out.append(line)
+    return "\n".join(out).strip("\n")
+
+
+def demote(text):
+    """text with its `## ` headings made `### `, so it cannot open a section of the ticket it is written into."""
+    return re.sub(r"(?m)^## ", "### ", text)
 
 
 def owner_hash(token):
@@ -396,7 +419,7 @@ class Conductor:
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                         "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
-                        "spec_ok": "", "level_note": ""})
+                        "spec_ok": "", "level_note": "", "asks": 0, "ask_role": "", "ask_from": ""})
         self.st["level"] = self.base_level()
         self.snapshot_code()
         self.run_smoke()
@@ -436,6 +459,9 @@ class Conductor:
         if status not in tickets.DONE:
             if status in tickets.RESET:
                 tickets.set_open(self.ticket())
+            role, question = self.open_ask()
+            if role:
+                return self.hand_out_ask("build", role, question)
             if self.num("attempt") >= self.max_retries:
                 raise Stop("%s is still unresolved after %d attempt(s)" % (self.ticket_name(), self.max_retries))
             return self.hand_out_build()
@@ -713,6 +739,8 @@ class Conductor:
             return self.judge_build()
         if phase == "review":
             return self.judge_review()
+        if phase == "ask":
+            return self.judge_ask()
         return self.pick_ticket()
 
     def reset(self, num=None):
@@ -747,6 +775,9 @@ class Conductor:
         kept = {k: self.all[k] for k in ("deferred", "fast") if self.all.get(k)}  # a deferred ticket still owes its review
         for path, kind in ((self.state_file, "state"), (self.findings_file, "findings")):
             state.remove(path, kind)
+        for pattern in ("ask-%s.*" % self.feature, "ask-%s-L*" % self.feature, "scout-%s-*" % self.feature):
+            for path in self.state_file.parent.glob(pattern):
+                path.unlink()
         if not reopened and not had_run and not dropped:
             return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
         self.st = self.all = dict(kept)
@@ -775,6 +806,8 @@ class Conductor:
             return self.hand_out_review()
         if verdict == "pass":
             return self.pass_ticket()
+        if verdict.startswith("ask:"):
+            return self.hand_out_ask("review", verdict[4:], state.read_text(self.ask_file("question")) or "")
         if verdict == "fail":
             if self.lane and self.get("findings_for") != str(self.lane):
                 raise Stop("the review findings on file are not lane %d's: run verdict for this lane, then next %d"
@@ -803,6 +836,8 @@ class Conductor:
 
     def prompt_text(self):
         phase = self.get("phase")
+        if phase == "ask":
+            return self.ask_prompt()
         if phase not in ("build", "review"):
             raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
         try:
@@ -816,14 +851,168 @@ class Conductor:
         except FileNotFoundError as err:
             raise Stop(str(err))
 
+    # ---- questions: a builder or reviewer asks the architect, designer or product owner --
+
+    def ask_file(self, kind):
+        """The question or answer of the pending ask, in the state folder (one pair per lane)."""
+        return self.state_file.parent / ("ask-%s%s.%s" % (self.feature, "-L%d" % self.lane if self.lane else "", kind))
+
+    def open_ask(self):
+        """(role, question) of a `## Ask: <role>` section the builder appended to the ticket and nobody answered
+        yet (no `## Consulted` section after it), else (None, "")."""
+        try:
+            text = Path(self.ticket()).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None, ""
+        asks = list(ASK_HEADING.finditer(text))
+        if not asks:
+            return None, ""
+        last = asks[-1]
+        rest = text[last.end():]
+        if re.search(r"^## Consulted\b", rest, re.MULTILINE):
+            return None, ""
+        return last.group(1), rest.split("\n## ", 1)[0].strip("\n")
+
+    def hand_out_ask(self, source, role, question):
+        """Pause the build or review and hand the question to its consultant. It is not a failed attempt. A
+        question for the user, or one past MAX_ASKS, goes into the ticket as `## Ask: user` and stops the run."""
+        if role == "user" or self.num("asks") >= MAX_ASKS:
+            if role != "user":
+                question = "(for the %s, but this ticket asked its consultants %d times already)\n\n%s" % (
+                    role, MAX_ASKS, question)
+            return self.ask_user(source, question)
+        if source == "build":
+            self.st["attempt"] = self.num("attempt") - 1
+        else:
+            self.st["review_attempt"] = self.num("review_attempt") - 1
+        self.count_run()
+        state.write_text(self.ask_file("question"), question.strip("\n") + "\n")
+        state.remove(self.ask_file("answer"))
+        self.st.update({"phase": "ask", "asks": self.num("asks") + 1, "ask_role": role, "ask_from": source,
+                        "ask_attempt": 1, "verdict": "", "ask_sha": git.head()})
+        self.save()
+        return self.emit_ask()
+
+    def emit_ask(self):
+        return self.emit("ASK %s %s %s %s%s" % (self.get("ask_role"), self.ticket(), self.get("num"), self.get("base"),
+                                                self.lane_word()))
+
+    def ask_user(self, source, question):
+        """Stop for the user. The question goes into the ticket as `## Ask: user` (once), which keeps the run
+        stopped until the user answers under `## Consulted (user)`; the ticket is then built again."""
+        role, _ = self.open_ask()
+        if role != "user":
+            tickets.append_section(self.ticket(), "Ask: user", demote(question))
+            if source == "review":
+                tickets.set_open(self.ticket())
+            if not git.commit_file(self.ticket(), "chore(%s): %s question for the user" % (self.feature, self.get("num"))):
+                raise Stop("cannot commit the question to %s. this session must be allowed to run git commit"
+                           % self.ticket_name())
+        self.st.update({"phase": "build", "attempt": min(self.num("attempt"), self.max_retries - 1)})
+        self.save()
+        where = " (in the lane folder %s)" % Path.cwd() if self.lane else ""
+        raise Stop("%s asks you: %s. answer it at the end of %s%s under `## Consulted (user)`, commit, and run next%s"
+                   % (self.ticket_name(), " ".join(question.split())[:600], proof.repo_relative(self.ticket()), where,
+                      " %d" % self.lane if self.lane else ""))
+
+    def record_answer(self, text):
+        found = ""
+        for line in text.splitlines():
+            match = ANSWER.match(line)
+            if match:
+                found = match.group(1).lower()
+        if found:
+            answer = section_after(text, "## Answer") or "\n".join(l for l in text.splitlines() if not ANSWER.match(l))
+            lines = demote(answer).strip("\n").splitlines()
+            state.write_text(self.ask_file("answer"), "\n".join(lines[:60]) + "\n")
+        self.st["verdict"] = found or "none"
+        self.save()
+        self.log("ANSWER-%s" % (found or "none").upper())
+        return "OK" if found else "RETRY no answer"
+
+    def judge_ask(self):
+        self.check_code()
+        role = self.get("ask_role")
+        if not git.tracked_clean() or git.head() != self.get("ask_sha"):
+            raise Stop("the %s changed tracked files, which a consultant must never do" % role)
+        verdict = self.get("verdict")
+        self.st["verdict"] = ""
+        if verdict not in ("given", "user"):
+            if self.num("ask_attempt") >= self.max_retries:
+                raise Stop("no answer from the %s for %s after %d attempt(s)" % (role, self.ticket_name(), self.max_retries))
+            self.st["ask_attempt"] = self.num("ask_attempt") + 1
+            self.count_run()
+            self.save()
+            return self.emit_ask()
+        question = (state.read_text(self.ask_file("question")) or "").strip("\n")
+        answer = (state.read_text(self.ask_file("answer")) or "").strip("\n")
+        source = self.get("ask_from")
+        self.log("ASK-%s-%s" % (role.upper(), verdict.upper()))
+        if verdict == "user":
+            return self.ask_user(source, "%s\n\nThe %s says only you can decide. Its options:\n\n%s" % (question, role, answer))
+        if source == "review":
+            self.st["phase"] = "review"
+            notes = [n for n in self.get("review_notes").split(NOTE_SEP) if n]
+            notes.append("you asked the %s: %s. the answer: %s" % (role, " ".join(question.split())[:400],
+                                                                  " ".join(answer.split())[:1500]))
+            self.st["review_notes"] = NOTE_SEP.join(notes)
+            return self.hand_out_review()
+        tickets.append_section(self.ticket(), "Consulted (%s)" % role,
+                               "**Question:**\n\n%s\n\n**Answer:**\n\n%s" % (demote(question), answer))
+        if not git.commit_file(self.ticket(), "chore(%s): %s answer from the %s" % (self.feature, self.get("num"), role)):
+            raise Stop("cannot commit the %s's answer to %s. this session must be allowed to run git commit"
+                       % (role, self.ticket_name()))
+        self.st["phase"] = "build"
+        return self.hand_out_build()
+
+    def ask_prompt(self):
+        role = self.get("ask_role")
+        question = (state.read_text(self.ask_file("question")) or "").strip("\n")
+        rel = proof.repo_relative(self.ticket())
+        asker = {"build": "builder", "review": "reviewer"}.get(self.get("ask_from"), "builder")
+        task = ("Your question comes from the %s of ticket %s of the feature `%s`. Read the plan in `%s` (`spec.md`, "
+                "`map.md`, and the mock-ups if there are any) and the ticket as it was planned, with `git show %s:%s`. "
+                "The work started at commit `%s`.\n\nThe question:\n\n%s\n\nDo not edit any file or create a "
+                "commit. Your final reply must end with exactly `ANSWER: GIVEN` or `ANSWER: USER`."
+                % (asker, self.get("num"), self.feature, self.plan.as_posix(), self.get("base"), rel, self.get("base"),
+                   question))
+        if self.lane:
+            task = ("Work in the folder `%s` (`cd %s` first): the worktree of this ticket. Every path here is relative "
+                    "to it.\n\n%s" % (Path.cwd(), shlex.quote(str(Path.cwd())), task))
+        try:
+            role_text = prompts.role(self.scripts, prompts.ROLES["ask-" + role])
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+        return "%s\n\n---\n\n%s\n" % (role_text, task) + self.scout_findings()
+
+    def consult_prompt(self, role, question_file):
+        """A consultant's prompt for a question the planner raised. Stateless, like the other plan commands."""
+        self.no_plan_yet()
+        if "ask-" + role not in prompts.ROLES:
+            raise Stop("consult takes architect, designer or po, not %s" % role)
+        question = self.read_text(question_file, "question").strip("\n")
+        if not question:
+            raise Stop("the question %s is empty" % question_file)
+        brief = self.brief_file.as_posix() if self.brief_file.is_file() else "(no brief saved yet)"
+        task = ("Your question comes from the planner of the feature `%s`, who is drafting its plan from the brief in "
+                "`%s`. Read the brief and the repository.\n\nThe question:\n\n%s\n\nDo not edit any file. Your final "
+                "reply must end with exactly `ANSWER: GIVEN` or `ANSWER: USER`." % (self.feature, brief, question))
+        try:
+            role_text = prompts.role(self.scripts, prompts.ROLES["ask-" + role])
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+        self.log("CONSULT-%s" % role.upper())
+        return "%s\n\n---\n\n%s\n" % (role_text, task)
+
     # ---- scouts: cheap read only helpers the session spawns before a role starts --
 
     def phase_key(self):
         """Names the phase handed out last, so scout replies saved for one phase never reach another."""
         if self.get("phase") == "final":
             return "final:%s:%s:%s" % (self.get("final_base"), self.num("final_round"), self.num("review_attempt"))
-        return "%s:%s:%s:%s:%s:%s" % (self.get("phase"), self.get("num"), self.num("round"), self.num("attempt"),
-                                      self.get("review_pass"), self.num("review_attempt"))
+        return "%s:%s:%s:%s:%s:%s:%s:%s" % (self.get("phase"), self.get("num"), self.num("round"), self.num("attempt"),
+                                            self.get("review_pass"), self.num("review_attempt"), self.num("asks"),
+                                            self.num("ask_attempt"))
 
     def scout_slot(self):
         return "L%d" % self.lane if self.lane else ""
@@ -835,10 +1024,15 @@ class Conductor:
             return []
         phase = self.get("phase")
         tasks = "%s/%s" % (self.plan.as_posix(), os.environ.get("FLOW_TICKETS") or "tasks")
+        if phase == "ask":
+            question = (state.read_text(self.ask_file("question")) or "").strip("\n")
+            return scouts.consult(self.get("ask_role"), question) if self.num("ask_attempt") == 1 else []
         if phase == "final":
             first = self.num("review_attempt") == 1 and not self.num("final_round")
             return scouts.review(self.get("final_base"), tasks) if first else []
         if self.num("round"):
+            return []
+        if self.num("asks"):  # resuming after a question: the first hand-out was scouted already
             return []
         if phase == "build" and self.num("attempt") == 1:
             return scouts.build(proof.repo_relative(self.ticket()), self.get("base"), lanes.touches(self.ticket_at_base()) or [],
@@ -862,7 +1056,7 @@ class Conductor:
         """`SCOUT <k> <agent> <reply file>` lines for the phase handed out last, or NONE. Clears old replies."""
         self.check_owner()
         with self.pending_phase("scouts", lane):
-            if self.get("phase") not in ("build", "review", "final"):
+            if self.get("phase") not in ("build", "review", "final", "ask"):
                 raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
             found = self.scout_questions()
             folder = self.state_file.parent
@@ -964,12 +1158,14 @@ class Conductor:
         return self.record_verdict(reply)
 
     def record_verdict(self, reply):
-        if self.get("phase") not in ("review", "final"):
+        if self.get("phase") not in ("review", "final", "ask"):
             raise NoPhase("no review is pending for %s" % self.feature)
         try:
             text = Path(reply).read_text(encoding="utf-8", errors="replace")
         except OSError as err:
             raise Stop("cannot read the review reply %s: %s" % (reply, err.strerror))
+        if self.get("phase") == "ask":
+            return self.record_answer(text)
         found = ""
         asked = 0
         for line in text.splitlines():
@@ -988,6 +1184,16 @@ class Conductor:
             notes = [n for n in self.get("review_notes").split(NOTE_SEP) if n and not n.startswith("this ticket is level")]
             self.st["review_notes"] = NOTE_SEP.join([self.st["level_note"]] + notes)
             self.log("LEVEL-RAISE")
+        if found.startswith("ask"):
+            role = found.split()[1]
+            question = section_after(text, "## Question") or "\n".join(text.splitlines()[-40:])
+            if self.get("phase") == "final":  # no ticket to pause: the fix ticket's builder asks
+                found = "fail"
+                text = ("The feature reviewer could not judge this without an answer from the %s:\n\n%s\n\nAsk it in "
+                        "this ticket with `## Ask: %s`." % (role, question, role))
+            else:
+                state.write_text(self.ask_file("question"), question + "\n")
+                found = "ask:" + role
         if found == "fail":
             state.write_text(self.findings_file, "\n".join(text.splitlines()[:120]) + "\n", "findings")
         self.st["verdict"] = found or "none"
@@ -1017,7 +1223,7 @@ class Conductor:
 
     def busy_lanes(self):
         """The lanes that hold a ticket: built, in review, or passed and waiting for their merge."""
-        return [k for k in range(1, MAX_LANES + 1) if self.lane_key(k, "phase") in ("build", "review", "merge")]
+        return [k for k in range(1, MAX_LANES + 1) if self.lane_key(k, "phase") in ("build", "review", "ask", "merge")]
 
     @contextlib.contextmanager
     def in_lane(self, lane):
@@ -1061,7 +1267,7 @@ class Conductor:
                 self.st["restore"] = ""
                 self.save()
             phase = self.get("phase")
-            if phase in ("build", "review"):
+            if phase in ("build", "review", "ask"):
                 name = lanes.branch(self.feature, self.get("num"))
                 on = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False).stdout.strip()
                 if on != name:
@@ -1071,6 +1277,8 @@ class Conductor:
                 line = self.judge_build()
             elif phase == "review":
                 line = self.judge_review()
+            elif phase == "ask":
+                line = self.judge_ask()
         return line if line is not None else self.dispatch()
 
     def dispatch(self):

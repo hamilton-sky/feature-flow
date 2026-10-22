@@ -45,6 +45,10 @@ Rate each finding `blocker`, `major` or `minor`, name the file and the ticket, a
 
 On a FAIL, the conductor writes your findings into a new ticket, a builder fixes them, and the feature is reviewed again. So write each finding so a builder who never saw your reasoning can act on it.
 
+## Open questions
+
+If a verdict needs an answer that is not yours to give (a design choice, how something should look or behave, what the feature must do where the spec is silent), do not guess and do not ask: make it a finding that names the question and the options you see. The fix ticket carries it, and its builder can ask.
+
 ## Output
 
 Use exactly this shape. Keep it short; no praise.
