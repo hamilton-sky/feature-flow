@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
          "review-single": "ticket-reviewer.md",
-         "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md"}
+         "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md",
+         "scout": "flow-scout.md", "web": "flow-web.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
           "review-single": "review-single.md", "review-feature": "review-feature.md", "plan": "plan.md",
           "plan-review": "plan-review.md"}
@@ -49,6 +50,11 @@ def _runner(text, scripts):
     return re.sub(r"python3 scripts/([\w.-]+)", lambda m: "python3 " + shlex.quote(base + "/" + m.group(1)), text)
 
 
+def role(scripts, name):
+    """A role file's body, ready to go in front of a prompt."""
+    return _runner(_body(find_file(scripts, "agents", name)), scripts)
+
+
 def _templates(text, guides):
     """Replace the guide's `[label](templates/x.md)` links with the path of the file in the folder it was read from.
 
@@ -73,7 +79,7 @@ def _templates(text, guides):
 
 
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None):
-    role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
+    role_text = role(scripts, ROLES[phase])
     guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
                                ("<base>", sha), ("<base-commit>", sha), ("<start-commit>", sha)):
@@ -102,7 +108,7 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
                 "switch its branch.\n%s" % (folder, branch, shlex.quote(folder),
                                             "Never change a file" if phase == "build" else "Read only; never change a file",
                                             task))
-    parts = [role, "---", intro, guide, "---", task]
+    parts = [role_text, "---", intro, guide, "---", task]
     if retry and phase == "build":
         parts += ["The debugging guide follows. Follow it before you change any code.",
                   _body(find_file(scripts, "guides", "debug.md"))]
@@ -111,7 +117,7 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
 
 def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
     """The prompt for the one review of a whole feature that fast mode defers the reviews of tickets nums to."""
-    role = _runner(_body(find_file(scripts, "agents", ROLES["review-feature"])), scripts)
+    role_text = role(scripts, ROLES["review-feature"])
     guide = _runner(_body(find_file(scripts, "guides", GUIDES["review-feature"])), scripts)
     for placeholder, value in (("<feature>", feature), ("<tasks>", plan + "/" + tasks), ("<plan>", plan), ("<base>", base)):
         guide = guide.replace(placeholder, value)
@@ -122,7 +128,7 @@ def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
             "`REVIEW: PASS` or `REVIEW: FAIL`." % (feature, base, plan, ", ".join(nums) or "none"))
     for note in notes:
         task += "\nThe conductor notes: %s" % note
-    parts = [role, "---", "The feature review guide follows. Follow it exactly.", guide, "---", task]
+    parts = [role_text, "---", "The feature review guide follows. Follow it exactly.", guide, "---", task]
     return "\n\n".join(parts) + "\n"
 
 
@@ -131,7 +137,7 @@ def plan(phase, scripts, feature, draft, brief, findings=""):
 
     Both get the approved brief and the draft folder, never the conversation or each other's reasoning.
     """
-    role = _runner(_body(find_file(scripts, "agents", ROLES[phase])), scripts)
+    role_text = role(scripts, ROLES[phase])
     guide_file = find_file(scripts, "guides", GUIDES[phase])
     guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent)
     guide = guide.replace("<feature>", feature).replace("<draft>", draft)
@@ -145,7 +151,7 @@ def plan(phase, scripts, feature, draft, brief, findings=""):
                 "Do not edit any file or create a commit. Your final reply must end with exactly "
                 "`PLAN-REVIEW: PASS` or `PLAN-REVIEW: FAIL`." % (feature, draft))
         intro = "The plan review guide follows. Follow it exactly."
-    parts = [role, "---", intro, guide, "---", task, "## The brief", brief.strip("\n")]
+    parts = [role_text, "---", intro, guide, "---", task, "## The brief", brief.strip("\n")]
     if findings.strip():
         parts += ["## Review findings from the last round", "The draft is already in `%s`. Fix each finding in it, "
                   "or say in your reply why it stays." % draft, findings.strip("\n")]
