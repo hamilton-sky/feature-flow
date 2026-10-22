@@ -183,6 +183,45 @@ class FastDrive(unittest.TestCase):
         rc, out = repo.flow("fast", "on", FLOW_TRUSTED="0", FLOW_SESSION=env["FLOW_SESSION"])
         self.assertIn("flow-trust.py", out)
 
+    def test_with_the_gate_off_every_ticket_keeps_its_review(self):
+        repo, env, reply = self.setup((("01-a", ["Level: 1"], "a.txt"),), FLOW_FAST="1", FLOW_GATE="off")
+        env["FLOW_GATE"] = "off"
+        seen, _ = self.drive(repo, env, reply)
+        self.assertEqual([num for word, num, _ in seen if word == "REVIEW"], ["01"])
+
+    def test_reset_keeps_the_deferred_tickets_for_the_feature_review(self):
+        repo, env, reply = self.setup((("01-a", ["Level: 1"], "a.txt"), ("02-b", ["Level: 1"], "b.txt")),
+                                      FLOW_FAST="1")
+        rc, line = repo.flow("next", **env)
+        repo.resolve(line.split()[1])
+        rc, line = repo.flow("next", **env)  # 01 deferred, 02 handed out
+        self.assertTrue(line.startswith("BUILD plans/f/tasks/02-b.md"), line)
+        rc, out = repo.flow("reset", FLOW_TAKEOVER="1")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("kept 1 ticket(s) built in fast mode for the feature review", out)
+        rc, out = repo.flow("start")
+        env["FLOW_SESSION"] = out.split()[1]
+        seen, _ = self.drive(repo, env, reply)
+        self.assertEqual([num for word, num, _ in seen if word == "REVIEW"], ["all"])
+        self.assertEqual(len(re.findall(r"REVIEW-DEFERRED", repo.log())), 2)
+
+    def test_relay_hands_off_before_the_feature_review_is_judged(self):
+        repo, env, reply = self.setup((("01-a", ["Level: 1"], "a.txt"),), FLOW_FAST="1", FLOW_RELAY="1")
+        env["FLOW_RELAY"] = "1"
+        rc, line = repo.flow("next", **env)
+        repo.resolve(line.split()[1])
+        self.assertEqual(repo.flow("next", **env)[1].split()[0], "HANDOFF")  # after the build
+        env["FLOW_SESSION"] = repo.flow("start", **env)[1].split()[1]
+        rc, line = repo.flow("next", **env)
+        self.assertTrue(line.startswith("REVIEW plans/f all"), line)
+        reply.write_text("ok\nREVIEW: PASS\n", encoding="utf-8")
+        self.assertEqual(repo.flow("verdict", str(reply), **env), (0, "OK"))
+        self.assertEqual(repo.flow("next", **env)[1].split()[0], "HANDOFF")  # after the feature review
+        env["FLOW_SESSION"] = repo.flow("start", **env)[1].split()[1]
+        rc, out = repo.flow("next", **env)
+        self.assertTrue(out.startswith("DONE"), out)
+        self.assertRegex(repo.log(), r",all,REVIEW\n")
+
     def test_without_fast_nothing_changes(self):
         repo, env, reply = self.setup((("01-a", ["Level: 1"], "a.txt"), ("02-b", ["Level: 2"], "b.txt")))
         seen, _ = self.drive(repo, env, reply)

@@ -246,12 +246,12 @@ The session runs `prompt`, `next` and `verdict` with the lane from the `BUILD` o
 
 ## The fast path
 
-`/feature-flow <feature> fast` trades per-ticket reviews for speed. The planner gets `Pace: fast` in the brief and writes a short plan of fewer, larger tickets, and the plan reviewer is skipped. With `FLOW_FAST=1` on `start`, a level 1 or 2 ticket that passes the gate, the floor guard and its Done when checks passes at once (`REVIEW-DEFERRED` in the log). A level 3 ticket, or one that touches a `Sensitive:` path, still gets its own reviews.
+`/feature-flow <feature> fast` trades per-ticket reviews for speed. The planner gets `Pace: fast` in the brief and writes a short plan of fewer, larger tickets, and the plan reviewer is skipped. With `FLOW_FAST=1` on `start`, a ticket below level 3 (one with no `Level:` line too) that passes the gate, the floor guard and its Done when checks passes at once (`REVIEW-DEFERRED` in the log). With `FLOW_GATE=off` nothing would check it, so every ticket keeps its review. A level 3 ticket, or one that touches a `Sensitive:` path, still gets its own reviews.
 
 - **The feature review.** Once every ticket is resolved, `next` hands out `REVIEW <plan folder> all <sha>`: one fresh reviewer reads the deferred tickets as they were planned and the whole diff from the oldest deferred ticket's base to HEAD, with `guides/review-feature.md`. It has no lane, even when lanes run.
 - **A failed feature review** becomes a new ticket, `NN-feature-review-fixes-<round>.md`, with the findings in it. A builder fixes it, and the feature is reviewed again. After `FLOW_MAX_REVIEW_ROUNDS` failed rounds the run stops for you.
 - **Mid-run.** `fast on` and `fast off` (through the runner, like `next`) switch it between phases. Asking the session to go faster runs `fast on`. Tickets already passed without a review still get the feature review, whichever way it is switched.
-- **The cost.** A mistake in an early ticket is found at the end, when later tickets may have built on it. Use it for small or low-risk features. `reset` forgets which tickets were deferred.
+- **The cost.** A mistake in an early ticket is found at the end, when later tickets may have built on it. Use it for small or low-risk features. `reset` keeps the list of deferred tickets, so they still get the feature review.
 
 ## Long features and handoff
 
@@ -295,7 +295,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_TICKETS_PER_SESSION` | `4` | tickets per session before `HANDOFF`; `0` never hands off |
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
 | `FLOW_LANES` | `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`) |
-| `FLOW_FAST` | unset | read by `start`: `1` defers level 1 and 2 tickets' reviews to one feature review at the end, `0` turns it off; unset keeps the run's setting |
+| `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |

@@ -288,17 +288,18 @@ class Conductor:
     def hand_out_final(self, retry=False):
         """Every ticket is resolved but some skipped their own review: review the whole feature once."""
         self.count_run()
-        self.all["phase"] = "final"
+        self.all.update({"phase": "final", "num": "all", "ticket": ""})  # the log names the feature review `all`
         self.all["final_base"] = self.feature_base()
         self.snapshot_code()  # what check_code holds the feature review to; with lanes, no ticket's snapshot is here
         self.all["review_attempt"] = (self.num("review_attempt") if retry else 0) + 1  # not the last ticket's count
         self.all["review_sha"] = git.head()
         self.all["verdict"] = ""
+        self.all["relay_handoff"] = "1" if self.relay else ""
         self.save()
         return self.emit("REVIEW %s all %s" % (self.plan.as_posix(), self.all["final_base"]))
 
     def judge_final(self):
-        self.check_code()
+        self.check_code(final=True)
         if not git.tracked_clean() or git.head() != self.all.get("review_sha"):
             raise Stop("the reviewer changed tracked files, which a reviewer must never do")
         verdict = self.all.get("verdict", "")
@@ -404,7 +405,7 @@ class Conductor:
         self.st["code_sha"] = whole
         self.st["code_files"] = codehash.dump(each)
 
-    def check_code(self, allowed=False):
+    def check_code(self, allowed=False, final=False):
         """Stop when the files the conductor runs from changed since the ticket was picked."""
         whole, each = codehash.flow_code(self.scripts)
         if whole == self.get("code_sha"):
@@ -413,6 +414,9 @@ class Conductor:
             self.snapshot_code()
             return
         names = codehash.changed(codehash.load(self.get("code_files")), each)
+        if final:
+            raise Stop("flow code changed during the feature review of %s: %s. a reviewer must never change it"
+                       % (self.feature, ", ".join(names)))
         raise Stop("flow code changed while building %s: %s. if intended, the ticket needs a line: "
                    "Floor: allow flow-edit" % (self.ticket_name(), ", ".join(names)))
 
@@ -463,7 +467,7 @@ class Conductor:
             if note:
                 notes.append(note)
         level = self.measure_level()
-        if self.fast() and level < 3:
+        if self.fast() and level < 3 and self.gate_on:  # with the gate off, nothing but the review checks it
             return self.defer_review()
         self.st["review_pass"] = "spec"
         if level == 0:
@@ -680,6 +684,8 @@ class Conductor:
                 raise Stop("next %s: the feature review has no lane. run next without one" % lane)
             if not self.plan.is_dir():
                 raise Stop("no plan folder %s" % self.plan)
+            if self.get("relay_handoff") == "1":
+                return self.handoff()
             return self.judge_final()
         if self.num("lanes") > 1:
             return self.lane_next(lane)
@@ -737,13 +743,18 @@ class Conductor:
                            % nums)
         dropped = self.drop_lanes()
         had_run = self.state_file.is_file()
+        kept = {k: self.all[k] for k in ("deferred", "fast") if self.all.get(k)}  # a deferred ticket still owes its review
         for path, kind in ((self.state_file, "state"), (self.findings_file, "findings")):
             state.remove(path, kind)
         if not reopened and not had_run and not dropped:
             return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
-        self.st = self.all = {}
+        self.st = self.all = dict(kept)
+        if kept:
+            self.save()
         self.log("RESET")
         done = ["cleared the run state"] if had_run else []
+        if kept.get("deferred"):
+            done.append("kept %d ticket(s) built in fast mode for the feature review" % len(self.deferred()))
         done += dropped
         done += ["reopened %s" % tickets.name(p) for p in reopened]
         return "OK %s. run %s %s" % (", ".join(done), self.invoke, self.feature)
@@ -807,7 +818,8 @@ class Conductor:
         nums = [num for num, _ in self.deferred()]
         try:
             return prompts.feature_review(self.scripts, self.feature, self.plan.as_posix(), self.all["final_base"], nums,
-                                          [n for n in [self.final_note()] if n])
+                                          [n for n in [self.final_note()] if n],
+                                          os.environ.get("FLOW_TICKETS") or "tasks")
         except FileNotFoundError as err:
             raise Stop(str(err))
 

@@ -12,7 +12,7 @@ The feature was built in fast mode: some of its tickets passed the gate, the flo
 - Each ticket the task names, **as it was at `<base>`**, so you read the ask without the author's Answer. Resolve the filename first, then ask for that one blob:
 
 ```
-TICKET=$(git ls-files '<plan>/tasks/NN-*.md')   # exactly one path, or fix the pattern
+TICKET=$(git ls-files '<tasks>/NN-*.md')   # exactly one path, or fix the pattern
 git show "<base>:$TICKET"
 ```
 
@@ -21,7 +21,7 @@ git show "<base>:$TICKET"
 
 ```
 git diff --stat "<base>..HEAD"
-git diff "<base>..HEAD" -- . ':(exclude)<plan>/tasks/'
+git diff "<base>..HEAD" -- . ':(exclude)<tasks>/'
 ```
 
   Read the files that diff touches.
@@ -30,7 +30,7 @@ git diff "<base>..HEAD" -- . ':(exclude)<plan>/tasks/'
 
 ## What you must not do
 
-Edit, write, stage, commit, stash, check out or reset anything. You may run read only commands, the Done when commands of the tickets, and commands.md's Test command. If a command leaves files behind, say so in your report and leave them.
+Edit, write, stage, commit, stash, check out or reset anything. You may run read only commands, the Done when commands of the tickets, and commands.md's Test command. If a command leaves files behind, say so in your report and leave them. There is no ticket level to raise here, so write no `LEVEL:` line.
 
 ## What to check
 
