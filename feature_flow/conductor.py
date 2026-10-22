@@ -258,6 +258,107 @@ class Conductor:
         self.log("PASS-FOLLOWUPS")
         return self.pass_ticket()
 
+    # ---- the fast path: reviews deferred to one review of the whole feature --
+
+    def fast(self):
+        return self.all.get("fast") == "1"
+
+    def deferred(self):
+        """[(NN, base)] of the tickets that passed their checks in fast mode without a review of their own."""
+        return [tuple(item.split(":", 1)) for item in self.all.get("deferred", "").split() if ":" in item]
+
+    def defer_review(self):
+        """Fast mode: the ticket passed the gate, the floor guard and its checks, so it passes now and the
+        feature review at the end covers it."""
+        items = [i for i in self.all.get("deferred", "").split() if not i.startswith(self.get("num") + ":")]
+        self.all["deferred"] = " ".join(items + ["%s:%s" % (self.get("num"), self.get("base"))])
+        self.log("REVIEW-DEFERRED")
+        return self.pass_ticket()
+
+    def feature_base(self):
+        """The oldest base of the deferred tickets: the feature review covers from there to HEAD."""
+        bases = sorted({base for _, base in self.deferred()})
+        if len(bases) == 1:
+            return bases[0]
+        result = git._git("merge-base", "--octopus", *bases, check=False)
+        if result.returncode != 0 or not result.stdout.strip():
+            raise Stop("cannot find where the deferred tickets started: %s" % result.stderr.strip())
+        return result.stdout.strip()
+
+    def hand_out_final(self, retry=False):
+        """Every ticket is resolved but some skipped their own review: review the whole feature once."""
+        self.count_run()
+        self.all.update({"phase": "final", "num": "all", "ticket": ""})  # the log names the feature review `all`
+        self.all["final_base"] = self.feature_base()
+        self.snapshot_code()  # what check_code holds the feature review to; with lanes, no ticket's snapshot is here
+        self.all["review_attempt"] = (self.num("review_attempt") if retry else 0) + 1  # not the last ticket's count
+        self.all["review_sha"] = git.head()
+        self.all["verdict"] = ""
+        self.all["relay_handoff"] = "1" if self.relay else ""
+        self.save()
+        return self.emit("REVIEW %s all %s" % (self.plan.as_posix(), self.all["final_base"]))
+
+    def judge_final(self):
+        self.check_code(final=True)
+        if not git.tracked_clean() or git.head() != self.all.get("review_sha"):
+            raise Stop("the reviewer changed tracked files, which a reviewer must never do")
+        verdict = self.all.get("verdict", "")
+        self.all["verdict"] = ""
+        if verdict == "pass":
+            for key in ("phase", "deferred", "final_base", "final_round", "review_attempt", "review_sha"):
+                self.all[key] = ""
+            self.save()
+            self.log("FEATURE-PASS")
+            return self.dispatch() if self.num("lanes") > 1 else self.pick_ticket()
+        if verdict == "fail":
+            round_no = self.num("final_round") + 1
+            if round_no > self.max_rounds:
+                raise Stop("the feature review of %s still fails after %d round(s). the user decides what happens next"
+                           % (self.feature, self.max_rounds))
+            path = self.fix_ticket(round_no, state.read_text(self.findings_file, "findings") or "")
+            if not git.commit_file(path, "chore(%s): fixes from the feature review, round %d" % (self.feature, round_no)):
+                raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
+            self.all.update({"phase": "", "final_round": round_no, "review_attempt": 0, "review_sha": ""})
+            self.save()
+            self.log("FEATURE-FAIL")
+            return self.dispatch() if self.num("lanes") > 1 else self.pick_ticket()
+        if self.num("review_attempt") >= self.max_retries:
+            raise Stop("no verdict from the feature review of %s after %d attempt(s)" % (self.feature, self.max_retries))
+        return self.hand_out_final(retry=True)
+
+    def fix_ticket(self, round_no, findings):
+        """Write the feature review's findings as a new open ticket, numbered after the last one."""
+        folder = self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
+        nums = [int(tickets.number(p)) for p in tickets.ticket_files(str(folder)) if tickets.number(p).isdigit()]
+        num = "%02d" % (max(nums or [0]) + 1)
+        path = folder / ("%s-feature-review-fixes-%d.md" % (num, round_no))
+        quoted = "\n".join("> " + line if line else ">" for line in findings.strip("\n").splitlines()) or "> (none)"
+        path.write_text(
+            "# Fix the findings of the feature review, round %d\n\n"
+            "Type: task\nStatus: open\nBlocked by: —\nTest first: no\nLevel: 2\n"
+            "Check: none the feature review that follows checks these fixes\n\n"
+            "The review of the whole feature (from commit %s) failed. Fix each finding below that is a blocker or a "
+            "major, in the files it names. A minor is optional. If a finding is wrong, say why in the Answer instead.\n\n"
+            "## Not in this ticket\n\n- Anything the findings do not name.\n\n"
+            "## Done when\n\n- Every blocker and major finding below is fixed, or the Answer says why it stays.\n"
+            "- commands.md's Test command passes.\n\n"
+            "## Findings\n\n%s\n\n## Answer\n" % (round_no, self.all.get("final_base", ""), quoted),
+            encoding="utf-8")
+        return path
+
+    def fast_switch(self, value):
+        """`fast on|off` between phases: from the next ticket on, level 1 and 2 tickets skip or get their own
+        review. Tickets already deferred keep the feature review at the end."""
+        self.check_owner()
+        if value not in ("on", "off"):
+            raise Stop("fast takes on or off, not %s" % value)
+        self.all["fast"] = "1" if value == "on" else ""
+        self.save()
+        self.log("FAST-%s" % value.upper())
+        return "OK fast %s%s" % (value, "" if value == "on" or not self.deferred() else
+                                 ". %d ticket(s) already deferred still get the feature review at the end"
+                                 % len(self.deferred()))
+
     def pick_ticket(self):
         """Hand out the next ready ticket, or finish."""
         check = checks.flow_status(self.scripts, self.feature, "--check")
@@ -269,6 +370,8 @@ class Conductor:
                        % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
         nxt = checks.flow_status(self.scripts, self.feature, "--next")
         if nxt.code == 10:
+            if self.deferred():
+                return self.hand_out_final()
             done = self.num("done")
             followups = self.num("followups")
             self.st["phase"] = ""
@@ -302,7 +405,7 @@ class Conductor:
         self.st["code_sha"] = whole
         self.st["code_files"] = codehash.dump(each)
 
-    def check_code(self, allowed=False):
+    def check_code(self, allowed=False, final=False):
         """Stop when the files the conductor runs from changed since the ticket was picked."""
         whole, each = codehash.flow_code(self.scripts)
         if whole == self.get("code_sha"):
@@ -311,6 +414,9 @@ class Conductor:
             self.snapshot_code()
             return
         names = codehash.changed(codehash.load(self.get("code_files")), each)
+        if final:
+            raise Stop("flow code changed during the feature review of %s: %s. a reviewer must never change it"
+                       % (self.feature, ", ".join(names)))
         raise Stop("flow code changed while building %s: %s. if intended, the ticket needs a line: "
                    "Floor: allow flow-edit" % (self.ticket_name(), ", ".join(names)))
 
@@ -361,6 +467,8 @@ class Conductor:
             if note:
                 notes.append(note)
         level = self.measure_level()
+        if self.fast() and level < 3 and self.gate_on:  # with the gate off, nothing but the review checks it
+            return self.defer_review()
         self.st["review_pass"] = "spec"
         if level == 0:
             if self.gate_on and self.checks_ran:
@@ -560,12 +668,25 @@ class Conductor:
         self.st["owner"] = owner_hash(token)
         self.st["session_done"] = 0
         self.st["lanes"] = wanted if wanted > 1 else ""
+        fast = os.environ.get("FLOW_FAST", "")
+        if fast not in ("", "0", "1"):
+            raise Stop("FLOW_FAST must be 1 or 0, not %s" % fast)
+        if fast:
+            self.st["fast"] = "1" if fast == "1" else ""
         self.save()
         self.log("TAKEOVER" if takeover else "START")
         return "OK %s" % token
 
     def next(self, lane=None):
         self.check_owner()
+        if self.all.get("phase") == "final":
+            if lane is not None:
+                raise Stop("next %s: the feature review has no lane. run next without one" % lane)
+            if not self.plan.is_dir():
+                raise Stop("no plan folder %s" % self.plan)
+            if self.get("relay_handoff") == "1":
+                return self.handoff()
+            return self.judge_final()
         if self.num("lanes") > 1:
             return self.lane_next(lane)
         if lane is not None:
@@ -622,13 +743,18 @@ class Conductor:
                            % nums)
         dropped = self.drop_lanes()
         had_run = self.state_file.is_file()
+        kept = {k: self.all[k] for k in ("deferred", "fast") if self.all.get(k)}  # a deferred ticket still owes its review
         for path, kind in ((self.state_file, "state"), (self.findings_file, "findings")):
             state.remove(path, kind)
         if not reopened and not had_run and not dropped:
             return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
-        self.st = self.all = {}
+        self.st = self.all = dict(kept)
+        if kept:
+            self.save()
         self.log("RESET")
         done = ["cleared the run state"] if had_run else []
+        if kept.get("deferred"):
+            done.append("kept %d ticket(s) built in fast mode for the feature review" % len(self.deferred()))
         done += dropped
         done += ["reopened %s" % tickets.name(p) for p in reopened]
         return "OK %s. run %s %s" % (", ".join(done), self.invoke, self.feature)
@@ -665,6 +791,10 @@ class Conductor:
     def prompt(self, lane=None):
         """The full prompt for the BUILD or REVIEW that `next` handed out. Exit 2 (NoPhase) when none is."""
         self.check_owner()
+        if self.all.get("phase") == "final":
+            if lane is not None:
+                raise Stop("prompt %s: the feature review has no lane. run prompt without one" % lane)
+            return self.final_prompt()
         if self.num("lanes") > 1 or lane is not None:
             with self.in_lane(self.lane_number(lane, "prompt")):
                 return self.prompt_text()
@@ -684,10 +814,31 @@ class Conductor:
         except FileNotFoundError as err:
             raise Stop(str(err))
 
+    def final_prompt(self):
+        nums = [num for num, _ in self.deferred()]
+        try:
+            return prompts.feature_review(self.scripts, self.feature, self.plan.as_posix(), self.all["final_base"], nums,
+                                          [n for n in [self.final_note()] if n],
+                                          os.environ.get("FLOW_TICKETS") or "tasks")
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+
+    def final_note(self):
+        round_no = self.num("final_round")
+        if not round_no:
+            return ""
+        return ("this is round %d of the feature review: the last round's findings are in the newest "
+                "feature-review-fixes ticket. check that each blocker and major is fixed" % (round_no + 1))
+
     def verdict(self, reply, lane=None):
         """Record the reviewer's reply. Exit 2 (NoPhase) unless a review is pending."""
         self.check_owner()
         reply = Path(reply).resolve()
+        if self.all.get("phase") == "final":
+            if lane is not None:
+                raise Stop("verdict for lane %s: the feature review has no lane. run verdict without one" % lane)
+            self.all["findings_for"] = ""
+            return self.record_verdict(reply)
         if self.num("lanes") > 1 or lane is not None:
             k = self.lane_number(lane, "verdict")
             with self.in_lane(k):
@@ -698,7 +849,7 @@ class Conductor:
         return self.record_verdict(reply)
 
     def record_verdict(self, reply):
-        if self.get("phase") != "review":
+        if self.get("phase") not in ("review", "final"):
             raise NoPhase("no review is pending for %s" % self.feature)
         try:
             text = Path(reply).read_text(encoding="utf-8", errors="replace")
@@ -714,6 +865,8 @@ class Conductor:
             if match:
                 asked = max(asked, int(match.group(1)))
         level = self.num("level")
+        if self.get("phase") == "final":
+            asked = 0  # the feature review has no ticket level to raise
         if asked > (level or 2):  # a ticket without a Level line already gets level 2 reviews or more
             self.st["level"] = asked
             self.st["level_note"] = self.describe_level(asked, "a reviewer raised it")
@@ -1022,6 +1175,8 @@ class Conductor:
 
     def finish(self):
         """Every ticket is merged: remove the lanes and report, as pick_ticket does without lanes."""
+        if self.deferred():
+            return self.hand_out_final()
         lanes.remove_all(self.top, self.feature)
         done = self.num("done")
         followups = self.num("followups")

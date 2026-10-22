@@ -9,9 +9,10 @@ from pathlib import Path
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
          "review-single": "ticket-reviewer.md",
-         "plan": "feature-planner.md", "plan-review": "plan-reviewer.md"}
+         "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
-          "review-single": "review-single.md", "plan": "plan.md", "plan-review": "plan-review.md"}
+          "review-single": "review-single.md", "review-feature": "review-feature.md", "plan": "plan.md",
+          "plan-review": "plan-review.md"}
 
 
 REPO = "."  # where an install's .feature-flow/ is: the working folder, or the main worktree while a lane works
@@ -105,6 +106,23 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
     if retry and phase == "build":
         parts += ["The debugging guide follows. Follow it before you change any code.",
                   _body(find_file(scripts, "guides", "debug.md"))]
+    return "\n\n".join(parts) + "\n"
+
+
+def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
+    """The prompt for the one review of a whole feature that fast mode defers the reviews of tickets nums to."""
+    role = _runner(_body(find_file(scripts, "agents", ROLES["review-feature"])), scripts)
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES["review-feature"])), scripts)
+    for placeholder, value in (("<feature>", feature), ("<tasks>", plan + "/" + tasks), ("<plan>", plan), ("<base>", base)):
+        guide = guide.replace(placeholder, value)
+    task = ("Your task: review the whole feature `%s` (feature pass), from commit `%s` to HEAD. The plan is in `%s`. "
+            "These tickets were built in fast mode without a review of their own: %s.\n"
+            "Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began "
+            "can be stale.\nDo not edit any file or create a commit. Your final reply must end with exactly "
+            "`REVIEW: PASS` or `REVIEW: FAIL`." % (feature, base, plan, ", ".join(nums) or "none"))
+    for note in notes:
+        task += "\nThe conductor notes: %s" % note
+    parts = [role, "---", "The feature review guide follows. Follow it exactly.", guide, "---", task]
     return "\n\n".join(parts) + "\n"
 
 
