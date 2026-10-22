@@ -8,11 +8,12 @@ from pathlib import Path
 from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
-USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] | verdict <file> [lane] | reset [NN]\n"
+USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] | verdict <file> [lane] | fast on|off\n"
+         "       python3 scripts/flow.py <feature> reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
-COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset")
-ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3)}
-RUNNER_ONLY = ("next", "prompt", "verdict")
+COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset", "fast")
+ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3), "fast": (3,)}
+RUNNER_ONLY = ("next", "prompt", "verdict", "fast")
 
 
 def main(argv=None, scripts=None):
@@ -97,6 +98,8 @@ def run(args, scripts, trusted):
             line = conductor.prompt(*args[2:])
         elif command == "reset":
             line = conductor.reset(args[2] if len(args) == 3 else None)
+        elif command == "fast":
+            line = conductor.fast_switch(args[2])
         elif command == "start":
             line = conductor.start()
         else:
