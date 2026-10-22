@@ -22,6 +22,11 @@ def _files(scripts):
                 found.append(prompts.find_file(scripts, folder, names[phase]).resolve())
             except FileNotFoundError:
                 pass
+    for name in ("flow-scout.md", "flow-web.md"):  # the scouts' roles go into prompts too
+        try:
+            found.append(prompts.find_file(scripts, "agents", name).resolve())
+        except FileNotFoundError:
+            pass
     try:
         found.append(prompts.find_file(scripts, "guides", "debug.md").resolve())
     except FileNotFoundError:

@@ -12,7 +12,7 @@ import secrets
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, scouts, state, suggest, tickets
 
 
 NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
@@ -77,6 +77,7 @@ class Conductor:
         self.small_files = _env_int("FLOW_SMALL_FILES", 3)
         self.small_lines = _env_int("FLOW_SMALL_LINES", 60)
         self.checks_ran = False
+        self.scouts_on = os.environ.get("FLOW_SCOUTS", "on") != "off"
         self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
         self.invoke = os.environ.get("FLOW_INVOKE") or "/feature-flow"
         top = git.toplevel()
@@ -305,7 +306,7 @@ class Conductor:
         verdict = self.all.get("verdict", "")
         self.all["verdict"] = ""
         if verdict == "pass":
-            for key in ("phase", "deferred", "final_base", "final_round", "review_attempt", "review_sha"):
+            for key in ("phase", "deferred", "final_base", "final_round", "review_attempt", "review_sha", "scout_key"):
                 self.all[key] = ""
             self.save()
             self.log("FEATURE-PASS")
@@ -810,16 +811,130 @@ class Conductor:
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
                                  [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase != "build" else (),
                                  retry=self.num("round") > 0,
-                                 workdir=(str(Path.cwd()), lanes.branch(self.feature, self.get("num"))) if self.lane else None)
+                                 workdir=(str(Path.cwd()), lanes.branch(self.feature, self.get("num"))) if self.lane else None
+                                 ) + self.scout_findings()
         except FileNotFoundError as err:
             raise Stop(str(err))
+
+    # ---- scouts: cheap read only helpers the session spawns before a role starts --
+
+    def phase_key(self):
+        """Names the phase handed out last, so scout replies saved for one phase never reach another."""
+        if self.get("phase") == "final":
+            return "final:%s:%s:%s" % (self.get("final_base"), self.num("final_round"), self.num("review_attempt"))
+        return "%s:%s:%s:%s:%s:%s" % (self.get("phase"), self.get("num"), self.num("round"), self.num("attempt"),
+                                      self.get("review_pass"), self.num("review_attempt"))
+
+    def scout_slot(self):
+        return "L%d" % self.lane if self.lane else ""
+
+    def scout_questions(self):
+        """[(agent, role, question)] for the phase handed out last: a build's first attempt above level 1 (or with
+        no level), a level 3 ticket's first spec review, and the first round of the feature review."""
+        if not self.scouts_on:
+            return []
+        phase = self.get("phase")
+        tasks = "%s/%s" % (self.plan.as_posix(), os.environ.get("FLOW_TICKETS") or "tasks")
+        if phase == "final":
+            first = self.num("review_attempt") == 1 and not self.num("final_round")
+            return scouts.review(self.get("final_base"), tasks) if first else []
+        if self.num("round"):
+            return []
+        if phase == "build" and self.num("attempt") == 1:
+            return scouts.build(proof.repo_relative(self.ticket()), self.get("base"), lanes.touches(self.ticket_at_base()) or [],
+                                self.num("level"))
+        if (phase == "review" and self.num("level") == 3 and self.get("review_pass") == "spec"
+                and self.num("review_attempt") == 1):
+            return scouts.review(self.get("base"), tasks)
+        return []
+
+    def pending_phase(self, command, lane):
+        """A context for the pending phase's state: the feature review's, the lane's, or the run's."""
+        if self.all.get("phase") == "final":
+            if lane is not None:
+                raise Stop("%s %s: the feature review has no lane. run %s without one" % (command, lane, command))
+            return contextlib.nullcontext()
+        if self.num("lanes") > 1 or lane is not None:
+            return self.in_lane(self.lane_number(lane, command))
+        return contextlib.nullcontext()
+
+    def scouts(self, lane=None):
+        """`SCOUT <k> <agent> <reply file>` lines for the phase handed out last, or NONE. Clears old replies."""
+        self.check_owner()
+        with self.pending_phase("scouts", lane):
+            if self.get("phase") not in ("build", "review", "final"):
+                raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
+            found = self.scout_questions()
+            folder = self.state_file.parent
+            scouts.clear(folder, self.feature, self.scout_slot())
+            self.st["scout_key"] = self.phase_key()
+            self.st["scout_n"] = len(found)
+            self.save()
+            if found:
+                self.log("SCOUTS-%d" % len(found))
+            return scouts.listing(folder, self.feature, self.scout_slot(), found)
+
+    def scout_prompt(self, k, lane=None):
+        """The whole prompt of scout k for the phase handed out last."""
+        self.check_owner()
+        with self.pending_phase("scout-prompt", lane):
+            if self.get("scout_key") != self.phase_key():
+                raise NoPhase("run scouts first: no scouts are listed for the phase pending for %s" % self.feature)
+            return self.one_scout(self.scout_questions(), k, str(Path.cwd()) if self.lane else None)
+
+    def one_scout(self, found, k, workdir=None):
+        if not k.isdigit() or not 1 <= int(k) <= len(found):
+            raise Stop("no scout %s: there are %d" % (k, len(found)))
+        agent, role, question = found[int(k) - 1]
+        try:
+            role_text = prompts.role(self.scripts, agent + ".md")
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+        return scouts.prompt(role_text, role, question, workdir)
+
+    def scout_findings(self):
+        """The scout replies saved for the phase handed out last, as a section for its prompt, or ""."""
+        if self.get("scout_key") != self.phase_key():
+            return ""
+        return scouts.section(self.state_file.parent, self.feature, self.scout_slot(), self.num("scout_n"))
+
+    def plan_scout_key(self):
+        return self.state_file.parent / ("scout-%s-plan.key" % self.feature)
+
+    def save_brief(self, brief):
+        """The brief's text, saved where the planner and the plan reviewer read it."""
+        self.no_plan_yet()
+        text = self.read_text(brief, "brief")
+        if not text.strip():
+            raise Stop("the brief %s is empty" % brief)
+        if Path(brief).resolve() != self.brief_file.resolve():
+            self.brief_file.write_text(text, encoding="utf-8")
+        return text
+
+    def plan_scouts(self, brief):
+        """The scouts before planning: saves the brief and lists `SCOUT` lines as `scouts` does."""
+        text = self.save_brief(brief)
+        folder = self.state_file.parent
+        scouts.clear(folder, self.feature, "plan")
+        found = scouts.plan(text) if self.scouts_on else []
+        self.plan_scout_key().write_text(scouts.brief_key(text) + "\n", encoding="utf-8")
+        self.log("PLAN-SCOUTS")
+        return scouts.listing(folder, self.feature, "plan", found)
+
+    def plan_scout_prompt(self, k):
+        self.no_plan_yet()
+        key = state.read_text(self.plan_scout_key())
+        text = self.read_text(self.brief_file, "brief") if self.brief_file.is_file() else None
+        if not self.scouts_on or text is None or key is None or key.strip() != scouts.brief_key(text):
+            raise NoPhase("run plan-scouts first: no scouts are listed for the brief of %s" % self.feature)
+        return self.one_scout(scouts.plan(text), k)
 
     def final_prompt(self):
         nums = [num for num, _ in self.deferred()]
         try:
             return prompts.feature_review(self.scripts, self.feature, self.plan.as_posix(), self.all["final_base"], nums,
                                           [n for n in [self.final_note()] if n],
-                                          os.environ.get("FLOW_TICKETS") or "tasks")
+                                          os.environ.get("FLOW_TICKETS") or "tasks") + self.scout_findings()
         except FileNotFoundError as err:
             raise Stop(str(err))
 
@@ -1216,13 +1331,8 @@ class Conductor:
 
     def plan_prompt(self, brief, findings=None):
         """The feature-planner's prompt. Saves the brief; a first round (no findings) starts an empty draft."""
-        self.no_plan_yet()
-        text = self.read_text(brief, "brief")
+        text = self.save_brief(brief)
         notes = self.read_text(findings, "review findings") if findings else ""
-        if not text.strip():
-            raise Stop("the brief %s is empty" % brief)
-        if Path(brief).resolve() != self.brief_file.resolve():
-            self.brief_file.write_text(text, encoding="utf-8")
         if not findings and self.draft.is_dir():
             if self.draft.resolve().parent != self.draft_root.resolve():
                 raise Stop("the draft folder %s is outside %s" % (self.draft_text(), self.draft_root.as_posix()))
@@ -1230,7 +1340,11 @@ class Conductor:
         (self.draft / (os.environ.get("FLOW_TICKETS") or "tasks")).mkdir(parents=True, exist_ok=True)
         self.log("PLAN-PROMPT")
         try:
-            return prompts.plan("plan", self.scripts, self.feature, self.draft_text(), text, notes)
+            found = ""
+            key = state.read_text(self.plan_scout_key())
+            if not findings and key is not None and key.strip() == scouts.brief_key(text):
+                found = scouts.section(self.state_file.parent, self.feature, "plan", len(scouts.plan(text)))
+            return prompts.plan("plan", self.scripts, self.feature, self.draft_text(), text, notes) + found
         except FileNotFoundError as err:
             raise Stop(str(err))
 

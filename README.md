@@ -244,6 +244,21 @@ With `FLOW_LANES=2` (up to 4) on `start`, tickets that do not touch the same fil
 
 The session runs `prompt`, `next` and `verdict` with the lane from the `BUILD` or `REVIEW` line, and `next` answers `WAIT <lanes>` when every lane that can work is busy (see `## Lanes` in the skill).
 
+## Scouts
+
+Before a planner, builder or reviewer starts, the session can spawn cheap helpers that read ahead for it: `flow-scout` (read only, codebase) and `flow-web` (web only, for the planner). Both run on Haiku in Claude Code (`model: haiku` in their role files); in Codex the skill picks the lightest model `spawn_agent` allows. A scout looks at the code the way its role would (`ROLE: builder` looks for patterns and helpers to reuse, `ROLE: reviewer` for the rules the change must follow) and never decides anything.
+
+| Before | Scouts |
+|---|---|
+| planning (`plan-scouts <brief>`) | one codebase scout and one web scout |
+| a level 1 ticket | none |
+| a build below level 3 (first attempt) | one builder scout on the ticket and its `Touches:` |
+| a level 3 build (first attempt) | two builder scouts: the code it changes, and what depends on it |
+| a level 3 ticket's spec review | one reviewer scout on the conventions the diff must follow |
+| the feature review (fast path) | one reviewer scout |
+
+`scouts [lane]` lists `SCOUT <k> <agent> <reply file>` lines (or `NONE`) and clears the last ones' replies; `scout-prompt <k> [lane]` prints one scout's prompt. The session saves each reply into its file, and the phase's `prompt` adds them under `## Scout findings (unverified)`, cut to 60 lines each. A reply saved for one phase never reaches another. Retries and later rounds get no scouts. `FLOW_SCOUTS=off` turns them off.
+
 ## The fast path
 
 `/feature-flow <feature> fast` trades per-ticket reviews for speed. The planner gets `Pace: fast` in the brief and writes a short plan of fewer, larger tickets, and the plan reviewer is skipped. With `FLOW_FAST=1` on `start`, a ticket below level 3 (one with no `Level:` line too) that passes the gate, the floor guard and its Done when checks passes at once (`REVIEW-DEFERRED` in the log). With `FLOW_GATE=off` nothing would check it, so every ticket keeps its review. A level 3 ticket, or one that touches a `Sensitive:` path, still gets its own reviews.
@@ -296,6 +311,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
 | `FLOW_LANES` | `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`) |
 | `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting |
+| `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |
