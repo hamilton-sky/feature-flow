@@ -14,7 +14,7 @@ import shutil
 import time
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, scouts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, gate, git, lanes, profiles, prompts, proof, scouts, state, suggest, tickets
 
 
 NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
@@ -94,6 +94,11 @@ class Conductor:
         self.root = Path(os.environ.get("FLOW_DIR") or "plans")
         self.plan = self.root / feature
         self.commands = self.plan / "commands.md"
+        try:
+            self.profile = profiles.pick(os.environ, tickets.commands_value(self.commands, "Profile"))
+        except profiles.UnknownProfile as err:
+            raise Stop(str(err))
+        profiles.apply(os.environ, self.profile)
         self.max_retries = _env_int("FLOW_MAX_RETRIES", 2)
         self.max_rounds = _env_int("FLOW_MAX_REVIEW_ROUNDS", 3)
         self.gate_timeout = _env_int("FLOW_GATE_TIMEOUT", 30)
@@ -849,6 +854,8 @@ class Conductor:
         self.st["seen"] = int(time.time())  # the time between sessions is not spent on the feature
         self.save()
         self.log("TAKEOVER" if takeover else "START")
+        if self.profile:
+            self.log("PROFILE-%s" % self.profile.upper())
         return "OK %s" % token
 
     def next(self, lane=None):

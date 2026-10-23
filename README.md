@@ -306,6 +306,20 @@ Every finished run can leave a record of what it cost and what it caught, so a t
 
 Both files sit in the plan folder, so they are committed with it and survive a cloud session. Nothing is sent anywhere; attach `eval.json` to a field-run issue if you want to share it. Run logs from before 0.15.0 have no dates, so they give no tokens.
 
+## Profiles
+
+Most settings below never need touching. One word picks a sensible set:
+
+| Profile | Sets | For |
+|---|---|---|
+| `careful` | `FLOW_GATE_FULL=1`, `FLOW_FAST=0`, `FLOW_SMALL_LINES=0`, `FLOW_TICKETS_PER_SESSION=3` | code where a wrong "done" is expensive: the full gate and an own review for every ticket |
+| `normal` | nothing: the defaults | everyday features |
+| `fast` | `FLOW_FAST=1`, `FLOW_SCOUTS=off`, `FLOW_TICKETS_PER_SESSION=6` | small, low-risk features: one feature review at the end |
+
+Pick one with `/feature-flow <feature> careful` (or `fast`), `FLOW_PROFILE=<name>` on `start`, or a `Profile:` line in the plan's `commands.md`, approved with the plan. A profile fills only settings you did not set: `FLOW_PROFILE=fast FLOW_SCOUTS=on` keeps the scouts. The log records `PROFILE-<NAME>` at the start. A level 3 or `Sensitive:` ticket keeps its own reviews in every profile.
+
+The long `python3 -I -c ...` line the skill uses to call the conductor stays as it is: it is how the skill checks `flow-trust.py` against the sha256 it pins before running it, and a shorter wrapper would be one more file nothing checks. The session copies it from the skill; you never type it.
+
 ## Long features and handoff
 
 A session's context fills up, so the flow moves to a fresh session every few tickets. After `FLOW_TICKETS_PER_SESSION` tickets (default 4) pass review, `next` prints a `HANDOFF` line instead of the next ticket, for example `HANDOFF /feature-flow csv-export 3f9c0a1b2c3d4e5f.0a1b2c3d4e5f6a7b` (the last word is the runner's digest, which lets the new session check that the flow's files did not change in between). The session stops and tells you to open a new session and type that line. The new session picks up exactly where the last one stopped. Set `FLOW_TICKETS_PER_SESSION=0` to never hand off.
@@ -346,6 +360,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `FLOW_PROFILE` | unset | `careful`, `normal` or `fast`: fills the settings in this table that are not set; a `Profile:` line in `commands.md` does the same |
 | `FLOW_TICKETS_PER_SESSION` | `4` | tickets per session before `HANDOFF`; `0` never hands off |
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
 | `FLOW_LANES` | `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`) |
