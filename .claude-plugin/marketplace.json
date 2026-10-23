@@ -1,0 +1,16 @@
+{
+  "name": "feature-flow",
+  "owner": {
+    "name": "hamilton-sky"
+  },
+  "metadata": {
+    "description": "feature-flow, a ticket-graph workflow for coding agents."
+  },
+  "plugins": [
+    {
+      "name": "feature-flow",
+      "source": "./",
+      "description": "A ticket-graph workflow: planner, builders and fresh reviewers, with a script that runs the checks and decides every step."
+    }
+  ]
+}
