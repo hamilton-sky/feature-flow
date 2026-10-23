@@ -320,6 +320,24 @@ Pick one with `/feature-flow <feature> careful` (or `fast`), `FLOW_PROFILE=<name
 
 The long `python3 -I -c ...` line the skill uses to call the conductor stays as it is: it is how the skill checks `flow-trust.py` against the sha256 it pins before running it, and a shorter wrapper would be one more file nothing checks. The session copies it from the skill; you never type it.
 
+## Starting from Spec Kit or OpenSpec
+
+If you already plan with [GitHub Spec Kit](https://github.com/github/spec-kit) or [OpenSpec](https://github.com/Fission-AI/OpenSpec), feature-flow can build what they planned:
+
+```bash
+feature-flow import specs/001-photo-albums albums              # a Spec Kit feature folder (or its tasks.md)
+feature-flow import openspec/changes/add-auth auth             # an OpenSpec change folder
+python3 scripts/flow-status.py albums --import specs/001-photo-albums   # the same, from a repo install
+```
+
+Or ask the session to plan `albums` from `specs/001-photo-albums`. Either way it writes `plans/<feature>/`, never over an existing plan (`--dry-run` shows what it would write):
+
+- **One ticket per phase or section**, its tasks as the Done when items, so thirty small tasks become five tickets with real reviews, not thirty.
+- **Order:** each section waits for the one before. Spec Kit's user story phases (`[US1]`, `[US2]`) wait only for the phases before the first story, so with lanes they are built side by side, and the polish phase waits for every story.
+- **Touches:** the paths the tasks name, when every task in the section names one.
+- **spec.md** carries the source's `spec.md` and `plan.md` (Spec Kit) or `proposal.md` and `design.md` (OpenSpec).
+- **What you add:** the commands (`commands.md` is the template), a `check` block per ticket and the levels. `flow-status.py <feature> --lint` says what is missing. The skill does this with you, then asks for a yes before it commits the plan.
+
 ## Long features and handoff
 
 A session's context fills up, so the flow moves to a fresh session every few tickets. After `FLOW_TICKETS_PER_SESSION` tickets (default 4) pass review, `next` prints a `HANDOFF` line instead of the next ticket, for example `HANDOFF /feature-flow csv-export 3f9c0a1b2c3d4e5f.0a1b2c3d4e5f6a7b` (the last word is the runner's digest, which lets the new session check that the flow's files did not change in between). The session stops and tells you to open a new session and type that line. The new session picks up exactly where the last one stopped. Set `FLOW_TICKETS_PER_SESSION=0` to never hand off.
@@ -344,6 +362,7 @@ python3 scripts/flow-status.py <feature> --counts         one line of counts
 python3 scripts/flow-status.py <feature> --check          cycles, missing blockers, missing Done when, unordered mentions
 python3 scripts/flow-status.py <feature> --lint           --check plus: a check block (or `Check: none <why>`) on every ticket, a Test command
 feature-flow report <feature>                             what a run did, from its log: builds, reviews, failed checks, stops
+feature-flow import <spec-kit or openspec folder> <feature>   start plans/<feature>/ from their task list
 feature-flow eval <feature> [--later]                     record the run in plans/<feature>/eval.json, with your verdict (also: flow-status.py <feature> --eval)
 python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness

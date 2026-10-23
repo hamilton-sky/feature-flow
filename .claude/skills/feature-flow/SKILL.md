@@ -41,7 +41,7 @@ When `plans/<feature>/` does not exist, or you are planning from the conversatio
 
 Then run `python3 scripts/flow-status.py <feature> --check` and list the files `plan-accept` wrote. The second yes also approves committing the plan, so commit the folder `plan-accept` printed (`OK <folder>`, `plans/<feature>` unless `FLOW_DIR` is set) and nothing else: `git add -- <folder> && git commit -m "docs(<feature>): plan" -- <folder>`. If the commit fails, report why and stop. Then go straight on to building it below, unless the user asked to stop after planning.
 
-To add tickets to a plan that exists, edit it by hand following the ticket rules in `guides/plan.md`.
+To add tickets to a plan that exists, edit it by hand following the ticket rules in `guides/plan.md`. When the user points at a Spec Kit (`specs/<NNN-name>/`) or OpenSpec (`openspec/changes/<id>/`) task list, start the plan from it instead of the planner: `python3 <S>/flow-status.py <feature> --import <that folder or its tasks.md>` writes `plans/<feature>/` with one ticket per phase or section. Then, with the user, fill in `commands.md` from the project's own config, add a `check` block under each ticket's Done when and set its level, run `flow-status.py <feature> --lint` until it is clean, show the graph, and on the user's yes commit the folder as `docs(<feature>): plan` and build it.
 
 ## Before building
 
