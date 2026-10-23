@@ -26,6 +26,15 @@ python3 install.py /path/to/your/repo --agent all      # both, side by side
 # `bash install.sh ...` still works on Linux and macOS: it only runs install.py
 ```
 
+As a Claude Code plugin, with nothing written into your repo (this repo is its own marketplace):
+
+```
+/plugin marketplace add hamilton-sky/feature-flow
+/plugin install feature-flow@feature-flow
+```
+
+The plugin carries the skills, the roles (named `feature-flow:ticket-builder` and so on), the conductor, the scripts and the guides, and the skill runs the conductor from the plugin's folder. A repo with its own install still uses that one. Claude Code cloud sessions (claude.ai/code) do not install plugins, so for them install into the repo and commit `.claude/`, `scripts/` and `.feature-flow/` as below. The plugin path is new and has not had a real run yet.
+
 Without a clone, the same installer runs from [PyPI](https://pypi.org/project/feature-flow-cli/):
 
 ```bash
