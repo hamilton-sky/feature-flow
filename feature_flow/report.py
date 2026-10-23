@@ -1,7 +1,7 @@
 """feature-flow report <feature>: what a run did, read from its log.
 
 usage: feature-flow report <feature>
-Reads .feature-flow/state/flow-<feature>.log (one `time,ticket,EVENT` line per step) and prints, per
+Reads .feature-flow/state/flow-<feature>.log (one `time,ticket,EVENT` line per step, the time in UTC) and prints, per
 ticket, how many times it was built and reviewed and which checks failed, then the run's STOPs, resets
 and handoffs. Read-only. It cannot see a trust-runner STOP (the runner stops before the conductor
 logs anything): the session's own output shows those, so count them by hand.

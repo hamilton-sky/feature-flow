@@ -32,7 +32,7 @@ Without a clone, the same installer runs from [PyPI](https://pypi.org/project/fe
 uvx feature-flow-cli install /path/to/your/repo --agent all   # or: pipx run feature-flow-cli install ...
 ```
 
-The package puts a `feature-flow` command on your PATH with `install`, `uninstall`, `status <feature>`, `view <feature>`, `reset <feature>` and `report <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
+The package puts a `feature-flow` command on your PATH with `install`, `uninstall`, `status <feature>`, `view <feature>`, `reset <feature>`, `report <feature>` and `eval <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
 
 The installer lists what it wrote in `.feature-flow/installed.txt`, with each file's hash in `.feature-flow/installed.sha256`. Commit those files (`git add --pathspec-from-file=.feature-flow/installed.txt`); until you do, the flow does not count them as uncommitted changes. Installing a newer version over an older one updates every file nobody edited since it was installed, and keeps (and names) the ones you changed; `--force` replaces those too.
 
@@ -286,6 +286,17 @@ A builder, reviewer or planner that hits a question it should not decide alone a
 - **Still over, a re-plan offer.** Once fast mode has finished a ticket and the run is still over (or at once, if fast mode was already on), the run stops once with the minutes spent, the tickets left, and an offer to re-plan. If one ticket took more than half the time over several attempts, the stop names it as stuck, since that is a stuck ticket, not a slow plan. `next` goes on as planned, and a new `budget` earns a new offer.
 - **The re-plan needs your yes.** On your yes, between tickets, `replan-prompt` hands the `feature-planner` the open tickets with `guides/replan.md`. It folds them into fewer, larger tickets with the same bar: every Done when item and check moves into the ticket that takes over, folded tickets become `Status: parked (folded into NN)`, and resolved tickets stay as they are. The session shows you the change and commits it only on a second yes. The next `next` stops if the re-plan changed a resolved ticket. Nothing is ever cut without you.
 
+## Recording a run (eval)
+
+Every finished run can leave a record of what it cost and what it caught, so a trial on your own repo gives an answer, not an impression. On `DONE` the skill runs `python3 scripts/flow-status.py <feature> --eval` (or run `feature-flow eval <feature>` yourself) and asks you a few questions.
+
+- **`plans/<feature>/eval.json`**: tickets, builds, reviews and rework; every catch by the check that made it (gate, floor guard, Done when, test first, footprint, reviewer, feature review); where the run needed you (stops, questions, handoffs, resets); active minutes; and tokens.
+- **Tokens** come from Claude Code's own session transcripts (`~/.claude/projects/`, or `CLAUDE_CONFIG_DIR`), never from the agent: every message of the sessions and subagents that worked in this repo during the run, each counted once, by model and, without lanes, split per ticket by time. Codex sessions are not read yet.
+- **`plans/<feature>/eval-verdict.md`**: a form for you. Was the plan right, how many fixes you made by hand, would you use it again, and for each catch whether it was real or a false alarm. Run `--eval` again and your answers land in `eval.json`. The false-alarm count is the only way to tell whether the checks are worth their cost.
+- **Later:** `feature-flow eval <feature> --later`, a week or two on, lists the commits since the run whose subject says fix, revert, bug or regression on the paths each ticket's `Touches:` names: the defects the run let through.
+
+Both files sit in the plan folder, so they are committed with it and survive a cloud session. Nothing is sent anywhere; attach `eval.json` to a field-run issue if you want to share it. Run logs from before 0.15.0 have no dates, so they give no tokens.
+
 ## Long features and handoff
 
 A session's context fills up, so the flow moves to a fresh session every few tickets. After `FLOW_TICKETS_PER_SESSION` tickets (default 4) pass review, `next` prints a `HANDOFF` line instead of the next ticket, for example `HANDOFF /feature-flow csv-export 3f9c0a1b2c3d4e5f.0a1b2c3d4e5f6a7b` (the last word is the runner's digest, which lets the new session check that the flow's files did not change in between). The session stops and tells you to open a new session and type that line. The new session picks up exactly where the last one stopped. Set `FLOW_TICKETS_PER_SESSION=0` to never hand off.
@@ -310,6 +321,7 @@ python3 scripts/flow-status.py <feature> --counts         one line of counts
 python3 scripts/flow-status.py <feature> --check          cycles, missing blockers, missing Done when, unordered mentions
 python3 scripts/flow-status.py <feature> --lint           --check plus: a check block (or `Check: none <why>`) on every ticket, a Test command
 feature-flow report <feature>                             what a run did, from its log: builds, reviews, failed checks, stops
+feature-flow eval <feature> [--later]                     record the run in plans/<feature>/eval.json, with your verdict (also: flow-status.py <feature> --eval)
 python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
 python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser

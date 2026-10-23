@@ -15,10 +15,12 @@ Talk the feature through, then `/feature-flow` (Codex: `$feature-flow`). Say yes
 
 ## After
 
-From the repo:
+The skill records the run when it reaches `DONE`: `plans/<feature>/eval.json` and the form `plans/<feature>/eval-verdict.md`, which it fills in with your answers. If it did not (an old install, or a run that stopped), run it from the repo:
 
 ```bash
-feature-flow report <feature>
+feature-flow eval <feature>          # writes eval.json and the form; fill the form, run it again
+feature-flow report <feature>        # the same log, as a table
+feature-flow eval <feature> --later  # a week or two later: fixes and reverts on the files the run touched
 ```
 
 It reads `.feature-flow/state/flow-<feature>.log` and prints, per ticket, how many times it was built and reviewed, which checks failed, and the run's STOPs with their reasons, resets and handoffs. A ticket built more than once was reworked; a STOP is where the flow wanted you.
@@ -33,4 +35,4 @@ Then answer five questions:
 4. Did the session ever mangle the loader line or lose a digest?
 5. Was the plan right: did the tickets match what you wanted built?
 
-Keep `.feature-flow/state/` (the log and state files) and open an issue at https://github.com/hamilton-sky/feature-flow/issues with the report output and your answers.
+Keep `.feature-flow/state/` (the log and state files) and open an issue at https://github.com/hamilton-sky/feature-flow/issues with `eval.json` attached, the report output and your answers.
