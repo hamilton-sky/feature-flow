@@ -9,7 +9,7 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, cli, install, evaluate, report, status, suggest, uninstall, view
+from feature_flow import __version__, cli, install, evaluate, importer, report, status, suggest, uninstall, view
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
@@ -19,17 +19,19 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow reset <feature> [NN]
        feature-flow report <feature>
        feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]
+       feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]
        feature-flow --version
 install copies the skill, its roles, scripts and guides into a repo; --user installs them once for every repo, in ~/.claude, ~/.agents and ~/.feature-flow, and writes nothing into a repo. feature-flow install --help says more.
 uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude, ~/.agents and ~/.feature-flow.
 status and view read plans/<feature>/ in the current directory, like scripts/flow-status.py and scripts/flow-view.py.
 reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.
 report prints what a run did (builds, reviews, failed checks, stops) from its log in .feature-flow/state/. Read-only.
+given a Spec Kit or OpenSpec task list, `import` starts plans/<feature>/ with one ticket per phase or section.
 eval records a field run in plans/<feature>/eval.json: cost, tokens, what each check caught, where it needed you, and your verdict from eval-verdict.md.
 """
 
 
-COMMANDS = ("install", "uninstall", "status", "view", "reset", "report", "eval", "--version", "--help")
+COMMANDS = ("install", "uninstall", "status", "view", "reset", "report", "eval", "import", "--version", "--help")
 
 
 def main(argv=None):
@@ -54,6 +56,8 @@ def main(argv=None):
         return report.main(rest)
     if command == "eval":
         return evaluate.main(rest)
+    if command == "import":
+        return importer.main(rest)
     if command == "reset":
         if not rest or len(rest) > 2:
             sys.stderr.write(USAGE)
