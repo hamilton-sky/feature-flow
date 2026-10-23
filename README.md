@@ -320,6 +320,7 @@ Pick one with `/feature-flow <feature> careful` (or `fast`), `FLOW_PROFILE=<name
 
 The long `python3 -I -c ...` line the skill uses to call the conductor stays as it is: it is how the skill checks `flow-trust.py` against the sha256 it pins before running it, and a shorter wrapper would be one more file nothing checks. The session copies it from the skill; you never type it.
 
+<<<<<<< HEAD
 ## Starting from Spec Kit or OpenSpec
 
 If you already plan with [GitHub Spec Kit](https://github.com/github/spec-kit) or [OpenSpec](https://github.com/Fission-AI/OpenSpec), feature-flow can build what they planned:
@@ -338,6 +339,8 @@ Or ask the session to plan `albums` from `specs/001-photo-albums`. Either way it
 - **spec.md** carries the source's `spec.md` and `plan.md` (Spec Kit) or `proposal.md` and `design.md` (OpenSpec).
 - **What you add:** the commands (`commands.md` is the template), a `check` block per ticket and the levels. `flow-status.py <feature> --lint` says what is missing. The skill does this with you, then asks for a yes before it commits the plan.
 
+=======
+>>>>>>> origin/main
 ## Long features and handoff
 
 A session's context fills up, so the flow moves to a fresh session every few tickets. After `FLOW_TICKETS_PER_SESSION` tickets (default 4) pass review, `next` prints a `HANDOFF` line instead of the next ticket, for example `HANDOFF /feature-flow csv-export 3f9c0a1b2c3d4e5f.0a1b2c3d4e5f6a7b` (the last word is the runner's digest, which lets the new session check that the flow's files did not change in between). The session stops and tells you to open a new session and type that line. The new session picks up exactly where the last one stopped. Set `FLOW_TICKETS_PER_SESSION=0` to never hand off.
