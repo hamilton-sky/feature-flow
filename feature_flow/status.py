@@ -1,6 +1,6 @@
 """The ticket graph reader, ported from the bash script of the same name.
 
-usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json]
+usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --eval [--later]]
 Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready.
 --ready prints every ready ticket path, one per line, with the same exit codes.
 """
@@ -282,5 +282,8 @@ class _Bytes:
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if len(argv) > 1 and argv[1] == "--eval":  # the run's record, written by feature_flow/evaluate.py
+        from feature_flow import evaluate
+        return evaluate.main(argv[:1] + argv[2:])
     sys.stdout.flush()
     return run(argv, _Bytes(sys.stdout.buffer), _Bytes(sys.stderr.buffer))

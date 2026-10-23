@@ -114,4 +114,4 @@ def save(path, data, kind=None):
 
 def log(path, num, event):
     with open(path, "a", encoding="utf-8") as handle:
-        handle.write("%s,%s,%s\n" % (time.strftime("%H:%M:%S"), num or "-", event))
+        handle.write("%s,%s,%s\n" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), num or "-", event))
