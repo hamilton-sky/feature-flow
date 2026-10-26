@@ -1,17 +1,18 @@
 # Trying feature-flow on your own repo
 
-feature-flow has mostly been run on itself. A run on a different repo, with a feature you actually need, teaches more than another release. This page is the checklist, and `feature-flow report` gives you the numbers.
+A run on your repo, with a feature you actually need, teaches more than another release. The field runs so far are why 0.19.0 to 0.23.0 exist (see [releases.md](releases.md)). This page is the checklist, and `feature-flow eval` and `feature-flow report` give you the numbers.
 
 ## Before
 
 1. A repo with a test command that runs in about a minute or less, or a slow suite plus a faster subset you can name with `Quick:` in `commands.md`.
-2. A feature of 3 to 6 tickets that you can describe in a few sentences.
-3. Install it so it stays out of your history: `feature-flow install . --private` (or `--user` once for every repo).
-4. For Codex: `--agent codex`, and run it on your own machine.
+2. A feature of 3 to 6 tickets that you can describe in a few sentences. If it has a behaviour a test can reach from outside, keep the planner's `Acceptance:` line, so a tester writes acceptance tests from the spec before the build.
+3. Pick a profile: `normal` for a first run, `careful` where a wrong "done" is expensive, `fast` for a small, low-risk feature.
+4. Install it so it stays out of your history: `feature-flow install . --private` (or `--user` once for every repo).
+5. For Codex: `--agent codex`, and run it on your own machine.
 
 ## During
 
-Talk the feature through, then `/feature-flow` (Codex: `$feature-flow`). Say yes twice. Let it run, and write down anything you did not expect.
+Talk the feature through, then `/feature-flow` (Codex: `$feature-flow`). Say yes twice. Let it run, and write down anything you did not expect. If another agent drives the session for you, add `agent` (`/feature-flow <feature> agent`), so the eval does not count its stops as your time.
 
 ## After
 
@@ -27,7 +28,7 @@ It reads `.feature-flow/state/flow-<feature>.log` and prints, per ticket, how ma
 
 It does not see the trust runner's own STOPs (`flow-trust.py does not match this skill`, `flow files changed since the last step`), because the runner stops before the conductor logs anything. Count those from the session by hand: they are how you tell whether the session copied the long loader line correctly.
 
-Then answer five questions:
+Fill in `eval-verdict.md`, above all whether each catch was real or a false alarm: that count is the only way to tell whether the checks earn their cost. Then answer five questions:
 
 1. Where did it stall?
 2. Which STOPs did you not expect?
