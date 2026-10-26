@@ -132,6 +132,16 @@ def tracked_clean():
             and _git("diff", "--cached", "--quiet", check=False).returncode == 0)
 
 
+def undo_tracked(patch):
+    """Save every change to a tracked file (worktree and index) as a patch, then put them back to HEAD.
+    Untracked files stay. Returns the changed paths."""
+    names = _git("diff", "--name-only", "HEAD").stdout.split("\n")
+    diff = subprocess.run(["git", "diff", "--binary", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    Path(patch).write_bytes(diff.stdout)
+    _git("reset", "-q", "--hard", "HEAD")
+    return [name for name in names if name]
+
+
 def commit_paths(paths, message):
     """Commit these paths only, whatever else is staged."""
     paths = [str(p) for p in paths]

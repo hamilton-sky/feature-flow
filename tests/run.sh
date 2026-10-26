@@ -396,7 +396,7 @@ if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] &&
 LEFT="$(find "$BAR/home" -type f)"
 if [ -z "$LEFT" ]; then ok "the user uninstall leaves no files in the home"; else bad "the user uninstall leaves no files in the home" "$LEFT"; fi
 if [ ! -e "$BAR/home/.feature-flow" ]; then ok "and ~/.feature-flow is gone"; else bad "and ~/.feature-flow is gone"; fi
-expect_has "--version prints the version" "feature-flow 0.18.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
+expect_has "--version prints the version" "feature-flow 0.19.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"
@@ -711,8 +711,9 @@ D="$(flowrepo pyflow_reviewedit)"
 cd "$D" || exit 1
 pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next
 echo tampered >> README.md; reply "REVIEW: PASS"; pyflow f verdict .git/reply.txt; pyflow f next
-expect_rc "a reviewer's uncommitted edit exits 1" 1 "$RC"
-expect_has "and stops" "STOP the reviewer changed tracked files, which a reviewer must never do" "$OUT"
+expect_has "a reviewer's uncommitted edit is put back and the review handed out again" "REVIEW plans/f/tasks/01-a.md 01" "$OUT"
+expect_lacks "and the edit is gone" "tampered" "$(cat README.md)"
+expect_has "and kept as a patch" "+tampered" "$(cat .feature-flow/state/edit-f-01.patch)"
 D="$(flowrepo pyflow_reviewcommit)"
 cd "$D" || exit 1
 pyflow f next; resolve plans/f/tasks/01-a.md; pyflow f next

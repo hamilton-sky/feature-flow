@@ -105,6 +105,38 @@ class ReviewPasses(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("STOP the reviewer changed tracked files", out)
 
+    def test_review_pass_a_reviewer_edit_is_put_back_and_the_review_handed_out_again(self):
+        self.assertEqual(self.repo.flow("next"), (0, self.review))
+        readme = self.repo.path("plans/f/spec.md").read_text(encoding="utf-8")
+        self.repo.path("plans/f/spec.md").write_text(readme + "tampered\n", encoding="utf-8")
+        self.repo.git("add", "plans/f/spec.md")
+        self.passed()
+        self.assertEqual(self.repo.flow("next"), (0, self.review))
+        self.assertEqual(self.repo.porcelain(), "")
+        self.assertEqual(self.repo.path("plans/f/spec.md").read_text(encoding="utf-8"), readme)
+        self.assertEqual(self.repo.state()["review_pass"], "spec")  # the edited review's PASS was thrown away
+        patch = self.repo.path(".feature-flow/state/edit-f-01.patch").read_text(encoding="utf-8")
+        self.assertIn("+tampered", patch)
+        self.assertIn("EDIT-UNDONE", self.repo.log())
+        prompt = self.repo.flow("prompt")[1]
+        self.assertIn("the last reviewer changed plans/f/spec.md, which a reviewer must never do", prompt)
+        self.passed()
+        self.assertEqual(self.repo.flow("next"), (0, self.review))
+        self.assertEqual(self.repo.state()["review_pass"], "quality")
+        self.assertNotIn("the last reviewer changed", self.repo.flow("prompt")[1])
+
+    def test_review_pass_a_reviewer_that_edits_again_stops_the_run(self):
+        self.assertEqual(self.repo.flow("next"), (0, self.review))
+        for _ in range(2):
+            with open(str(self.repo.path("plans/f/spec.md")), "a", encoding="utf-8") as handle:
+                handle.write("tampered\n")
+            self.passed()
+            rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 1)
+        self.assertIn("STOP the reviewer of 01-a kept changing files after 2 attempt(s): the last reviewer changed "
+                      "plans/f/spec.md", out)
+        self.assertEqual(self.repo.porcelain(), "")
+
     def test_review_pass_no_verdict_in_the_quality_pass_retries_the_quality_review(self):
         self.to_quality()
         self.assertEqual(self.reply("no verdict here\n"), (0, "RETRY no review verdict"))
