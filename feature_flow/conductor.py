@@ -29,10 +29,11 @@ FINDING = re.compile(r"^[ \t]*[0-9]+\.[ \t]+(blocker|major|minor)\b", re.IGNOREC
 CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
 LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}
 BRAINSTORM = "brainstorm.md"  # the user's chosen approach, copied from the state folder into the draft and the plan
-HELPERS = {"scout": "scout", "web": "scout", "architect": "consult", "designer": "consult", "po": "consult",
-           "skeptic": "skeptic"}  # a brainstorm helper and the group its limit counts in
-HELPER_LIMITS = {"normal": {"scout": 2, "web": 1, "consult": 2, "skeptic": 1},
-                 "careful": {"scout": 3, "web": 2, "consult": 3, "skeptic": 1}}  # helpers per brainstorm
+LENSES = ("positive", "researcher", "open-minded", "artistic", "ux", "security")  # guides/lenses/<name>.md
+HELPERS = dict({"scout": "scout", "web": "scout", "architect": "consult", "designer": "consult", "po": "consult",
+                "skeptic": "skeptic"}, **{lens: "lens" for lens in LENSES})  # a brainstorm helper and its limit's group
+HELPER_LIMITS = {"normal": {"scout": 2, "web": 1, "consult": 2, "skeptic": 1, "lens": 2},
+                 "careful": {"scout": 3, "web": 2, "consult": 3, "skeptic": 1, "lens": 3}}  # helpers per brainstorm
 FULL_ROUNDS = 2  # a level 2 ticket's rounds in which a major finding still sends it back
 MAX_LANES = 4
 MAX_BATCH = 5  # most tickets one builder takes at once in fast mode
@@ -1659,14 +1660,19 @@ class Conductor:
                        "on without, or delete %s to start a new brainstorm"
                        % (self.feature, limit, group, profile, counts_file.as_posix()))
         try:
-            role_text = prompts.role(self.scripts, prompts.ROLES["skeptic" if helper == "skeptic" else
+            role_text = prompts.role(self.scripts, prompts.ROLES[group if group in ("skeptic", "lens") else
                                                                helper if group in ("scout", "web") else "ask-" + helper])
+            lens = prompts.lens(self.scripts, helper) if group == "lens" else ""
         except FileNotFoundError as err:
             raise Stop(str(err))
         about = ("The user's session is brainstorming how to build the feature `%s`, before it is planned: no brief "
                  "and no plan exist yet." % self.feature)
         if group in ("scout", "web"):
             out = scouts.prompt(role_text, "planner", about + "\n\n" + question)
+        elif group == "lens":
+            out = ("%s\n\n---\n\nYour lens is `%s`. Its guide follows.\n\n%s\n\n---\n\n%s The options it drafted "
+                   "follow. Read the repository.\n\n%s\n\nDo not edit any file. Your final reply must end with exactly "
+                   "`LENS: DONE`.\n" % (role_text, helper, lens, about, question))
         elif helper == "skeptic":
             out = ("%s\n\n---\n\n%s The options it drafted follow. Read the repository.\n\n%s\n\nDo not edit any "
                    "file. Your final reply must end with exactly `SKEPTIC: DONE`.\n" % (role_text, about, question))

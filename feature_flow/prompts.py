@@ -12,7 +12,7 @@ ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-q
          "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md",
          "scout": "flow-scout.md", "web": "flow-web.md", "ask-architect": "flow-architect.md",
          "ask-designer": "flow-designer.md", "ask-po": "flow-po.md", "replan": "feature-planner.md",
-         "skeptic": "flow-skeptic.md", "test": "flow-tester.md"}
+         "skeptic": "flow-skeptic.md", "test": "flow-tester.md", "lens": "flow-lens.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
           "review-single": "review-single.md", "review-feature": "review-feature.md", "plan": "plan.md",
           "plan-review": "plan-review.md", "replan": "replan.md", "test": "test.md"}
@@ -32,6 +32,11 @@ def find_file(scripts, folder, name):
         if path.is_file():
             return path
     raise FileNotFoundError("cannot find %s/%s beside scripts/ or in .feature-flow/" % (folder, name))
+
+
+def lens(scripts, name):
+    """A brainstorm lens's guide, guides/lenses/<name>.md."""
+    return _body(find_file(scripts, "guides", "lenses/%s.md" % name))
 
 
 def _body(path):

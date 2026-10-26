@@ -6,7 +6,7 @@ import unittest
 
 from helpers import ROOT
 
-READ_ONLY = ("ticket-reviewer", "plan-reviewer", "flow-scout", "flow-architect", "flow-designer", "flow-po", "flow-skeptic")
+READ_ONLY = ("ticket-reviewer", "plan-reviewer", "flow-scout", "flow-architect", "flow-designer", "flow-po", "flow-skeptic", "flow-lens")
 WRITERS = ("ticket-builder", "feature-planner")
 
 

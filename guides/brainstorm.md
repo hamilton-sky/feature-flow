@@ -28,8 +28,11 @@ Six read only helpers work for you, never for each other, and never talk to the 
 | `designer` | `flow-designer` | how an option looks and behaves for its user | Consulted, the option's diagram |
 | `po` | `flow-po` | what an option gives the user, what to cut | Consulted, Out in the brief |
 | `skeptic` | `flow-skeptic` | the strongest objection to each finished option | each option's Cons and Risky areas |
+| a lens | `flow-lens` | the options through one lens (below) | the option it speaks to, or a new option |
 
-The script counts them per brainstorm and stops past the limit: `normal` allows 2 scouts, 1 web, 2 consultants (architect, designer and po together) and 1 skeptic; `careful` allows 3, 2, 3 and 1. `FLOW_SCOUTS=off` allows no scout or web. Past a limit, go on without. A reply that ends `ANSWER: USER` is a question for the user: ask it.
+A lens is one way of looking, and its name is the helper's name: `positive` (the best case for each option), `researcher` (what the repository's own evidence says), `open-minded` (the option nobody drafted), `artistic` (how it feels to the person who meets it), `ux` (usability and accessibility) or `security` (what a hostile caller or a mistake could do). Pick the lenses that fit the idea: a screen the user sees gets `ux` and often `artistic`; anything that touches data, money, accounts or limits gets `security`; a vague or new idea gets `open-minded`; a choice that rests on a guess gets `researcher`. Ask a lens after the options are written, as the skeptic is.
+
+The script counts them per brainstorm and stops past the limit: `normal` allows 2 scouts, 1 web, 2 consultants (architect, designer and po together), 1 skeptic and 2 lenses; `careful` allows 3, 2, 3, 1 and 3. `FLOW_SCOUTS=off` allows no scout or web. Past a limit, go on without. A reply that ends `ANSWER: USER` is a question for the user: ask it.
 
 ## Step 2: Look around
 
@@ -46,9 +49,9 @@ If the choice turns on module boundaries, a screen or scope, ask the `architect`
 
 ## Step 4: The user picks
 
-Show the options with their diagrams and your pick, and ask: which one? They may pick, edit, mix, or drop the brainstorm. On a drop, delete the file and write the brief as before.
+Write the brainstorm file (below) with the options and no Chosen yet, then make it a review page: `python3 scripts/flow-status.py <feature> --brainstorm-page` writes `.feature-flow/state/brainstorm-<feature>.html` beside it, with a sidebar for the sections, a light, dark or system switch, diagrams whose boxes the user can drag, and an arrow animation they can turn on. The look is the brainstorm's `Style:` line (`route` unless the user asks for another style in `guides/styles/`). If you can publish an artifact, add `--fragment` and publish that file; otherwise give the user the file's path to open. Then show the options and your pick, and ask: which one? They may pick, edit, mix, or drop the brainstorm. On a drop, delete the file and write the brief as before.
 
-Write the file with the shell, not a file tool, from [templates/brainstorm.md](templates/brainstorm.md):
+Write the file with the shell, not a file tool, from [templates/brainstorm.md](templates/brainstorm.md), and again with Chosen and Rejected filled in once the user picks (make the page again if they want to see it):
 
 ```
 cat > .feature-flow/state/brainstorm-<feature>.md <<'BRAINSTORM'
