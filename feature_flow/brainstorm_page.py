@@ -20,7 +20,8 @@ from pathlib import Path
 
 from feature_flow import git
 
-USAGE = "usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]"
+USAGE = ("usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]\n"
+         "       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version>")
 DEFAULT_STYLE = "route"
 MERMAID = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"
 FONT_LINE = re.compile(r"/\*\s*fonts:\s*(https://fonts\.googleapis\.com/\S+)\s*\*/")
@@ -295,7 +296,7 @@ def parse(text):
     return title, meta, intro, sections
 
 
-def render(text, feature, style_css, style_name, fragment=False):
+def render(text, feature, style_css, style_name, fragment=False, live=False):
     title, meta, intro, sections = parse(text)
     figures, used = [], set()
     nav, body = [], []
@@ -336,9 +337,10 @@ def render(text, feature, style_css, style_name, fragment=False):
             % (html.escape(page_title),
                ('<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" '
                 'href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="%s">\n'
-                % html.escape(fonts.group(1)) if fonts else ""), BASE_CSS + PALETTE_CSS, style_css))
+                % html.escape(fonts.group(1)) if fonts else ""), BASE_CSS + PALETTE_CSS + (live_layer()[0] if live else ""),
+               style_css))
     content = (
-        '<div class="wrap" data-page="%s">\n<nav class="route" aria-label="Sections">'
+        '<div class="wrap" data-page="%s"%s>\n<nav class="route" aria-label="Sections">'
         '<div class="progress"><div class="bar"><i></i></div><div class="count">0 of %d sections read</div></div>'
         '<div class="stage">Brainstorm</div><ol>%s</ol>'
         '<div class="stage">View</div><div class="controls">'
@@ -347,9 +349,9 @@ def render(text, feature, style_css, style_name, fragment=False):
         '</button></div><label class="motion"><input type="checkbox" id="motion"> Animate the arrows</label></div>'
         '</nav>\n<main>\n<header class="hero"><div class="eyebrow">Brainstorm review &middot; style %s</div>'
         '<h1>%s</h1>%s<div class="meta">%s</div></header>\n%s\n</main>\n</div>\n%s<script>\n%s\n</script>\n'
-        % (html.escape(feature), len(nav), "".join(nav), html.escape(style_name), inline(title or page_title),
+        % (html.escape(feature), ' data-live="1"' if live else "", len(nav), "".join(nav), html.escape(style_name), inline(title or page_title),
            blocks(intro, figures), meta_html, "\n".join(body),
-           '<script src="%s"></script>\n' % MERMAID if needs_mermaid else "", PALETTE_JS + BASE_JS))
+           '<script src="%s"></script>\n' % MERMAID if needs_mermaid else "", PALETTE_JS + BASE_JS + (live_layer()[1] if live else "")))
     if fragment:
         return head + content
     return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" '
@@ -357,15 +359,29 @@ def render(text, feature, style_css, style_name, fragment=False):
             % (head, content))
 
 
+def live_layer():
+    from feature_flow import brainstorm_live
+    return brainstorm_live.LIVE_CSS, brainstorm_live.LIVE_JS
+
+
 def main(argv, out=None, err=None, root=None):
     out = out or sys.stdout
     err = err or sys.stderr
-    args, style, fragment, target = [], None, False, None
+    args, style, fragment, target, live, tool = [], None, False, None, None, None
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--fragment":
             fragment = True
+        elif a in ("--live", "--asks") and i + 1 < len(argv) and tool is None and live is None:
+            live, tool = argv[i + 1], a[2:]
+            i += 1
+        elif a == "--answer" and i + 3 < len(argv) and tool is None:
+            live, tool, extra = argv[i + 1], "answer", argv[i + 2:i + 4]
+            i += 3
+        elif a == "--apply" and i + 3 < len(argv) and tool is None:
+            live, tool, extra = argv[i + 1], "apply", argv[i + 2:i + 4]
+            i += 3
         elif a in ("--style", "--out") and i + 1 < len(argv):
             if a == "--style":
                 style = argv[i + 1]
@@ -389,6 +405,8 @@ def main(argv, out=None, err=None, root=None):
                   % (feature, feature))
         return 1
     text = path.read_text(encoding="utf-8", errors="replace")
+    if tool in ("asks", "answer", "apply"):
+        return live_tool(tool, path, text, Path(live), extra if tool != "asks" else [], out, err)
     root = Path(root) if root else guides_root()
     names = styles(root)
     _, meta, _, _ = parse(text)
@@ -397,10 +415,47 @@ def main(argv, out=None, err=None, root=None):
         err.write("no style %s: pick one of %s (guides/styles/)\n" % (name, ", ".join(names) or "none installed"))
         return 1
     css = (root / "guides" / "styles" / (name + ".css")).read_text(encoding="utf-8")
+    if tool == "live":  # the page and its state, to publish together as an artifact that saves itself
+        from feature_flow import brainstorm_live
+        folder = Path(live)
+        folder.mkdir(parents=True, exist_ok=True)
+        st = brainstorm_live.state(text, feature, brainstorm_live.load(folder / "state.json"))
+        (folder / "index.html").write_text(render(text, feature, css, name, True, True), encoding="utf-8")
+        (folder / "state.json").write_text(brainstorm_live.dump(st), encoding="utf-8")
+        out.write("wrote %s and %s (round %d, %d figures, %d open asks)\n" % (
+            (folder / "index.html").as_posix(), (folder / "state.json").as_posix(), st["round"], len(st["figures"]),
+            sum(1 for a in st["asks"] if not a.get("answer"))))
+        return 0
     page = render(text, feature, css, name, fragment)
     dest = Path(target) if target else path.with_suffix(".html")
     dest.write_text(page, encoding="utf-8")
     out.write("wrote %s\n" % dest.as_posix())
+    return 0
+
+
+def live_tool(tool, path, text, state_path, extra, out, err):
+    from feature_flow import brainstorm_live
+    if state_path.is_dir():
+        state_path = state_path / "state.json"
+    st = brainstorm_live.load(state_path)
+    if st is None:
+        err.write("no page state at %s: read the published page's state.json into it first (brainstorm guide)\n"
+                  % state_path.as_posix())
+        return 1
+    try:
+        if tool == "asks":
+            out.write(brainstorm_live.asks(st) + "\n")
+        elif tool == "answer":
+            if not extra[0].isdigit():
+                raise ValueError("the ask number must be a number, not %s" % extra[0])
+            state_path.write_text(brainstorm_live.dump(brainstorm_live.answer(st, int(extra[0]), extra[1])), encoding="utf-8")
+            out.write("answered ask %s in %s\n" % (extra[0], state_path.as_posix()))
+        else:
+            path.write_text(brainstorm_live.apply(text, st, extra[0], extra[1]), encoding="utf-8")
+            out.write("figure %s in %s is now version %s\n" % (extra[0], path.as_posix(), extra[1]))
+    except ValueError as e:
+        err.write("%s\n" % e)
+        return 1
     return 0
 
 
@@ -691,6 +746,7 @@ BASE_JS = r"""
     var hint = fig.querySelector('.hint'), help = hint.textContent, edited = fig.querySelector('.edited'), input = fig.querySelector('input.rename');
     var mid = 'arrow-' + fig.dataset.fig, byId = {}, nodes = {}, edges = [];
     var sel = null, linking = null, renaming = null, press = null, last = { at: 0 }, undo = [], redo = [];
+    var against = null, ghostLayer = null, ghosts = [], counts = { added: 0, removed: 0, renamed: 0 };  // the compare view
     svg.setAttribute('tabindex', '-1');
 
     function snap() { return JSON.stringify({ g: clean(g), pos: pos }); }
@@ -698,17 +754,18 @@ BASE_JS = r"""
       var same = JSON.stringify(clean(g)) === first && JSON.stringify(pos) === JSON.stringify(start);
       save(store, same ? null : JSON.stringify({ graph: clean(g), pos: pos }));
     }
-    function change(fn) {  // every edit goes through here, so it can be undone
+    function told(how) { if (fig.editor && fig.editor.onChange) fig.editor.onChange(how || 'hand'); }
+    function change(fn, how) {  // every edit goes through here, so it can be undone
       var before = snap();
       fn();
       undo.push(before); if (undo.length > 100) undo.shift(); redo = [];
-      build(); persist();
+      build(); persist(); told(how);
     }
     function restore(from, to) {
       if (!from.length) return;
       to.push(snap());
       var s = JSON.parse(from.pop()); g = s.g; pos = s.pos;
-      build(); persist();
+      build(); persist(); told();
     }
     function exists(s) { return s && (s.node ? byId[s.node] : g.edges[s.edge]); }
     function select(s) {
@@ -720,7 +777,7 @@ BASE_JS = r"""
       tool('connect').setAttribute('aria-pressed', String(!!linking));
       tool('undo').disabled = !undo.length; tool('redo').disabled = !redo.length;
       edited.hidden = JSON.stringify(clean(g)) === first;
-      hint.textContent = linking ? 'Click the box the new arrow goes to. Esc cancels.' : help;
+      hint.textContent = linking ? 'Click the box the new arrow goes to. Esc cancels.' : hint.dataset.help || help;
     }
     function build() {
       var had = fig.contains(document.activeElement);  // undo can remove the focused box: keep the keys in this figure
@@ -731,7 +788,12 @@ BASE_JS = r"""
       loops(g);
       var defs = el('defs', {}, svg);
       el('path', { d: 'M0 0L10 5L0 10z', fill: 'var(--line-strong)' }, el('marker', { id: mid, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs));
-      var edgeLayer = el('g', {}, svg), nodeLayer = el('g', {}, svg);
+      var edgeLayer = el('g', {}, svg);
+      ghostLayer = el('g', { 'aria-hidden': 'true' }, svg);
+      var nodeLayer = el('g', {}, svg);
+      var base = {}, baseEdges = {};
+      if (against) { against.nodes.forEach(function (n) { base[n.id] = n; }); against.edges.forEach(function (e) { baseEdges[e.from + '>' + e.to] = true; }); }
+      counts = { added: 0, removed: 0, renamed: 0 }; ghosts = [];
       g.edges.forEach(function (e, i) {
         var grp = el('g', { class: 'edge ' + e.style, 'data-i': i }, edgeLayer), hit = el('path', { class: 'hit' }, grp), path = el('path', {}, grp);
         if (e.style !== 'open') path.setAttribute('marker-end', 'url(#' + mid + ')');
@@ -747,8 +809,29 @@ BASE_JS = r"""
           var t = el('text', { 'text-anchor': 'middle', y: (i - (n.lines.length - 1) / 2) * 17 + 4.5 }, grp);
           t.textContent = line;
         });
+        if (against && !base[n.id]) { grp.classList.add('diff-add'); counts.added++; }
+        else if (against && base[n.id].label !== n.label) {
+          grp.classList.add('diff-ren'); counts.renamed++;
+          el('text', { 'text-anchor': 'middle', class: 'was', y: n.h / 2 + 15 }, grp).textContent = base[n.id].label;
+        }
         nodes[n.id] = grp;
       });
+      if (against) {
+        edges.forEach(function (d) { if (!baseEdges[d.e.from + '>' + d.e.to]) { d.grp.classList.add('diff-add'); counts.added++; } });
+        var here = {}; g.edges.forEach(function (e) { here[e.from + '>' + e.to] = true; });
+        against.nodes.forEach(function (n) {
+          if (byId[n.id]) return;
+          counts.removed++;
+          var m = { id: n.id, label: n.label, shape: n.shape }; measure(m);
+          if (start[n.id]) ghosts.push({ node: m, at: start[n.id] });
+        });
+        against.edges.forEach(function (e) {
+          if (here[e.from + '>' + e.to]) return;
+          counts.removed++;
+          var a = pos[e.from] && byId[e.from] ? pos[e.from] : start[e.from], b = pos[e.to] && byId[e.to] ? pos[e.to] : start[e.to];
+          if (a && b) ghosts.push({ from: e.from, to: e.to });
+        });
+      }
       place();
       select(sel);
       if (sel && sel.node && had) nodes[sel.node].focus({ preventScroll: true });
@@ -788,8 +871,21 @@ BASE_JS = r"""
         }
         d.path.setAttribute('d', line); d.hit.setAttribute('d', line);
       });
+      while (ghostLayer.firstChild) ghostLayer.removeChild(ghostLayer.firstChild);
+      var at = function (id) { return byId[id] ? pos[id] : start[id]; };
+      ghosts.forEach(function (gh) {
+        if (gh.node) {
+          var grp = el('g', { class: 'ghost', transform: 'translate(' + gh.at.x + ' ' + gh.at.y + ')' }, ghostLayer);
+          shape(gh.node, grp);
+          gh.node.lines.forEach(function (line, i) { el('text', { 'text-anchor': 'middle', y: (i - (gh.node.lines.length - 1) / 2) * 17 + 4.5 }, grp).textContent = line; });
+        } else {
+          var a = at(gh.from), b = at(gh.to);
+          el('path', { d: 'M' + a.x + ' ' + a.y + 'L' + b.x + ' ' + b.y }, el('g', { class: 'edge ghost' }, ghostLayer));
+        }
+      });
       if (keepBox) return;
       var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      ghosts.forEach(function (gh) { if (gh.node) { var p = gh.at, n = gh.node; minX = Math.min(minX, p.x - n.w / 2); minY = Math.min(minY, p.y - n.h / 2); maxX = Math.max(maxX, p.x + n.w / 2); maxY = Math.max(maxY, p.y + n.h / 2); } });
       extra.forEach(function (p) { minX = Math.min(minX, p.x - 40); minY = Math.min(minY, p.y - 14); maxX = Math.max(maxX, p.x + 40); maxY = Math.max(maxY, p.y + 14); });
       g.nodes.forEach(function (n) { var p = pos[n.id]; minX = Math.min(minX, p.x - n.w / 2); minY = Math.min(minY, p.y - n.h / 2); maxX = Math.max(maxX, p.x + n.w / 2); maxY = Math.max(maxY, p.y + n.h / 2); });
       if (minX === Infinity) { minX = minY = 0; maxX = 200; maxY = 80; }
@@ -865,7 +961,7 @@ BASE_JS = r"""
       if (!done.moved) { clicked({ node: done.id }); return; }
       nodes[done.id].classList.remove('dragging');
       undo.push(done.before); if (undo.length > 100) undo.shift(); redo = [];
-      place(); persist(); select(sel);
+      place(); persist(); select(sel); told();
     }
     svg.addEventListener('pointerup', drop);
     svg.addEventListener('pointercancel', drop);
@@ -946,6 +1042,18 @@ BASE_JS = r"""
       try { document.execCommand('copy'); toast('Copied as mermaid'); } catch (e) { toast('Select the source below to copy it'); }
       area.remove();
     }
+    fig.editor = {  // what the live page (brainstorm_live.py) works through
+      get: function () { return { graph: clean(g), pos: JSON.parse(JSON.stringify(pos)) }; },
+      load: function (graph, at, how) {
+        change(function () {
+          var keep = {};
+          g = JSON.parse(JSON.stringify(graph)); g.nodes.forEach(function (n) { if (at && at[n.id]) keep[n.id] = at[n.id]; else if (pos[n.id]) keep[n.id] = pos[n.id]; else if (start[n.id]) keep[n.id] = start[n.id]; });
+          pos = keep; sel = null; linking = null;
+        }, how);
+      },
+      compare: function (base) { against = base ? clean(base) : null; build(); return counts; },
+      onChange: null
+    };
     build();
   });
   if (window.mermaid) { try { window.mermaid.initialize({ startOnLoad: true, theme: 'neutral' }); } catch (e) {} }

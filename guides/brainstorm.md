@@ -7,7 +7,7 @@ The file is `.feature-flow/state/brainstorm-<feature>.md`, in the git-ignored st
 ## When
 
 - **`careful`** (the word, `FLOW_PROFILE=careful`, or `Profile: careful` in the conversation): always.
-- **`brainstorm`** in the arguments: always.
+- **`brainstorm`** in the arguments: always. **`brainstorm sketch`** starts from the user's own drawing (Sketch first, below).
 - **Otherwise**, offer it in one line when the idea is fuzzy: there is no bar yet, there are two real ways to build it, or the brief would carry more than two Unsure lines. On a no, go to the brief.
 - **Never** with `fast` (unless the user typed `brainstorm`), for a Spec Kit or OpenSpec import, or when a plan exists.
 - With **`auto`** and no person to ask, skip it. With **`agent`** (another agent drives), the driving agent answers for the user and picks the option: write `Picked by: agent`.
@@ -60,6 +60,31 @@ BRAINSTORM
 ```
 
 Then write the brief (brief guide, Step 1) from the chosen option, with the line `Brainstorm: .feature-flow/state/brainstorm-<feature>.md`: its What and In scope follow the chosen option, its Out names the rejected ones, and the brainstorm's Open lines go under Unsure. The user's pick and the brief share one yes (approval 1): show the brief right after the pick, and the yes covers both.
+
+## The live page
+
+When you can publish an artifact (Claude Code with the Artifact tool), make the page live instead. Then the user, and the people they invite, can each save their own version of a diagram, compare it with the original (added, removed and renamed boxes are marked), ask Claude in the page to change a diagram, and send you questions. Each person they invite needs a claude.ai sign-in and edit access from the page's Share menu.
+
+1. `python3 scripts/flow-status.py <feature> --brainstorm-page --live .feature-flow/state/brainstorm-<feature>-live` writes `index.html` and `state.json` into that folder.
+2. Publish `index.html`, with `state.json` as a file beside it and the capabilities `{"artifact": {}, "user": {"scopes": ["profile"]}, "sample": {}}`. Publish from the same path every round so the link stays the same. Give the user the link, and tell them it starts private and that they share it from its Share menu.
+3. End your turn. A save on the page republishes it, and that wakes you. Read the page's `state.json` (the Artifact tool's read, with path `state.json`) and copy it over the one in the live folder.
+4. `--brainstorm-page --asks <live folder>` lists the open asks, each with the asker's version of the diagram. Answer each one:
+   - Change the brainstorm when the ask calls for it. `--brainstorm-page --apply <live folder> <figure> <version>` puts that person's version of a figure into the file, and `original` as the version puts the original back.
+   - Then run `--brainstorm-page --answer <live folder> <n> "<answer>"`, with a short answer that says what you changed.
+5. Run step 1 again, which keeps the saved versions and asks, and publish both files to the same link. If a publish is refused because the page has a newer version, take that version's `state.json` and go back to step 4.
+
+A save that only adds a version, with no ask, needs nothing from you. The user still picks in the chat, as in Step 4. Without an Artifact tool, or on Codex, make the plain page.
+
+## Sketch first
+
+Use this with `brainstorm sketch` in the arguments, or when the user would rather draw than describe.
+
+1. After Step 1, write the brainstorm with only the Idea section and a `## Sketch` section. The Sketch holds one small flowchart of the idea as you understand it, two to four boxes.
+2. Make the live page, and ask the user to draw their idea on it: add, rename, colour and connect boxes, press Save as my version, then send you a note with Send to Claude.
+3. When the ask comes, `--apply` their version into the Sketch and treat it as the idea in their words.
+4. Go on with Step 2 and Step 3. Your options build on their sketch, and your answer on the page says how.
+
+Sketch first needs the live page. Without an Artifact tool, ask the user to describe the idea instead.
 
 ## Rules
 

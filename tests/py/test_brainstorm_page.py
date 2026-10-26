@@ -117,7 +117,7 @@ class Rendering(unittest.TestCase):
         self.assertIn('<input class="rename"', tools)
         self.assertEqual(re.findall(r'data-shape="(\w+)"', tools),
                          ["rect", "round", "stadium", "diamond", "cylinder", "hexagon", "circle"])
-        for name in ("function mermaid(g)", "function change(fn)", "function restore(from, to)", "'Delete'", "key === 'z'"):
+        for name in ("function mermaid(g)", "function change(fn, how)", "function restore(from, to)", "'Delete'", "key === 'z'"):
             self.assertIn(name, page.BASE_JS)
 
     def test_text_is_escaped_and_only_web_links_survive(self):
