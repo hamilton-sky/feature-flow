@@ -152,7 +152,7 @@ class FirstCalls(Base):
     def test_a_wrong_digest_stops_before_the_conductor_runs(self):
         rc, out, err = self.trust("f", "start", FLOW_TRUST="0" * 16 + "." + "0" * 16)
         self.assertEqual(rc, 1, (out, err))
-        self.assertTrue(out.startswith(CHANGED), out)
+        self.assertTrue(out.startswith("STOP no earlier conductor call for f"), out)  # nothing ran for f yet
         self.assertFalse(self.repo.path(STATE).exists())
 
     def test_after_build_is_accepted_and_ignored(self):
@@ -369,6 +369,25 @@ class Trips(Base):
         rc, out, err = self.call("next")
         self.assertEqual(rc, 1, (out, err))
         self.assertEqual(out.strip(), CHANGED + " (no earlier list to name them)")
+
+
+class Arguments(Base):
+    """0.20.0: --after-build anywhere, and a digest from another feature named as such."""
+
+    def test_after_build_is_read_before_or_after_the_feature(self):
+        runner = load_runner()
+        want = ("f", "next", [], ("plans/f/tasks/01-a.md", "abc123"))
+        self.assertEqual(runner.parse(["--after-build", "plans/f/tasks/01-a.md", "abc123", "f", "next"]), want)
+        self.assertEqual(runner.parse(["f", "next", "--after-build", "plans/f/tasks/01-a.md", "abc123"]), want)
+        self.assertEqual(runner.parse(["f", "--after-build", "plans/f/tasks/01-a.md", "abc123", "next"]), want)
+        self.assertIsNone(runner.parse(["f", "next", "--after-build", "x"]))
+
+    def test_another_features_digest_says_to_pass_new(self):
+        self.begin()
+        rc, out, err = self.trust("g", "start", FLOW_TRUST=self.digest)
+        self.assertEqual(rc, 1, (out, err))
+        self.assertIn("STOP no earlier conductor call for g in this repo", out)
+        self.assertIn("pass FLOW_TRUST=new", out)
 
 
 class NoTrips(Base):
@@ -759,8 +778,9 @@ class FlowEdit(FlowEditBase):
         self.assertEqual(lines[1], "FLOW-EDIT feature_flow/floorguard.py")
         self.assertTrue(lines[2].startswith("REVIEW "), (lines, err))
         self.digest = TRUST.match(lines[0]).group(1)
-        rc, lines, err = self.passed("next")
-        self.assertFalse(lines[0].startswith(CHANGED), lines)
+        rc, lines, err = self.passed("next")  # the runner lets it through; the conductor wants a verdict first
+        self.assertEqual((rc, lines), (2, []), err)
+        self.assertIn("no verdict recorded for the review of 01-a", err)
 
     def test_without_the_flag_it_stops(self):
         self.build()

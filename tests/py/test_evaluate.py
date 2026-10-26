@@ -118,6 +118,32 @@ class EvalCommandTests(unittest.TestCase):
         self.assertIn("2 catch(es)", out)
         self.assertIn("fill in", out)
 
+    def test_it_records_the_driver_the_followups_and_the_settled_tickets(self):
+        folder = state.state_dir(self.repo.dir)
+        (folder / "flow-f.log").write_text(LOG.replace("START\n", "START\n2026-10-23T10:00:01Z,-,DRIVER-AGENT\n", 1)
+                                           + "2026-10-23T10:09:30Z,02,DONEWHEN-DEFERRED 2\n", encoding="utf-8")
+        plan = self.repo.dir / "plans" / "f"
+        (plan / "tasks" / "03-c.md").write_text(helpers.ticket_text("C", "resolved", "—"), encoding="utf-8")
+        (plan / "followups.md").write_text("# Follow-ups: f\n\n## 01-a (left for later)\n\n- one\n- two\n",
+                                           encoding="utf-8")
+        code, out, err = self.run_eval("f")
+        self.assertEqual(code, 0, err)
+        record = json.loads((plan / "eval.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["driver"], "agent")
+        self.assertEqual(record["totals"]["settled_at_plan"], ["03"])
+        self.assertEqual(record["totals"]["followups"], 2)
+        self.assertEqual(record["totals"]["deferred_checks"], 2)
+        self.assertIn("settled at plan approval (never built): 03", out)
+        self.assertIn("follow-ups: 2 in followups.md, 2 deferred check(s)", out)
+        self.assertIn("needed the driving agent (not you): 1 stop(s)", out)
+        self.assertIn("an agent drove this run", (plan / "eval-verdict.md").read_text(encoding="utf-8"))
+
+    def test_a_person_drives_by_default(self):
+        code, out, err = self.run_eval("f")
+        record = json.loads((self.repo.dir / "plans" / "f" / "eval.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["driver"], "person")
+        self.assertIn("needed you: 1 stop(s)", out)
+
     def test_a_filled_form_lands_in_the_record(self):
         self.run_eval("f")
         form = self.repo.dir / "plans" / "f" / "eval-verdict.md"

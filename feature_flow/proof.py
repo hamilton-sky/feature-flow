@@ -15,10 +15,12 @@ OPEN = FENCE + "check"
 
 @dataclass(frozen=True)
 class Check:
-    """One `$ <command>`: exit is an int or "nonzero"; prints holds the substrings the output must contain."""
+    """One `$ <command>`: exit is an int or "nonzero"; prints holds the substrings the output must contain;
+    needs names what the check needs that a host may not have (network, a model), or is ""."""
     command: str
     exit: object = 0
     prints: tuple = ()
+    needs: str = ""
 
 
 class ParseError(ValueError):
@@ -44,11 +46,11 @@ def checks_in(text):
     """The checks of every ```check block in the ticket's Done when, in order."""
     checks = []
     fence = None  # None outside a fence, else the line that opened it
-    current = None  # [command, exit, prints, exit_seen] of the check being read
+    current = None  # [command, exit, prints, exit_seen, needs] of the check being read
 
     def finish():
         if current is not None:
-            checks.append(Check(current[0], current[1], tuple(current[2])))
+            checks.append(Check(current[0], current[1], tuple(current[2]), current[4]))
 
     for line in _done_when(text):
         if fence is None:
@@ -67,10 +69,10 @@ def checks_in(text):
             continue
         if line.startswith("$ ") and line[2:].strip():
             finish()
-            current = [line[2:].strip(), 0, [], False]
+            current = [line[2:].strip(), 0, [], False, ""]
             continue
         word = line.split(" ", 1)[0]
-        if word in ("exit", "prints") and current is None:
+        if word in ("exit", "prints", "needs") and current is None:
             raise ParseError("check block: %r comes before the first `$ <command>` line" % line)
         if word == "exit":
             value = line[len("exit "):].strip() if line.startswith("exit ") else ""
@@ -87,8 +89,11 @@ def checks_in(text):
         if word == "prints" and line.startswith("prints ") and line[len("prints "):]:
             current[2].append(line[len("prints "):])
             continue
+        if word == "needs" and line[len("needs "):].strip():
+            current[4] = " ".join(line[len("needs "):].split())
+            continue
         raise ParseError("check block: cannot read %r (expected `$ <command>`, `exit <N>`, "
-                         "`exit nonzero`, `prints <text>`, `#` or a blank line)" % line)
+                         "`exit nonzero`, `prints <text>`, `needs <what>`, `#` or a blank line)" % line)
     if fence == OPEN:
         raise ParseError("check block: %r is never closed by a %s line" % (fence, FENCE))
     return checks
@@ -99,22 +104,23 @@ def _wanted(check):
     return want + "".join(" and output containing %r" % text for text in check.prints)
 
 
-def run_checks(checks, timeout):
+def run_checks(checks, timeout, deferred=None):
     """Run every check (none is skipped after a failure). timeout is minutes, a float is fine, 0 for none.
     Returns (ok, report); the report names each failing command, what was wanted, what happened and the
-    last lines of its output."""
+    last lines of its output. A failing check with a `needs` line is not a failure: it is appended to
+    deferred (a list) as (check, what happened), when deferred is given."""
     failures = []
     top = git.toplevel()
     here = os.getcwd()
     try:
         if top is not None:
             os.chdir(str(top))
-        return _run_checks(checks, timeout, failures)
+        return _run_checks(checks, timeout, failures, deferred)
     finally:
         os.chdir(here)
 
 
-def _run_checks(checks, timeout, failures):
+def _run_checks(checks, timeout, failures, deferred):
     for check in checks:
         with tempfile.TemporaryFile() as log:
             args, use_shell = gate.shell(check.command)
@@ -128,6 +134,9 @@ def _run_checks(checks, timeout, failures):
             if code_ok and all(text in output for text in check.prints):
                 continue
             got = "exit %d" % code
+        if check.needs and deferred is not None:
+            deferred.append((check, got))
+            continue
         failures.append("$ %s\n  wanted: %s\n  got: %s\n  the last lines of its output:\n%s"
                         % (check.command, _wanted(check), got, gate.tail(output)))
     return not failures, "\n".join(failures)

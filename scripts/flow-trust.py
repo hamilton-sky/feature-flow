@@ -37,6 +37,8 @@ USAGE = ("STOP usage: FLOW_TRUST=<last TRUST digest | new> FLOW_SESSION=<token> 
          "[--after-build <ticket> <sha>] <feature> <command> [args...]")
 NO_TRUST = "STOP pass FLOW_TRUST: the last TRUST digest, or new on this session's first call"
 CHANGED = "STOP flow files changed since the last step: %s"
+NEW_FEATURE = ("STOP no earlier conductor call for %s in this repo, so FLOW_TRUST cannot be its digest: a TRUST digest "
+               "belongs to one feature. on a feature's first call pass FLOW_TRUST=new")
 KILLED = "STOP the conductor was killed by signal %d"
 DURING = "STOP flow code changed during %s: %s"
 STATE_CHANGED = "STOP the run state was changed by something other than the conductor during %s"
@@ -65,11 +67,12 @@ def started():
 def parse(args):
     """(feature, command, the conductor's other args, (ticket, sha) or None), or None on a usage error."""
     after = None
-    if args[:1] == ["--after-build"]:
-        if len(args) < 3:
+    if "--after-build" in args:  # before the feature, as the usage says, or anywhere after it
+        at = args.index("--after-build")
+        if len(args) < at + 3:
             return None
-        after = (args[1], args[2])
-        args = args[3:]
+        after = (args[at + 1], args[at + 2])
+        args = args[:at] + args[at + 3:]
     if len(args) < 2:
         return None
     feature = args[0]
@@ -331,7 +334,10 @@ def main():
     if trust != "new" and digest(before, state) != trust:
         edited = flow_edit(top, feature, trust, after, before, state)
         if edited is None:
-            print(CHANGED % named_changes(top, feature, dict(before, **state)))
+            if not trust_path(top, feature).is_file() and not any(path.exists() for path in state_files(top, feature)):
+                print(NEW_FEATURE % feature)
+            else:
+                print(CHANGED % named_changes(top, feature, dict(before, **state)))
             return 1
     result = run_conductor(here, feature, command, rest)
     code, state = snapshot(here, top, feature)

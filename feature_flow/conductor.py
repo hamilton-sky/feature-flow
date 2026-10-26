@@ -98,7 +98,7 @@ class Conductor:
             self.profile = profiles.pick(os.environ, tickets.commands_value(self.commands, "Profile"))
         except profiles.UnknownProfile as err:
             raise Stop(str(err))
-        profiles.apply(os.environ, self.profile)
+        filled = profiles.apply(os.environ, self.profile)
         self.max_retries = _env_int("FLOW_MAX_RETRIES", 2)
         self.max_rounds = _env_int("FLOW_MAX_REVIEW_ROUNDS", 3)
         self.gate_timeout = _env_int("FLOW_GATE_TIMEOUT", 30)
@@ -133,8 +133,15 @@ class Conductor:
         except UnicodeDecodeError:
             raise Stop("the state file %s is damaged: it is not UTF-8 text" % self.state_file)
         self.all = self.st  # the whole run state; self.st is one lane's view of it while a lane works
+        if self.driver() == "agent" and (not os.environ.get("FLOW_TICKETS_PER_SESSION")
+                                         or "FLOW_TICKETS_PER_SESSION" in filled):
+            self.per_session = 0  # an agent has no context to refresh between sessions: no handoffs
 
     # ---- small helpers -------------------------------------------------
+
+    def driver(self):
+        """Who drives the run: "agent" (an orchestrating agent, FLOW_DRIVER=agent on start) or "person"."""
+        return os.environ.get("FLOW_DRIVER") or self.all.get("driver") or "person"
 
     def get(self, key, default=""):
         return self.st.get(key, default)
@@ -249,6 +256,7 @@ class Conductor:
                 self.ticket_name(), source, cap,
                 " at level %d. the user decides what happens next" % level if level else ""))
         self.st["round"] = round_no
+        self.st["due_minors"] = ""  # the next round's reviews list them again if they are still there
         tickets.append_findings(self.ticket(), round_no, source, findings)
         tickets.set_open(self.ticket())
         if not git.commit_file(self.ticket(), "chore(%s): %s review findings, round %d"
@@ -260,7 +268,34 @@ class Conductor:
         self.st["review_pass"] = "spec"
         return self.hand_out_build()
 
+    def add_due(self, key, items):
+        """Remember follow-ups for when the ticket passes: tab separated in the state, one per item."""
+        items = [" ".join(item.split()) for item in items if item.strip()]
+        self.st[key] = NOTE_SEP.join([n for n in self.get(key).split(NOTE_SEP) if n] + items)
+
+    def write_followups(self, title, items, message):
+        """Append items under a heading of the plan's followups.md and commit it."""
+        path = self.plan / "followups.md"
+        text = "" if path.is_file() else (
+            "# Follow-ups: %s\n\nWhat the run left for later: minor findings of passing reviews, the findings a "
+            "level 2 ticket passed with after %d review rounds, and Done when checks this host could not pass. "
+            "Each is a candidate for a cleanup ticket.\n" % (self.feature, FULL_ROUNDS))
+        text += "\n## %s\n\n%s\n" % (title, "\n".join("- " + item for item in items))
+        with open(str(path), "a", encoding="utf-8") as handle:
+            handle.write(text)
+        if not git.commit_file(path, message):
+            raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
+
+    def write_due(self, title):
+        """Write the follow-ups remembered for this ticket (or the feature review) and forget them."""
+        items = [n for key in ("due_checks", "due_minors") for n in self.get(key).split(NOTE_SEP) if n]
+        self.st["due_checks"] = self.st["due_minors"] = ""
+        if items:
+            self.write_followups(title, items, "chore(%s): %s follow-ups" % (self.feature, self.get("num")))
+            self.log("FOLLOWUPS %d" % len(items))
+
     def pass_ticket(self):
+        self.write_due("%s (left for later)" % self.ticket_name())
         self.note_slowest()
         if self.lane:  # counted once its merge lands; None tells lane_next to merge it
             self.st["phase"] = "merge"
@@ -275,17 +310,9 @@ class Conductor:
     def pass_with_followups(self, source, findings):
         """A level 2 ticket past its full rounds whose review found no blocker: append the findings to the
         plan's followups.md, commit it, and pass the ticket."""
-        path = self.plan / "followups.md"
         found = [line.strip() for line in findings.splitlines() if FINDING.match(line)]
-        text = "" if path.is_file() else (
-            "# Follow-ups: %s\n\nFindings a level 2 ticket passed with after %d review rounds. Each is a candidate "
-            "for a cleanup ticket.\n" % (self.feature, FULL_ROUNDS))
-        text += "\n## %s (round %d, %s)\n\n%s\n" % (self.ticket_name(), self.num("round") + 1, source,
-                                                    "\n".join("- " + line for line in found))
-        with open(str(path), "a", encoding="utf-8") as handle:
-            handle.write(text)
-        if not git.commit_file(path, "chore(%s): %s follow-ups from the %s" % (self.feature, self.get("num"), source)):
-            raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
+        self.write_followups("%s (round %d, %s)" % (self.ticket_name(), self.num("round") + 1, source), found,
+                             "chore(%s): %s follow-ups from the %s" % (self.feature, self.get("num"), source))
         self.st["followups"] = self.num("followups") + 1
         self.log("PASS-FOLLOWUPS")
         return self.pass_ticket()
@@ -337,9 +364,9 @@ class Conductor:
             self.edit_retry(note, self.num("review_attempt"), "the feature reviewer of %s kept changing files" % self.feature)
             return self.hand_out_final(retry=True)
         self.all["edit_note"] = ""
-        verdict = self.all.get("verdict", "")
-        self.all["verdict"] = ""
+        verdict = self.take_verdict()
         if verdict == "pass":
+            self.write_due("feature review (left for later)")
             for key in ("phase", "deferred", "final_base", "final_round", "review_attempt", "review_sha", "scout_key"):
                 self.all[key] = ""
             self.save()
@@ -435,7 +462,7 @@ class Conductor:
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                         "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
-                        "spec_ok": "", "level_note": "", "edit_note": "", "asks": 0, "ask_role": "", "ask_from": "",
+                        "spec_ok": "", "level_note": "", "edit_note": "", "due_checks": "", "due_minors": "", "asks": 0, "ask_role": "", "ask_from": "",
                         "ticket_clock": self.all.get("spent", 0)})
         self.st["level"] = self.base_level()
         self.snapshot_code()
@@ -638,7 +665,8 @@ class Conductor:
         if not found:
             self.log("DONEWHEN-SKIP")
             return None, "the conductor ran no Done when checks: the ticket has no check block"
-        ok, report = proof.run_checks(found, self.gate_timeout)
+        deferred = []
+        ok, report = proof.run_checks(found, self.gate_timeout, deferred)
         dirty = git.changes()
         if dirty:
             raise Stop("a Done when check of %s changed the working tree: %s. a check command must not change it"
@@ -646,7 +674,16 @@ class Conductor:
         self.log("DONEWHEN-PASS" if ok else "DONEWHEN-FAIL")
         if not ok:
             return report, ""
-        return None, "the conductor ran %d Done when check(s) and all passed" % len(found)
+        if not deferred:
+            return None, "the conductor ran %d Done when check(s) and all passed" % len(found)
+        self.log("DONEWHEN-DEFERRED %d" % len(deferred))
+        self.st["due_checks"] = NOTE_SEP.join("deferred check, needs %s: `%s` (here: %s)" % (c.needs, c.command, got)
+                                              for c, got in deferred)
+        return None, ("the conductor ran %d Done when check(s): %d passed, and %d that need what this host lacks did "
+                      "not pass and are deferred, not met: %s. they go to the plan's followups.md. judge only what "
+                      "can be checked here, and do not count a deferred check as MET"
+                      % (len(found), len(found) - len(deferred), len(deferred),
+                         "; ".join("`%s` (needs %s)" % (c.command, c.needs) for c, _ in deferred)))
 
     def run_test_first(self):
         """For a `Test first: yes` ticket, prove a test-only commit failed the Test command.
@@ -842,7 +879,12 @@ class Conductor:
         if busy and wanted != self.num("lanes"):
             raise Stop("lane(s) %s still hold tickets from the last session, which ran with FLOW_LANES=%d. start with "
                        "that, or reset to drop them" % (",".join(map(str, busy)), self.num("lanes")))
+        driver = os.environ.get("FLOW_DRIVER", "")
+        if driver not in ("", "person", "agent"):
+            raise Stop("FLOW_DRIVER must be person or agent, not %s" % driver)
         token = secrets.token_hex(8)
+        if driver:
+            self.st["driver"] = driver
         self.st["owner"] = owner_hash(token)
         self.st["session_done"] = 0
         self.st["lanes"] = wanted if wanted > 1 else ""
@@ -857,6 +899,7 @@ class Conductor:
         self.st["seen"] = int(time.time())  # the time between sessions is not spent on the feature
         self.save()
         self.log("TAKEOVER" if takeover else "START")
+        self.log("DRIVER-%s" % self.driver().upper())
         if self.profile:
             self.log("PROFILE-%s" % self.profile.upper())
         return "OK %s" % token
@@ -956,8 +999,11 @@ class Conductor:
         """A read only agent changed tracked files. A commit stops the run; an edit is saved as a patch in the
         state folder and put back, and the note for the next attempt comes back ("" when nothing changed)."""
         if git.head() != sha:
-            raise Stop("the %s changed tracked files, which %s must never do. it committed, so the conductor cannot "
-                       "undo it: look at `git log --oneline %s..HEAD`" % (who, rule, sha[:12]))
+            raise Stop("the %s changed tracked files, which %s must never do. a commit landed after it was handed "
+                       "out (`git log --oneline %s..HEAD`), so the conductor cannot undo it. if the session made that "
+                       "commit (never commit between a %s and its next), take it out with `git reset --soft %s` and "
+                       "`git stash`, run next, and commit it again once the run is done"
+                       % (who, rule, sha[:12], "question" if rule == "a consultant" else "review", sha[:12]))
         if git.tracked_clean():
             return ""
         patch = self.state_file.parent / ("edit-%s-%s%s.patch" % (self.feature, self.get("num") or "plan",
@@ -981,6 +1027,19 @@ class Conductor:
         self.st["verdict"] = ""
         self.st["edit_note"] = note
 
+    def take_verdict(self):
+        """The verdict `verdict` recorded, cleared; a pass keeps its minor findings for the follow-ups.
+        With none recorded, nothing changes: the session must run verdict first."""
+        verdict = self.get("verdict")
+        if not verdict:
+            raise NoPhase("no verdict recorded for the review of %s: save the reviewer's whole reply to a file and "
+                          "run verdict <that file>%s, then next" % (self.ticket_name() if self.get("phase") != "final"
+                                                                    else self.feature, self.lane_word()))
+        if verdict == "pass":
+            self.add_due("due_minors", self.get("reply_minors").split(NOTE_SEP))
+        self.st["verdict"] = self.st["reply_minors"] = ""
+        return verdict
+
     def judge_review(self):
         self.check_code()
         note = self.undo_edit(self.get("review_sha"), "reviewer", "a reviewer")
@@ -988,8 +1047,7 @@ class Conductor:
             self.edit_retry(note, self.num("review_attempt"), "the reviewer of %s kept changing files" % self.ticket_name())
             return self.hand_out_review()
         self.st["edit_note"] = ""
-        verdict = self.get("verdict")
-        self.st["verdict"] = ""
+        verdict = self.take_verdict()
         review_pass = self.get("review_pass", "spec")
         raised = review_pass == "single" and self.num("level") == 3  # a reviewer raised it in this pass
         if verdict == "pass" and (review_pass == "spec" or raised):
@@ -1130,9 +1188,13 @@ class Conductor:
         note = self.undo_edit(self.get("ask_sha"), role, "a consultant")
         if note:
             self.edit_retry(note, self.num("ask_attempt"), "the %s for %s kept changing files" % (role, self.ticket_name()))
+            verdict = "none"
         else:
             self.st["edit_note"] = ""
-        verdict = self.get("verdict")
+            verdict = self.get("verdict")
+            if not verdict:
+                raise NoPhase("no answer recorded from the %s for %s: save its whole reply to a file and run verdict "
+                              "<that file>%s, then next" % (role, self.ticket_name(), self.lane_word()))
         self.st["verdict"] = ""
         if verdict not in ("given", "user"):
             if self.num("ask_attempt") >= self.max_retries:
@@ -1395,6 +1457,10 @@ class Conductor:
                 found = "ask:" + role
         if found == "fail":
             state.write_text(self.findings_file, "\n".join(text.splitlines()[:120]) + "\n", "findings")
+        if found == "pass":
+            source = "feature review" if self.get("phase") == "final" else "%s review" % self.get("review_pass", "spec")
+            self.st["reply_minors"] = NOTE_SEP.join("%s (%s)" % (" ".join(line.split()), source)
+                                                    for line in text.splitlines() if FINDING.match(line))
         self.st["verdict"] = found or "none"
         self.save()
         self.log("VERDICT-%s" % (found or "none").upper())

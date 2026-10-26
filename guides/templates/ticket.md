@@ -24,6 +24,7 @@ is being converted and what the safe default is for anything that does not match
 # The conductor runs this block before review. No command can prove the ticket? Drop the block and put `Check: none <why>` in the header instead. One `$` line per bullet that names a command.
 $ <the command from a bullet, read-only, run from the repo's top folder>
 prints <text the output must contain>
+# needs <what>: only for a check a host may be unable to run (network, a model); it is deferred there, not failed
 ```
 
 ## Reference
