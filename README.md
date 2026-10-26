@@ -168,6 +168,7 @@ plans/
     ├── map.md           destination, the bar, decisions so far     (workers append only)
     ├── commands.md      build, test, lint, smoke commands           (frozen once approved)
     ├── learnings.md     traps workers found                         (workers append only)
+    ├── brainstorm.md    the options weighed and the one picked      (only after a brainstorm)
     └── tasks/
         ├── 01-types.md
         ├── 02-service.md
@@ -321,6 +322,14 @@ Most settings below never need touching. One word picks a sensible set:
 Pick one with `/feature-flow <feature> careful` (or `fast`), `FLOW_PROFILE=<name>` on `start`, or a `Profile:` line in the plan's `commands.md`, approved with the plan. A profile fills only settings you did not set: `FLOW_PROFILE=fast FLOW_SCOUTS=on` keeps the scouts. The log records `PROFILE-<NAME>` at the start. A level 3 or `Sensitive:` ticket keeps its own reviews in every profile.
 
 The long `python3 -I -c ...` line the skill uses to call the conductor stays as it is: it is how the skill checks `flow-trust.py` against the sha256 it pins before running it, and a shorter wrapper would be one more file nothing checks. The session copies it from the skill; you never type it.
+
+## Brainstorm before planning
+
+When an idea is still fuzzy, the session can brainstorm it with you before it writes the brief: `/feature-flow <feature> brainstorm`, always in `careful`, and offered on its own when there is no bar yet or there are two real ways to build it. It asks you up to three questions, one at a time, sends a scout to see how the code does the nearest thing today, then lays out two or three options, each with a mermaid diagram, its pros and cons, its size and its risky areas, and recommends one. Your pick and the brief share one yes.
+
+Six read only helpers work for the session during a brainstorm: a code scout, a web scout, the architect, designer and product owner, and `flow-skeptic`, who attacks each finished option so the session that wrote the options is not the one that judges them. Each gets its prompt from `brainstorm-prompt <helper> <question file>`, which counts them: `normal` allows 2 scouts, 1 web, 2 consultants and 1 skeptic per brainstorm, `careful` 3, 2, 3 and 1, and `FLOW_SCOUTS=off` no scouts. Helpers never write the brainstorm and never ask you anything; the session does both.
+
+The result is `brainstorm.md` ([template](guides/templates/brainstorm.md)), committed with the plan. The planner follows its chosen option and copies its diagram into `spec.md`, the plan reviewer fails a plan that builds a rejected option or leaves a risky area below level 3, and a re-plan keeps the choice. It is skipped in `fast`, for an import, and with `auto`; with `agent`, the driving agent picks, the file says `Picked by: agent`, and the eval records it.
 
 ## Starting from Spec Kit or OpenSpec
 

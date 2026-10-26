@@ -11,7 +11,8 @@ ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-q
          "review-single": "ticket-reviewer.md",
          "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md",
          "scout": "flow-scout.md", "web": "flow-web.md", "ask-architect": "flow-architect.md",
-         "ask-designer": "flow-designer.md", "ask-po": "flow-po.md", "replan": "feature-planner.md"}
+         "ask-designer": "flow-designer.md", "ask-po": "flow-po.md", "replan": "feature-planner.md",
+         "skeptic": "flow-skeptic.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
           "review-single": "review-single.md", "review-feature": "review-feature.md", "plan": "plan.md",
           "plan-review": "plan-review.md", "replan": "replan.md"}
@@ -133,7 +134,7 @@ def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
     return "\n\n".join(parts) + "\n"
 
 
-def plan(phase, scripts, feature, draft, brief, findings=""):
+def plan(phase, scripts, feature, draft, brief, findings="", brainstorm=False):
     """The prompt for the feature-planner (phase "plan") or the plan-reviewer ("plan-review").
 
     Both get the approved brief and the draft folder, never the conversation or each other's reasoning.
@@ -153,13 +154,18 @@ def plan(phase, scripts, feature, draft, brief, findings=""):
                 "`PLAN-REVIEW: PASS` or `PLAN-REVIEW: FAIL`." % (feature, draft))
         intro = "The plan review guide follows. Follow it exactly."
     parts = [role_text, "---", intro, guide, "---", task, "## The brief", brief.strip("\n")]
+    if brainstorm:
+        parts += ["## The brainstorm", ("The user chose how to build this feature in a brainstorm before the brief: "
+                  "`%sbrainstorm.md`. Read it first and follow its Chosen option, as the plan guide says." % draft)
+                  if phase == "plan" else ("The user chose how to build this feature in a brainstorm: "
+                  "`%sbrainstorm.md`. Check 11 applies." % draft)]
     if findings.strip():
         parts += ["## Review findings from the last round", "The draft is already in `%s`. Fix each finding in it, "
                   "or say in your reply why it stays." % draft, findings.strip("\n")]
     return "\n\n".join(parts) + "\n"
 
 
-def replan(scripts, feature, plan, open_tickets):
+def replan(scripts, feature, plan, open_tickets, brainstorm=False):
     """The feature-planner's prompt to fold a running feature's open tickets into fewer, in place."""
     role_text = role(scripts, ROLES["replan"])
     guide_file = find_file(scripts, "guides", GUIDES["replan"])
@@ -169,5 +175,8 @@ def replan(scripts, feature, plan, open_tickets):
             "the re-plan guide says. Edit only the ticket files listed below and add new ones beside them. Do not "
             "commit. Your final reply must end with exactly `PLAN: READY` or `PLAN: QUESTIONS`." % (feature, plan))
     listing = "\n".join("- `%s`" % path for path in open_tickets)
+    if brainstorm:
+        task += ("\nThe user chose how to build this feature in `%s/brainstorm.md`: the folded tickets still build its "
+                 "Chosen option." % plan)
     return "\n\n".join([role_text, "---", "The re-plan guide follows. Follow it exactly.", guide, "---", task,
                          "## The open tickets", listing]) + "\n"

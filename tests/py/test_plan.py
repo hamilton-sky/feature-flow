@@ -78,6 +78,109 @@ class Planning(unittest.TestCase):
         self.assertNotIn("Review findings", out)
         self.assertFalse(self.repo.path(DRAFT + "/tasks/01-a.md").exists())
 
+    # ---- the brainstorm ------------------------------------------------
+
+    def brainstorm(self, line="Brainstorm: .feature-flow/state/brainstorm-g.md\n"):
+        self.repo.path("brief.md").write_text("Feature: g\nWhat: a thing\nThe bar: `true` exits 0\n" + line,
+                                              encoding="utf-8")
+        notes = self.repo.path(".feature-flow/state/brainstorm-g.md")
+        notes.parent.mkdir(parents=True, exist_ok=True)
+        notes.write_text("# Brainstorm: g\n\nPicked by: person\n\n## Chosen\n\nA\n", encoding="utf-8")
+        return notes
+
+    def test_a_brief_that_names_its_brainstorm_carries_it_into_the_draft_and_the_plan(self):
+        self.brainstorm()
+        rc, out, _ = self.flow("plan-prompt", "brief.md")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("## The brainstorm", out)
+        self.assertIn("`%s/brainstorm.md`. Read it first" % DRAFT, out)
+        self.assertIn("## Chosen\n\nA", self.repo.path(DRAFT + "/brainstorm.md").read_text(encoding="utf-8"))
+        self.write_draft()
+        rc, out, _ = self.flow("plan-review-prompt")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Check 11 applies.", out)
+        self.assertEqual(self.flow("plan-accept")[:2], (0, "OK plans/g"))
+        self.assertTrue(self.repo.path("plans/g/brainstorm.md").is_file())
+
+    def test_a_findings_round_puts_the_brainstorm_back_as_the_user_picked_it(self):
+        self.brainstorm()
+        self.flow("plan-prompt", "brief.md")
+        self.repo.path(DRAFT + "/brainstorm.md").write_text("changed by the planner\n", encoding="utf-8")
+        self.repo.path("findings.txt").write_text("1. spec.md: no diagram\nPLAN-REVIEW: FAIL\n", encoding="utf-8")
+        rc, out, _ = self.flow("plan-prompt", "brief.md", "findings.txt")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Picked by: person", self.repo.path(DRAFT + "/brainstorm.md").read_text(encoding="utf-8"))
+
+    def test_a_brief_without_a_brainstorm_line_ignores_an_old_brainstorm(self):
+        self.brainstorm(line="Brainstorm: <.feature-flow/state/brainstorm-<feature>.md, only when Step 0 ran>\n")
+        rc, out, _ = self.flow("plan-prompt", "brief.md")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("## The brainstorm", out)
+        self.assertFalse(self.repo.path(DRAFT + "/brainstorm.md").exists())
+
+    def test_a_brainstorm_line_must_name_this_features_file_and_it_must_exist(self):
+        self.brainstorm(line="Brainstorm: notes.md\n")
+        rc, out, _ = self.flow("plan-prompt", "brief.md")
+        self.assertEqual((rc, out), (1, "STOP the brief's Brainstorm: line must name "
+                                        ".feature-flow/state/brainstorm-g.md, not notes.md"))
+        self.brainstorm().unlink()
+        rc, out, _ = self.flow("plan-prompt", "brief.md")
+        self.assertEqual(rc, 1)
+        self.assertTrue(out.startswith("STOP the brief names the brainstorm .feature-flow/state/brainstorm-g.md, "
+                                       "which does not exist"), out)
+
+    def ask(self, text="How does the code export rows today?\n"):
+        self.repo.path("q.md").write_text(text, encoding="utf-8")
+        return "q.md"
+
+    def test_brainstorm_prompt_gives_each_helper_its_role_and_the_brainstorm(self):
+        q = self.ask()
+        for helper, start, end in (("scout", "You are a scout.", "change nothing."),
+                                   ("architect", "You are the architect", "`ANSWER: GIVEN` or `ANSWER: USER`."),
+                                   ("skeptic", "You are the skeptic", "`SKEPTIC: DONE`.")):
+            rc, out, _ = self.flow("brainstorm-prompt", helper, q)
+            self.assertEqual(rc, 0, out)
+            self.assertIn(start, out)
+            self.assertIn("brainstorming how to build the feature `g`, before it is planned", out)
+            self.assertIn("How does the code export rows today?", out)
+            self.assertTrue(out.endswith(end), out[-80:])
+        self.assertIn("ROLE: planner", self.flow("brainstorm-prompt", "web", q)[1])
+        log = self.repo.path(".feature-flow/state/flow-g.log").read_text(encoding="utf-8")
+        for event in ("BRAINSTORM-SCOUT", "BRAINSTORM-ARCHITECT", "BRAINSTORM-SKEPTIC", "BRAINSTORM-WEB"):
+            self.assertIn(event, log)
+        self.assertEqual(self.repo.porcelain(), "?? q.md")
+
+    def test_the_script_counts_the_helpers_and_refuses_past_the_limit(self):
+        q = self.ask()
+        for _ in range(2):
+            self.assertEqual(self.flow("brainstorm-prompt", "scout", q)[0], 0)
+        rc, out, _ = self.flow("brainstorm-prompt", "scout", q)
+        self.assertEqual(rc, 1)
+        self.assertTrue(out.startswith("STOP the brainstorm of g has used its 2 scout helper(s) (normal;"), out)
+        self.assertEqual(self.flow("brainstorm-prompt", "scout", q, FLOW_PROFILE="careful")[0], 0)  # careful allows 3
+        self.assertEqual(self.flow("brainstorm-prompt", "skeptic", q)[0], 0)
+        self.assertEqual(self.flow("brainstorm-prompt", "skeptic", q)[0], 1)
+        for helper in ("architect", "po"):
+            self.assertEqual(self.flow("brainstorm-prompt", helper, q)[0], 0)
+        self.assertEqual(self.flow("brainstorm-prompt", "designer", q)[0], 1)  # the consultants share 2
+        self.repo.path(".feature-flow/state/brainstorm-g.helpers").unlink()
+        self.assertEqual(self.flow("brainstorm-prompt", "designer", q)[0], 0)
+
+    def test_without_scouts_the_brainstorm_gets_no_scout_or_web_helper(self):
+        q = self.ask()
+        for helper in ("scout", "web"):
+            rc, out, _ = self.flow("brainstorm-prompt", helper, q, FLOW_SCOUTS="off")
+            self.assertEqual(rc, 1, out)
+            self.assertIn("FLOW_SCOUTS=off allows no scouts", out)
+        self.assertEqual(self.flow("brainstorm-prompt", "skeptic", q, FLOW_SCOUTS="off")[0], 0)
+
+    def test_brainstorm_prompt_refuses_an_unknown_helper_an_empty_question_and_an_existing_plan(self):
+        self.assertEqual(self.flow("brainstorm-prompt", "boss", self.ask())[:2],
+                         (1, "STOP brainstorm-prompt takes scout, web, architect, designer, po, skeptic, not boss"))
+        self.assertEqual(self.flow("brainstorm-prompt", "scout", self.ask(""))[:2], (1, "STOP the question q.md is empty"))
+        rc, out = self.repo.flow("brainstorm-prompt", "scout", "q.md")
+        self.assertEqual((rc, out), (1, "STOP plans/f already exists. pick another name: a plan is never overwritten"))
+
     # ---- plan-review-prompt --------------------------------------------
 
     def test_plan_review_prompt_needs_a_brief_and_a_draft(self):

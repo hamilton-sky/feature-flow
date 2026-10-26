@@ -12,12 +12,14 @@ USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt 
          "       python3 scripts/flow.py <feature> budget [<minutes>|+<minutes>|off] | replan-prompt\n"
          "       python3 scripts/flow.py <feature> scouts [lane] | scout-prompt <k> [lane] | plan-scouts <brief> | plan-scout-prompt <k>\n"
          "       python3 scripts/flow.py <feature> consult-prompt architect|designer|po <question file>\n"
+         "       python3 scripts/flow.py <feature> brainstorm-prompt scout|web|architect|designer|po|skeptic <question file>\n"
          "       python3 scripts/flow.py <feature> reset [NN]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
 COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset", "fast", "scouts",
-            "scout-prompt", "plan-scouts", "plan-scout-prompt", "consult-prompt", "budget", "replan-prompt")
+            "scout-prompt", "plan-scouts", "plan-scout-prompt", "consult-prompt", "budget", "replan-prompt",
+            "brainstorm-prompt")
 ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
-        "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,), "budget": (2, 3),
+        "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,), "brainstorm-prompt": (4,), "budget": (2, 3),
         "replan-prompt": (2,)}
 WANTS = {"verdict": ("the file the reviewer's whole reply was saved to", "<file> [lane]"),
          "plan-prompt": ("the brief file", "<brief> [findings]"),
@@ -25,7 +27,9 @@ WANTS = {"verdict": ("the file the reviewer's whole reply was saved to", "<file>
          "scout-prompt": ("the scout's number from a SCOUT line", "<k> [lane]"),
          "plan-scouts": ("the brief file", "<brief>"),
          "plan-scout-prompt": ("the scout's number from a SCOUT line", "<k>"),
-         "consult-prompt": ("the role and the question file", "architect|designer|po <question file>")}
+         "consult-prompt": ("the role and the question file", "architect|designer|po <question file>"),
+         "brainstorm-prompt": ("the helper and the question file",
+                               "scout|web|architect|designer|po|skeptic <question file>")}
 RUNNER_ONLY = ("next", "prompt", "verdict", "fast", "scouts", "scout-prompt", "budget", "replan-prompt")
 
 
@@ -126,6 +130,8 @@ def run(args, scripts, trusted):
             line = conductor.plan_scout_prompt(args[2])
         elif command == "consult-prompt":
             line = conductor.consult_prompt(args[2], args[3])
+        elif command == "brainstorm-prompt":
+            line = conductor.brainstorm_prompt(args[2], args[3])
         elif command == "fast":
             line = conductor.fast_switch(args[2])
         elif command == "budget":

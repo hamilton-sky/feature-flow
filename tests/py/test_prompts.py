@@ -132,5 +132,14 @@ class SinglePassTests(unittest.TestCase):
             self.assertNotEqual(before, codehash.flow_code(base / "scripts")[0])
 
 
+class ReplanBrainstormTests(unittest.TestCase):
+    def test_a_replan_keeps_the_chosen_option_only_when_there_was_a_brainstorm(self):
+        scripts = helpers.ROOT / "scripts"
+        plain = prompts.replan(scripts, "f", "plans/f", ["plans/f/tasks/02-b.md", "plans/f/tasks/03-c.md"])
+        self.assertNotIn("brainstorm.md", plain.split("---")[-1])
+        kept = prompts.replan(scripts, "f", "plans/f", ["plans/f/tasks/02-b.md"], True)
+        self.assertIn("`plans/f/brainstorm.md`: the folded tickets still build its Chosen option", kept)
+
+
 if __name__ == "__main__":
     unittest.main()

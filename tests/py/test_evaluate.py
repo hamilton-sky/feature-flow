@@ -142,6 +142,25 @@ class EvalCommandTests(unittest.TestCase):
         code, out, err = self.run_eval("f")
         record = json.loads((self.repo.dir / "plans" / "f" / "eval.json").read_text(encoding="utf-8"))
         self.assertEqual(record["driver"], "person")
+        self.assertIsNone(record["brainstorm"])
+        self.assertNotIn("brainstorm:", out)
+
+    def test_it_records_who_picked_the_brainstormed_option(self):
+        plan = self.repo.dir / "plans" / "f"
+        for picked, expect in (("agent", "agent"), ("person", "person"), ("<person|agent>", "unknown")):
+            (plan / "brainstorm.md").write_text("# Brainstorm: f\n\nPicked by: %s\n" % picked, encoding="utf-8")
+            code, out, err = self.run_eval("f")
+            self.assertEqual(code, 0, err)
+            record = json.loads((plan / "eval.json").read_text(encoding="utf-8"))
+            self.assertEqual(record["brainstorm"], {"picked_by": expect, "helpers": {}})
+            self.assertIn("brainstorm: yes, the option picked by %s, no helpers" % expect, out)
+        folder = state.state_dir(self.repo.dir)
+        (folder / "flow-f.log").write_text("2026-10-23T09:50:00Z,-,BRAINSTORM-SCOUT\n2026-10-23T09:51:00Z,-,BRAINSTORM-SCOUT\n"
+                                           "2026-10-23T09:55:00Z,-,BRAINSTORM-SKEPTIC\n" + LOG, encoding="utf-8")
+        code, out, err = self.run_eval("f")
+        record = json.loads((plan / "eval.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["brainstorm"]["helpers"], {"scout": 2, "skeptic": 1})
+        self.assertIn("scout x2, skeptic x1", out)
         self.assertIn("needed you: 1 stop(s)", out)
 
     def test_a_filled_form_lands_in_the_record(self):
