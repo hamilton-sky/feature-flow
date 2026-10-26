@@ -19,6 +19,13 @@ COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-pr
 ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
         "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,), "budget": (2, 3),
         "replan-prompt": (2,)}
+WANTS = {"verdict": ("the file the reviewer's whole reply was saved to", "<file> [lane]"),
+         "plan-prompt": ("the brief file", "<brief> [findings]"),
+         "fast": ("on or off", "on|off"),
+         "scout-prompt": ("the scout's number from a SCOUT line", "<k> [lane]"),
+         "plan-scouts": ("the brief file", "<brief>"),
+         "plan-scout-prompt": ("the scout's number from a SCOUT line", "<k>"),
+         "consult-prompt": ("the role and the question file", "architect|designer|po <question file>")}
 RUNNER_ONLY = ("next", "prompt", "verdict", "fast", "scouts", "scout-prompt", "budget", "replan-prompt")
 
 
@@ -84,6 +91,11 @@ def run(args, scripts, trusted):
         return 2
     if len(args) not in ARGS.get(command, (2,)):
         print(USAGE, file=sys.stderr)
+        if "--after-build" in args:
+            sys.stderr.write("--after-build is flow-trust.py's: flow-trust.py --after-build <ticket> <sha> %s next\n"
+                             % feature)
+        elif command in WANTS:
+            sys.stderr.write("%s needs %s: %s %s\n" % (command, WANTS[command][0], command, WANTS[command][1]))
         return 2
     if command in RUNNER_ONLY and not trusted:
         print("STOP run the conductor through scripts/flow-trust.py, as the skill says")

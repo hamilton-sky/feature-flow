@@ -157,7 +157,7 @@ class AskDrive(unittest.TestCase):
         rc, out = self.flow("next")
         self.assertEqual(rc, 1)
         self.assertTrue(out.startswith("STOP the architect changed tracked files, which a consultant must never do. "
-                                       "it committed"), out)
+                                       "a commit landed after it was handed out"), out)
 
     def test_the_consultant_gets_a_scout_with_its_own_lens(self):
         repo, env = self.setup()

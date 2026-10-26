@@ -87,6 +87,8 @@ def run_summary(rows):
         "catches": sum(by_check.values()),
         "catches_by_check": by_check,
         "lanes": any(event.startswith("LEASE-") for _, _, event, _ in rows),
+        "deferred_checks": sum(int(detail or 1) for _, _, event, detail in rows if event == "DONEWHEN-DEFERRED"
+                               and (detail or "1").isdigit()),
         "fast": any(event in ("REVIEW-DEFERRED", "BUDGET-FAST") for _, _, event, _ in rows),
     }, {
         "stops": [{"ticket": n, "reason": r} for n, r in stops],
@@ -95,6 +97,28 @@ def run_summary(rows):
         "takeovers": run["TAKEOVER"],
         "questions_to_user": user_questions,
     }, (min(times), max(times)) if times else None
+
+
+def driver(rows, run_state):
+    """Who drove the run: "agent" or "person", from the log's DRIVER- lines (the last start wins), else the state."""
+    found = [event[len("DRIVER-"):].lower() for _, _, event, _ in rows if event.startswith("DRIVER-")]
+    return found[-1] if found else (run_state.get("driver") or "person")
+
+
+def settled_at_plan(plan_dir, built):
+    """The tickets resolved without ever being built in a run: settled when the plan was approved."""
+    found = []
+    for path in tickets.ticket_files(str(plan_dir / (os.environ.get("FLOW_TICKETS") or "tasks"))):
+        num = tickets.number(path)
+        if num not in built and tickets.status(path) in tickets.DONE + ("wontfix",):
+            found.append(num)
+    return found
+
+
+def followups(plan_dir):
+    """The items in the plan's followups.md: its `- ` lines."""
+    text = state.read_text(plan_dir / "followups.md") or ""
+    return sum(1 for line in text.splitlines() if line.startswith("- "))
 
 
 # ---- tokens, from Claude Code's session transcripts ------------------------------
@@ -193,7 +217,9 @@ def add(into, counts):
 
 # ---- the human verdict ---------------------------------------------------------------
 
-def verdict_template(feature, catches):
+def verdict_template(feature, catches, driven_by="person"):
+    minutes = ("minutes-of-your-time: (roughly, answering questions and reviewing)" if driven_by != "agent" else
+               "minutes-of-your-time: (an agent drove this run: only the minutes you spent yourself, 0 if none)")
     lines = [
         "# Eval verdict: %s" % feature,
         "",
@@ -202,7 +228,7 @@ def verdict_template(feature, catches):
         "plan: (right | partly | wrong: did the tickets build what you wanted?)",
         "hand-fixes: (how many changes you made by hand after DONE, 0 if none)",
         "would-use-again: (yes | no)",
-        "minutes-of-your-time: (roughly, answering questions and reviewing)",
+        minutes,
         "note: ",
         "",
         "## Catches",
@@ -275,6 +301,10 @@ def build(feature, top, out_dir, home, with_later):
     per, totals, human, window = run_summary(rows)
     run_state = state.load(state.state_path(folder, feature))
     spent = run_state.get("spent", "")
+    plan_dir = Path(top) / os.environ.get("FLOW_DIR", "plans") / feature
+    driven_by = driver(rows, run_state)
+    totals["settled_at_plan"] = settled_at_plan(plan_dir, per)
+    totals["followups"] = followups(plan_dir)
     record = {
         "feature": feature,
         "feature_flow": __version__,
@@ -283,6 +313,7 @@ def build(feature, top, out_dir, home, with_later):
         "active_minutes": int(spent) // 60 if spent.isdigit() else None,
         "totals": totals,
         "tickets": per,
+        "driver": driven_by,
         "you": human,
         "tokens": tokens(home, top, window, rows),
         "verdict": read_verdict(out_dir / VERDICT_FILE),
@@ -291,7 +322,7 @@ def build(feature, top, out_dir, home, with_later):
         record["tokens"].pop("by_ticket")
         record["tokens"]["by_ticket_note"] = "not split: lanes ran tickets at the same time"
     if with_later:
-        record["later"] = later(Path(top) / os.environ.get("FLOW_DIR", "plans") / feature, window[1] if window else None)
+        record["later"] = later(plan_dir, window[1] if window else None)
     return record, catch_ids(rows)
 
 
@@ -302,6 +333,10 @@ def render(record, out_dir, wrote_form):
     if t["catches_by_check"]:
         lines.append("  caught by: " + ", ".join("%s x%d" % kv for kv in sorted(t["catches_by_check"].items())))
     lines.append("  reworked: %s" % (", ".join(t["reworked"]) or "none"))
+    if t.get("settled_at_plan"):
+        lines.append("  settled at plan approval (never built): %s" % ", ".join(t["settled_at_plan"]))
+    lines.append("  follow-ups: %d in followups.md%s" % (t.get("followups", 0), ", %d deferred check(s)"
+                                                         % t["deferred_checks"] if t.get("deferred_checks") else ""))
     lines.append("  active minutes: %s" % (record["active_minutes"] if record["active_minutes"] is not None else "unknown"))
     tok = record["tokens"]
     if tok:
@@ -313,8 +348,9 @@ def render(record, out_dir, wrote_form):
         lines.append("  tokens: not found (no Claude Code transcripts for this repo in the run window,"
                      " or a log from before 0.15.0)")
     you = record["you"]
-    lines.append("  needed you: %d stop(s), %d question(s), %d handoff(s), %d reset(s)"
-                 % (len(you["stops"]), you["questions_to_user"], you["handoffs"], you["resets"]))
+    lines.append("  %s: %d stop(s), %d question(s), %d handoff(s), %d reset(s)"
+                 % ("needed the driving agent (not you)" if record.get("driver") == "agent" else "needed you",
+                    len(you["stops"]), you["questions_to_user"], you["handoffs"], you["resets"]))
     verdict = record["verdict"]
     if verdict:
         lines.append("  your verdict: plan %s, %s hand fix(es), %s real catch(es), %s false alarm(s)"
@@ -372,7 +408,7 @@ def main(argv, out=None, err=None):
     form = out_dir / VERDICT_FILE
     wrote_form = not form.exists()
     if wrote_form:
-        form.write_text(verdict_template(feature, catches), encoding="utf-8")
+        form.write_text(verdict_template(feature, catches, record["driver"]), encoding="utf-8")
     (out_dir / "eval.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     out.write(render(record, out_dir, wrote_form))
     return 0

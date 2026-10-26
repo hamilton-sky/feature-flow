@@ -133,8 +133,9 @@ Run `python3 scripts/flow-status.py <feature> --counts` and `--next`, then repor
 ```
 NN resolved: <title>
 Next ready: MM <title>      (or: feature complete)
-Continue in a fresh session with the feature-flow skill for <feature>
 ```
+
+In **Manual** mode add a third line, `Continue in a fresh session with the feature-flow skill for <feature>`. In **Auto** mode leave it out: the session that started you decides what runs next.
 
 ## Failure handling
 
