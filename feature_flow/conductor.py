@@ -332,8 +332,11 @@ class Conductor:
 
     def judge_final(self):
         self.check_code(final=True)
-        if not git.tracked_clean() or git.head() != self.all.get("review_sha"):
-            raise Stop("the reviewer changed tracked files, which a reviewer must never do")
+        note = self.undo_edit(self.all.get("review_sha", ""), "reviewer", "a reviewer")
+        if note:
+            self.edit_retry(note, self.num("review_attempt"), "the feature reviewer of %s kept changing files" % self.feature)
+            return self.hand_out_final(retry=True)
+        self.all["edit_note"] = ""
         verdict = self.all.get("verdict", "")
         self.all["verdict"] = ""
         if verdict == "pass":
@@ -432,7 +435,7 @@ class Conductor:
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                         "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
-                        "spec_ok": "", "level_note": "", "asks": 0, "ask_role": "", "ask_from": "",
+                        "spec_ok": "", "level_note": "", "edit_note": "", "asks": 0, "ask_role": "", "ask_from": "",
                         "ticket_clock": self.all.get("spent", 0)})
         self.st["level"] = self.base_level()
         self.snapshot_code()
@@ -932,7 +935,8 @@ class Conductor:
         # and a budget's time stays spent
         for path, kind in ((self.state_file, "state"), (self.findings_file, "findings")):
             state.remove(path, kind)
-        for pattern in ("ask-%s.*" % self.feature, "ask-%s-L*" % self.feature, "scout-%s-*" % self.feature):
+        for pattern in ("ask-%s.*" % self.feature, "ask-%s-L*" % self.feature, "scout-%s-*" % self.feature,
+                        "edit-%s-*" % self.feature):
             for path in self.state_file.parent.glob(pattern):
                 path.unlink()
         if not reopened and not had_run and not dropped:
@@ -948,10 +952,42 @@ class Conductor:
         done += ["reopened %s" % tickets.name(p) for p in reopened]
         return "OK %s. run %s %s" % (", ".join(done), self.invoke, self.feature)
 
+    def undo_edit(self, sha, who, rule):
+        """A read only agent changed tracked files. A commit stops the run; an edit is saved as a patch in the
+        state folder and put back, and the note for the next attempt comes back ("" when nothing changed)."""
+        if git.head() != sha:
+            raise Stop("the %s changed tracked files, which %s must never do. it committed, so the conductor cannot "
+                       "undo it: look at `git log --oneline %s..HEAD`" % (who, rule, sha[:12]))
+        if git.tracked_clean():
+            return ""
+        patch = self.state_file.parent / ("edit-%s-%s%s.patch" % (self.feature, self.get("num") or "plan",
+                                                                    "-L%d" % self.lane if self.lane else ""))
+        try:
+            names = git.undo_tracked(patch)
+        except (OSError, RuntimeError) as err:
+            raise Stop("the %s changed tracked files, which %s must never do, and the conductor could not put them "
+                       "back: %s" % (who, rule, err))
+        self.log("EDIT-UNDONE")
+        shown = ", ".join(names[:5]) + (" and %d more" % (len(names) - 5) if len(names) > 5 else "")
+        return ("the last %s changed %s, which %s must never do. the conductor put the files back and threw its "
+                "answer away (its changes are in %s). change no file: report what you would change instead"
+                % (who, shown, rule, patch.as_posix()))
+
+    def edit_retry(self, note, attempts, what):
+        """After undo_edit put a read only agent's edit back: the note for the next attempt, or a stop."""
+        if attempts >= self.max_retries:
+            raise Stop("%s after %d attempt(s): %s" % (what, attempts, note.split(". the conductor", 1)[0]
+                       + ". the conductor put the files back"))
+        self.st["verdict"] = ""
+        self.st["edit_note"] = note
+
     def judge_review(self):
         self.check_code()
-        if not git.tracked_clean() or git.head() != self.get("review_sha"):
-            raise Stop("the reviewer changed tracked files, which a reviewer must never do")
+        note = self.undo_edit(self.get("review_sha"), "reviewer", "a reviewer")
+        if note:
+            self.edit_retry(note, self.num("review_attempt"), "the reviewer of %s kept changing files" % self.ticket_name())
+            return self.hand_out_review()
+        self.st["edit_note"] = ""
         verdict = self.get("verdict")
         self.st["verdict"] = ""
         review_pass = self.get("review_pass", "spec")
@@ -1001,7 +1037,8 @@ class Conductor:
             if phase == "review" and self.get("review_pass") in ("quality", "single"):
                 phase = "review-" + self.get("review_pass")
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
-                                 [n for n in self.get("review_notes").split(NOTE_SEP) if n] if phase != "build" else (),
+                                 [n for n in self.get("review_notes").split(NOTE_SEP) + [self.get("edit_note")] if n]
+                                 if phase != "build" else (),
                                  retry=self.num("round") > 0,
                                  workdir=(str(Path.cwd()), lanes.branch(self.feature, self.get("num"))) if self.lane else None
                                  ) + self.scout_findings()
@@ -1090,8 +1127,11 @@ class Conductor:
     def judge_ask(self):
         self.check_code()
         role = self.get("ask_role")
-        if not git.tracked_clean() or git.head() != self.get("ask_sha"):
-            raise Stop("the %s changed tracked files, which a consultant must never do" % role)
+        note = self.undo_edit(self.get("ask_sha"), role, "a consultant")
+        if note:
+            self.edit_retry(note, self.num("ask_attempt"), "the %s for %s kept changing files" % (role, self.ticket_name()))
+        else:
+            self.st["edit_note"] = ""
         verdict = self.get("verdict")
         self.st["verdict"] = ""
         if verdict not in ("given", "user"):
@@ -1133,6 +1173,8 @@ class Conductor:
                 "commit. Your final reply must end with exactly `ANSWER: GIVEN` or `ANSWER: USER`."
                 % (asker, self.get("num"), self.feature, self.plan.as_posix(), self.get("base"), rel, self.get("base"),
                    question))
+        if self.get("edit_note"):
+            task += "\n\nThe conductor notes: %s" % self.get("edit_note")
         if self.lane:
             task = ("Work in the folder `%s` (`cd %s` first): the worktree of this ticket. Every path here is relative "
                     "to it.\n\n%s" % (Path.cwd(), shlex.quote(str(Path.cwd())), task))
@@ -1284,7 +1326,7 @@ class Conductor:
         nums = [num for num, _ in self.deferred()]
         try:
             return prompts.feature_review(self.scripts, self.feature, self.plan.as_posix(), self.all["final_base"], nums,
-                                          [n for n in [self.final_note()] if n],
+                                          [n for n in [self.final_note(), self.all.get("edit_note", "")] if n],
                                           os.environ.get("FLOW_TICKETS") or "tasks") + self.scout_findings()
         except FileNotFoundError as err:
             raise Stop(str(err))
