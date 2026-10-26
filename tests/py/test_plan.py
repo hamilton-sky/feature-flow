@@ -166,6 +166,28 @@ class Planning(unittest.TestCase):
         self.repo.path(".feature-flow/state/brainstorm-g.helpers").unlink()
         self.assertEqual(self.flow("brainstorm-prompt", "designer", q)[0], 0)
 
+    def test_a_lens_gets_the_lens_role_and_its_own_guide(self):
+        q = self.ask("A. Stream it. B. Build it in the background.\n")
+        rc, out, _ = self.flow("brainstorm-prompt", "ux", q)
+        self.assertEqual(rc, 0, out)
+        self.assertTrue(out.startswith("You are a lens"), out[:60])
+        self.assertIn("Your lens is `ux`.", out)
+        self.assertIn("# The UX lens", out)
+        self.assertNotIn("# The security lens", out)
+        self.assertIn("A. Stream it.", out)
+        self.assertTrue(out.endswith("`LENS: DONE`."), out[-60:])
+        self.assertIn("BRAINSTORM-UX", self.repo.path(".feature-flow/state/flow-g.log").read_text(encoding="utf-8"))
+
+    def test_the_lenses_share_one_limit(self):
+        q = self.ask()
+        for lens in ("security", "artistic"):
+            self.assertEqual(self.flow("brainstorm-prompt", lens, q)[0], 0)
+        rc, out, _ = self.flow("brainstorm-prompt", "open-minded", q)
+        self.assertEqual(rc, 1)
+        self.assertIn("has used its 2 lens helper(s) (normal;", out)
+        self.assertEqual(self.flow("brainstorm-prompt", "open-minded", q, FLOW_PROFILE="careful")[0], 0)
+        self.assertEqual(self.flow("brainstorm-prompt", "positive", q, FLOW_PROFILE="careful")[0], 1)
+
     def test_without_scouts_the_brainstorm_gets_no_scout_or_web_helper(self):
         q = self.ask()
         for helper in ("scout", "web"):
@@ -176,7 +198,8 @@ class Planning(unittest.TestCase):
 
     def test_brainstorm_prompt_refuses_an_unknown_helper_an_empty_question_and_an_existing_plan(self):
         self.assertEqual(self.flow("brainstorm-prompt", "boss", self.ask())[:2],
-                         (1, "STOP brainstorm-prompt takes scout, web, architect, designer, po, skeptic, not boss"))
+                         (1, "STOP brainstorm-prompt takes scout, web, architect, designer, po, skeptic, "
+                             "positive, researcher, open-minded, artistic, ux, security, not boss"))
         self.assertEqual(self.flow("brainstorm-prompt", "scout", self.ask(""))[:2], (1, "STOP the question q.md is empty"))
         rc, out = self.repo.flow("brainstorm-prompt", "scout", "q.md")
         self.assertEqual((rc, out), (1, "STOP plans/f already exists. pick another name: a plan is never overwritten"))
