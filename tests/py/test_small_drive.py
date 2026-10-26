@@ -1,7 +1,8 @@
 """Drive a five-ticket plan through the conductor the way the skill does, and count the reviews.
 
 The bar of plans/small-tickets: a small ticket with a passing check block gets one REVIEW, and
-Review: full, no check block, Type: convert, an over-limit diff and FLOW_SMALL_LINES=0 each get two.
+Review: full, no check block, an over-limit diff and FLOW_SMALL_LINES=0 each get two. Type: convert makes a
+ticket level 3, which since 0.23.0 gets one review that also probes it as a hostile caller.
 """
 
 import re
@@ -20,7 +21,7 @@ TICKETS = (
     ("01-small", "", True, 3, 1),
     ("02-full", "Review: full", True, 3, 2),
     ("03-nocheck", "", False, 3, 2),
-    ("04-convert", "", True, 3, 2),
+    ("04-convert", "", True, 3, 1),
     ("05-big", "", True, 61, 2),
 )
 
@@ -78,16 +79,15 @@ class SmallDrive(unittest.TestCase):
         repo, seen = self.drive()
         self.assertEqual(len(seen), len(TICKETS))
         self.assertEqual([len(one) for one in seen], [t[4] for t in TICKETS])
-        self.assertEqual(seen[0], ["single pass"])
-        for one in seen[1:]:
-            self.assertEqual(one, ["spec pass", "quality pass"])
+        for one, t in zip(seen, TICKETS):
+            self.assertEqual(one, ["single pass"] if t[4] == 1 else ["spec pass", "quality pass"])
         self.assertEqual(repo.log().count("REVIEW-SMALL"), 1)
 
     def test_small_lines_zero_gives_two_reviews_for_every_ticket(self):
         repo, seen = self.drive(FLOW_SMALL_LINES="0")
         self.assertEqual(len(seen), len(TICKETS))
-        for one in seen:
-            self.assertEqual(one, ["spec pass", "quality pass"])
+        for one, t in zip(seen, TICKETS):
+            self.assertEqual(one, ["single pass"] if t[0].endswith("convert") else ["spec pass", "quality pass"])
         self.assertNotIn("REVIEW-SMALL", repo.log())
 
 

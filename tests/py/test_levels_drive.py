@@ -1,7 +1,8 @@
 """Drive a seven-ticket plan through the conductor the way the skill does, and count the reviews per level.
 
-The bar of ticket levels: level 1 and level 2 tickets get one REVIEW whatever their size, level 3 gets two
-(spec then quality), a Sensitive path or `Review: full` raises a ticket to level 3, a level 1 diff over
+The bar of ticket levels: level 1, 2 and 3 tickets get one REVIEW whatever their size (since 0.23.0, level 3
+too, with the hostile caller probe), `Review: full` gets two (spec then quality), a Sensitive path or
+`Review: full` raises a ticket to level 3, a level 1 diff over
 the small limits becomes level 2, and a ticket with no Level line keeps the 0.8.0 size rule.
 """
 
@@ -22,8 +23,8 @@ TICKETS = (
     ("01-light", ["Level: 1"], "a.txt", 3, "1", ["single"]),
     ("02-light-big", ["Level: 1"], "b.txt", 61, "2", ["single"]),
     ("03-standard-big", ["Level: 2"], "c.txt", 200, "2", ["single"]),
-    ("04-boundary", ["Level: 3"], "d.txt", 3, "3", ["spec", "quality"]),
-    ("05-sensitive", ["Level: 2"], "src/auth/e.txt", 3, "3", ["spec", "quality"]),
+    ("04-boundary", ["Level: 3"], "d.txt", 3, "3", ["single"]),
+    ("05-sensitive", ["Level: 2"], "src/auth/e.txt", 3, "3", ["single"]),
     ("06-full", ["Level: 1", "Review: full"], "f.txt", 3, "3", ["spec", "quality"]),
     ("07-no-level", [], "g.txt", 3, None, ["single"]),
 )

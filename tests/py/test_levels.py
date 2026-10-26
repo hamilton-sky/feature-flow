@@ -86,19 +86,28 @@ class Levels(unittest.TestCase):
         self.assertEqual((self.repo.state()["level"], self.review_pass()), ("2", "single"))
         self.assertIn("REVIEW-SINGLE", self.repo.log())
 
-    def test_level_3_gets_spec_then_quality(self):
+    def test_level_3_gets_one_review_that_probes_as_a_hostile_caller(self):
         self.plan(["Level: 3"])
+        self.build()
+        self.assertEqual(self.review_pass(), "single")
+        prompt = self.repo.flow("prompt")[1]
+        self.assertIn("this ticket is level 3 (boundary)", prompt)
+        self.assertIn("then probe the change as a hostile caller", prompt)
+        self.assertEqual(self.reply("ok\nREVIEW: PASS\n"), (0, "OK"))
+        self.assertTrue(self.repo.flow("next")[1].startswith("BUILD %s 02 " % T2))
+
+    def test_level_3_with_review_full_gets_spec_then_quality(self):
+        self.plan(["Level: 3", "Review: full"])
         self.build()
         self.assertEqual(self.review_pass(), "spec")
         self.assertEqual(self.reply("ok\nREVIEW: PASS\n"), (0, "OK"))
         self.assertTrue(self.repo.flow("next")[1].startswith("REVIEW "))
         self.assertEqual(self.review_pass(), "quality")
-        self.assertIn("this ticket is level 3 (boundary)", self.repo.flow("prompt")[1])
 
     def test_sensitive_path_makes_level_3(self):
         self.plan(["Level: 2"], sensitive="src/auth/, *token*")
         self.build(name="src/auth/login.py")
-        self.assertEqual((self.repo.state()["level"], self.review_pass()), ("3", "spec"))
+        self.assertEqual((self.repo.state()["level"], self.review_pass()), ("3", "single"))
         self.assertIn("touches a Sensitive path in commands.md: src/auth/login.py", self.repo.flow("prompt")[1])
 
     def test_sensitive_glob_crosses_folders(self):
@@ -112,13 +121,13 @@ class Levels(unittest.TestCase):
         self.assertEqual(self.repo.state()["level"], "2")
 
     def test_review_full_and_flow_edit_make_level_3(self):
-        for header in (["Level: 1", "Review: full"], ["Level: 2", "Floor: allow flow-edit"]):
+        for header, review in ((["Level: 1", "Review: full"], "spec"), (["Level: 2", "Floor: allow flow-edit"], "single")):
             with self.subTest(header=header):
                 self.repo.close()
                 self.setUp()
                 self.plan(header)
                 self.build()
-                self.assertEqual((self.repo.state()["level"], self.review_pass()), ("3", "spec"))
+                self.assertEqual((self.repo.state()["level"], self.review_pass()), ("3", review))
 
     def test_level_lowered_by_the_builder_is_ignored(self):
         self.plan(["Level: 3", "Floor: allow ticket-edit"])
@@ -129,7 +138,7 @@ class Levels(unittest.TestCase):
         self.repo.path("work.txt").write_text("x\n", encoding="utf-8")
         self.repo.commit("feat: work")
         self.assertTrue(self.repo.flow("next")[1].startswith("REVIEW "))
-        self.assertEqual((self.repo.state()["level"], self.review_pass()), ("3", "spec"))
+        self.assertEqual((self.repo.state()["level"], self.review_pass()), ("3", "single"))
 
     def test_no_level_keeps_the_size_rule(self):
         self.plan([], [])
@@ -213,22 +222,20 @@ class Levels(unittest.TestCase):
     def test_level_3_never_passes_with_followups(self):
         self.plan(["Level: 3"])
         self.build()
-        self.reply("ok\nREVIEW: PASS\n")
-        self.repo.flow("next")
         for round_no in (1, 2, 3):
             self.reply(MAJOR)
             out = self.repo.flow("next")[1]
             self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
             self.assertTrue(self.rebuild(round_no)[1].startswith("REVIEW "))
-            self.assertEqual(self.review_pass(), "quality")
+            self.assertEqual(self.review_pass(), "single")
         self.reply(MAJOR)
-        self.assertEqual(self.repo.flow("next"), (1, "STOP 01-a still fails the quality review after 3 round(s) at "
+        self.assertEqual(self.repo.flow("next"), (1, "STOP 01-a still fails the single review after 3 round(s) at "
                                                      "level 3. the user decides what happens next"))
 
     # ---- a rebuild reruns only the pass that failed -----------------------
 
     def test_quality_fail_rebuild_skips_the_spec_pass(self):
-        self.plan(["Level: 3"])
+        self.plan(["Level: 3", "Review: full"])
         self.build()
         self.reply("ok\nREVIEW: PASS\n")
         self.repo.flow("next")
@@ -240,7 +247,7 @@ class Levels(unittest.TestCase):
         self.assertIn("the spec review passed in an earlier round", prompt)
 
     def test_spec_fail_rebuild_starts_at_spec(self):
-        self.plan(["Level: 3"])
+        self.plan(["Level: 3", "Review: full"])
         self.build()
         self.reply("SPEC\n- x: NOT MET\n\nREVIEW: FAIL\n")
         self.repo.flow("next")

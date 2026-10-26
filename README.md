@@ -86,6 +86,10 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
 ## How a ticket flows
 
 ```
+ tester subagent (once, before the first ticket, when commands.md
+   has Acceptance:): writes acceptance tests from spec.md only
+        │
+        ▼
  smoke command (script): is the base healthy?   no ─► stop, spend nothing
         │ yes
         ▼
@@ -106,23 +110,22 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
    commit that failed Test before the code                     fail ─┤
                                               │ pass                │
                                               ▼                     │
- spec review: fresh reviewer subagent, sees only the ticket         │
- + diff, re-runs every Done when                              FAIL ─┤
-                                              │ PASS                │
-                                              ▼                     │
- quality review: a second fresh reviewer subagent             FAIL ─┤
-   (a level 1 or 2 ticket gets one combined review instead
-    of these two; see "Ticket levels" below)
+ review: one fresh reviewer subagent, sees only the ticket         │
+ + diff: the spec checklist, then the code's quality; at level 3     │
+ it also probes every input as a hostile caller               FAIL ─┤
                                               │ PASS                ▼
                                               ▼        findings written into the ticket,
                                      next ticket       reopened, built again (rounds by level);
                                                        the builder's prompt then carries
                                                        a root-cause debugging guide
+
+ every ticket resolved: the acceptance tests run (script)     fail ─► fix ticket, built and
+                                                                      reviewed like any other
 ```
 
-`scripts/flow.py` is the conductor. The session asks it `next`, and it answers with one line: `BUILD`, `REVIEW`, `DONE`, `STOP` or `HANDOFF`. It prints the full prompt for each subagent from runtime-neutral guides, so the session never writes one itself.
+`scripts/flow.py` is the conductor. The session asks it `next`, and it answers with one line: `TEST`, `BUILD`, `REVIEW`, `ASK`, `DONE`, `STOP` or `HANDOFF`. It prints the full prompt for each subagent from runtime-neutral guides, so the session never writes one itself.
 
-**What the script checks and what it trusts.** The conductor verifies the build from the repo: the ticket file must say `resolved`, the tree must be clean and committed, and it runs the gate and the floor guard itself. It also runs the `check` block under each ticket's Done when and compares the exit code and printed text (a check with a `needs <what>` line, such as `needs network`, that fails is deferred instead: the reviewer is told it is not met, and it goes to `followups.md`), and for a `Test first: yes` ticket it proves the red test commit itself: it checks out the test-only commit, runs Test, and requires it to fail before the code. A failure of either goes back to the builder before any reviewer is started. It also checks that the reviewer changed no tracked file and made no commit (an edit is put back and the review given to a fresh reviewer, see Read only roles below). The review verdicts are different: each reviewer's reply (spec review, then quality review) is relayed by the session, which saves it to a file and hands it to `flow.py verdict`. The script reads `REVIEW: PASS` or `REVIEW: FAIL` from that reply; it cannot prove the session passed it on unedited. A ticket moves on only after two PASS verdicts, or one for a level 1 or 2 ticket (or, with no level, a ticket the conductor judged small). The size is measured from the repo (`git diff` against the commit the ticket started from), never taken from the builder.
+**What the script checks and what it trusts.** The conductor verifies the build from the repo: the ticket file must say `resolved`, the tree must be clean and committed, and it runs the gate and the floor guard itself. It also runs the `check` block under each ticket's Done when and compares the exit code and printed text (a check with a `needs <what>` line, such as `needs network`, that fails is deferred instead: the reviewer is told it is not met, and it goes to `followups.md`), and for a `Test first: yes` ticket it proves the red test commit itself: it checks out the test-only commit, runs Test, and requires it to fail before the code. A failure of either goes back to the builder before any reviewer is started. It also checks that the reviewer changed no tracked file and made no commit (an edit is put back and the review given to a fresh reviewer, see Read only roles below). The review verdicts are different: each reviewer's reply is relayed by the session, which saves it to a file and hands it to `flow.py verdict`. The script reads `REVIEW: PASS` or `REVIEW: FAIL` from that reply; it cannot prove the session passed it on unedited. A ticket with a `Level:` line moves on after one PASS verdict. A ticket with no level (a plan from before 0.9.0) needs two, a spec review and then a quality review, unless the conductor judged it small. The size is measured from the repo (`git diff` against the commit the ticket started from), never taken from the builder.
 
 **The gate: full or quick.** The gate runs Build, Test and Lint after every ticket. With an optional `Quick:` line in `commands.md` (a faster subset of `Test`), it runs Build, Quick and Lint after the tickets in the middle of a plan, and the full Build, Test and Lint after the last ticket, before a handoff, and under `FLOW_GATE_FULL=1`. A plan without `Quick:` runs the full gate every time. The test-first proof still runs the full `Test` command.
 
@@ -131,12 +134,12 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
 | | Level 1 (light) | Level 2 (standard) | Level 3 (boundary) |
 |---|---|---|---|
 | For | tests, docs, prompt text, spikes, the acceptance ticket | ordinary feature code | auth, tokens, permissions, money and run limits, data loss, the flow's own code, anything a hostile caller reaches |
-| Reviews | one combined review | one combined review, spec checklist first | spec review, then a quality review that probes every input as a hostile caller |
+| Reviews | one combined review | one combined review, spec checklist first | one combined review that also probes every input as a hostile caller |
 | Rework rounds | 1, then the run stops for you | 2; from round 3 only a `blocker` sends it back, majors go to `plans/<feature>/followups.md` and the ticket passes | `FLOW_MAX_REVIEW_ROUNDS` (3), then the run stops for you |
 
 The gate does not depend on the level: it still runs Quick mid-plan and the full Test on the last ticket and before a handoff. Nobody but you can lower a level. The conductor reads `Level:` from the ticket as it was at the base commit, so a builder's edit does nothing (and the floor guard fails it). It raises the level from what it measures, never lowers it: `Review: full`, `Type: convert` and `Floor: allow flow-edit` make a ticket level 3, so does a diff that touches a path on the optional `Sensitive:` line of `commands.md` (frozen by the floor guard), and a level 1 diff over the small limits becomes level 2. A reviewer can raise it with a line `LEVEL: 3` above the verdict; a raise to 3 during a combined review adds a quality review. The log records `LEVEL-1`, `LEVEL-2` or `LEVEL-3` for each review round, and `feature-flow report` shows it.
 
-**A rebuild reruns only the review that failed.** When a level 3 ticket fails its quality review, the rebuilt ticket gets the quality review only; the spec review it already passed is not repeated. The conductor's own checks (gate, floor guard, Done when, test first) still run on every rebuild.
+**One review at level 3 too (0.23.0).** Before 0.23.0 a level 3 ticket got a spec review and then a separate quality review. In the first field run (two features, 19 separate spec reviews), every real catch came from the quality review: the spec review re-ran the Done when checks the conductor had already run and passed, and found nothing they had missed. So a level 3 ticket now gets one review, which does the spec checklist (marking bullets the conductor's check block covered as `MET (conductor)` instead of running them again) and then the quality review with the hostile caller probe. That saves a fresh reviewer per level 3 ticket. A reviewer that raises a ticket to level 3 in a combined review still adds a quality review after it, since it did not probe the change as level 3.
 
 **One review for a small ticket (no level).** A ticket with no `Level:` line, from a plan written before 0.9.0, keeps the 0.8.0 rules. A ticket whose built diff is 3 files and 60 changed lines at most (the plan folder left out), and whose `check` block ran and passed, gets one combined review instead of the spec and quality reviews. The conductor measures the diff itself. `Review: full` in the ticket (as it was at the start), `Type: convert`, no `check` block, or `FLOW_GATE=off` keep both reviews. Every other conductor check still runs on every ticket.
 
@@ -154,6 +157,7 @@ The gate does not depend on the level: it still runs Quick mid-plan and the full
 | `ticket-reviewer` | Read, Glob, Grep, Bash (no Edit, no Write) | Reviews one ticket by the review guide in its prompt and ends with `REVIEW: PASS` or `REVIEW: FAIL`. |
 | `feature-planner` | Read, Glob, Grep, Bash, Write, Edit, WebSearch, WebFetch | Plans one feature from the approved brief by the plan guide, writes only the draft, cites outside sources, and ends with `PLAN: READY` or `PLAN: QUESTIONS`. |
 | `plan-reviewer` | Read, Glob, Grep, Bash (no Edit, no Write) | Checks the draft against the brief by the plan review guide and ends with `PLAN-REVIEW: PASS` or `PLAN-REVIEW: FAIL`. |
+| `flow-tester` | Read, Glob, Grep, Edit, Write, Bash | Writes the feature's acceptance tests from `spec.md` alone, before the build, by the test guide. Never reads the tickets. |
 
 **Read only roles.** The reviewers, the consultants (`flow-architect`, `flow-designer`, `flow-po`) and `flow-scout` have no Edit or Write tool, and in Claude Code a `PreToolUse` hook in their role file blocks shell commands that change files or the repository: git commands that write (`commit`, `add`, `stash`, `checkout`, `reset` and the like), `sed -i`, `rm`, `mv`, `cp`, `touch`, `tee` and output redirected into a file other than `/dev/null` or `/tmp/`. The hook reads the command's text, so a program that writes files itself (a test runner updating snapshots, a script) still gets through, and Claude Code ignores hooks in a plugin's agents. A Codex subagent cannot be limited at all: Codex gives every child its parent's sandbox. So the conductor is the backstop everywhere: when a reviewer or consultant leaves a tracked file changed, it saves the change as `.feature-flow/state/edit-<feature>-<NN>.patch`, puts the files back, throws that answer away and hands the same review to a fresh reviewer, with a note saying why (`EDIT-UNDONE` in the log). A second edit in a row stops the run, and so does a commit, which it cannot undo safely. A planner's draft reaches `plans/` only through `plan-accept`. On Codex the planner can research the web only if web search is on; otherwise it plans from the code and says so. The Codex planning path has not been run by hand.
 
@@ -263,7 +267,7 @@ Before a planner, builder or reviewer starts, the session can spawn cheap helper
 | a level 1 ticket | none |
 | a build below level 3 (first attempt) | one builder scout on the ticket and its `Touches:` |
 | a level 3 build (first attempt) | two builder scouts: the code it changes, and what depends on it |
-| a level 3 ticket's spec review | one reviewer scout on the conventions the diff must follow |
+| a level 3 ticket's first review | one reviewer scout on the conventions the diff must follow |
 | the feature review (fast path) | one reviewer scout |
 
 `scouts [lane]` lists `SCOUT <k> <agent> <reply file>` lines (or `NONE`) and clears the last ones' replies; `scout-prompt <k> [lane]` prints one scout's prompt. The session saves each reply into its file, and the phase's `prompt` adds them under `## Scout findings (unverified)`, cut to 60 lines each. A reply saved for one phase never reaches another. Retries and later rounds get no scouts. `FLOW_SCOUTS=off` turns them off.
@@ -277,6 +281,16 @@ A builder, reviewer or planner that hits a question it should not decide alone a
 - **A reviewer** ends with a `## Question` and `REVIEW: ASK <role>`. The answer comes back in the next review's notes. On the fast path's feature review, the reviewer writes the question as a finding, and the fix ticket's builder can ask it.
 - **The planner** starts each open question with `architect:`, `designer:`, `po:` or `user:`. The session runs `consult-prompt <role> <question file>` for the first three, adds the answers to the brief under `Consulted:`, kept apart from your `Decided:` lines, and plans again.
 - **What still comes to you.** Any question the asker marks `user`, any answer a consultant ends with `ANSWER: USER` (it changes what you get, so its options come to you), and a third consultant question on one ticket all stop the run with the question, written into the ticket under `## Ask: user`. You answer under `## Consulted (user)` at the end of the ticket, commit, and run `next`. A reviewer's question for you reopens the ticket, so its builder builds again with your answer.
+
+## Acceptance tests (the tester)
+
+A builder writes its own tests, so they tend to check what it built rather than what was asked. With an `Acceptance:` line in `commands.md` (the planner writes one for any feature a test can reach from outside), a separate tester writes the feature's acceptance tests before any of it is built, from the product owner's words alone.
+
+- **Before the first ticket**, `next` hands out `TEST <plan folder> <sha>`. A fresh `flow-tester` reads `spec.md` (its bar, stories and acceptance criteria, edge cases and interfaces), `map.md`, `commands.md` and the existing code's conventions, never the tickets, and commits tests under `plans/<feature>/acceptance/` that only the `Acceptance:` command runs. The conductor then checks its work: the commits change nothing outside that folder, the gate still passes with the tests in place, and the tests fail now, since nothing is built yet (`TEST-WRITTEN` in the log). Otherwise a fresh tester gets the job again, with a note saying what was wrong. It has no lane, even when lanes run.
+- **Builders cannot change them.** The tests sit inside the plan folder, so the floor guard fails any builder's change there (`acceptance-edit`), and no `Floor:` line allows it. A builder may run them to see where the feature stands.
+- **Once every ticket is resolved**, the conductor runs the `Acceptance:` command itself (`ACCEPT-PASS` or `ACCEPT-FAIL`). A failure becomes a new ticket, `NN-acceptance-fixes-<round>.md`, with the failing output in it, built and reviewed like any other; then the tests run again. After `FLOW_MAX_REVIEW_ROUNDS` failed rounds the run stops for you. With the fast path, the tests run before the feature review.
+- **A disputed test.** The tester can be wrong too, most often where the spec is vague. A fix ticket's builder that is sure a test asks for something `spec.md` does not say asks the product owner with `## Ask: po`. `flow-po` rules from `spec.md` alone with `RULING: TEST WRONG` or `RULING: CODE WRONG` (`RULING-TEST` or `RULING-CODE` in the log). The builder leaves a test ruled wrong failing and finishes the rest; once the ticket is resolved, a tester changes exactly the tests ruled wrong, as the rulings say, and the tests run again. The usual limit on questions holds, so a third one goes to you.
+- **No `Acceptance:` line, no tester**: a plan written before 0.23.0 runs as before.
 
 ## The fast path
 

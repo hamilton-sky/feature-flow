@@ -236,7 +236,7 @@ class LanesDrive(unittest.TestCase):
 
     def test_a_level_3_ticket_is_reviewed_again_when_another_merged_first(self):
         repo = self.repo()
-        drive = Drive(self, repo, (("01-a", "A", "—", ["Level: 3", "Touches: a/"]),
+        drive = Drive(self, repo, (("01-a", "A", "—", ["Level: 3", "Review: full", "Touches: a/"]),
                                    ("02-b", "B", "—", ["Level: 2", "Touches: b/"])))
         drive.fill()
         drive.build("01", {"a/x.txt": "x\n"})

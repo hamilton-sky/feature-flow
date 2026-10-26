@@ -92,8 +92,7 @@ class ScoutsDrive(unittest.TestCase):
             ("BUILD", "02", "", [("flow-scout", "builder")]),
             ("REVIEW", "02", "single", []),
             ("BUILD", "03", "", [("flow-scout", "builder"), ("flow-scout", "builder")]),
-            ("REVIEW", "03", "spec", [("flow-scout", "reviewer")]),
-            ("REVIEW", "03", "quality", []),
+            ("REVIEW", "03", "single", [("flow-scout", "reviewer")]),
         ])
         for word, num, _, roles, prompt in seen:
             if roles:
@@ -129,7 +128,7 @@ class ScoutsDrive(unittest.TestCase):
         repo, env, reply = self.setup((["Level: 3"],))
         env["FLOW_SCOUTS"] = "off"
         seen = self.drive(repo, env, reply)
-        self.assertEqual([r for _, _, _, r, _ in seen], [[], [], []])
+        self.assertEqual([r for _, _, _, r, _ in seen], [[], []])
 
     def test_the_feature_review_gets_a_reviewer_scout(self):
         repo, env, reply = self.setup((["Level: 1"], ["Level: 2"]), FLOW_FAST="1")

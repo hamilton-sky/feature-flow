@@ -89,8 +89,7 @@ class FastDrive(unittest.TestCase):
         base = repo.head()
         seen, done = self.drive(repo, env, reply)
         reviews = [(num, kind) for word, num, kind in seen if word == "REVIEW"]
-        self.assertEqual(reviews, [("03", "spec"), ("03", "quality"), ("04", "spec"), ("04", "quality"),
-                                   ("all", "feature")])
+        self.assertEqual(reviews, [("03", "single"), ("04", "single"), ("all", "feature")])
         self.assertIn("DONE f is complete", done)
         log = repo.log()
         self.assertEqual(len(re.findall(r",(0[125]),REVIEW-DEFERRED$", log, re.MULTILINE)), 3)

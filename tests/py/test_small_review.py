@@ -100,9 +100,11 @@ class SmallReview(unittest.TestCase):
         self.prepare(check=False)
         self.assert_two_passes()
 
-    def test_convert_keeps_two_passes(self):
+    def test_convert_is_level_3_with_one_review(self):
         self.prepare(ticket_type="convert")
-        self.assert_two_passes()
+        self.assertEqual(self.build(), (0, self.review))
+        self.assertEqual(self.repo.state()["review_pass"], "single")
+        self.assertIn("hostile caller", self.repo.flow("prompt")[1])
 
     def test_big_diff_keeps_two_passes(self):
         self.prepare()

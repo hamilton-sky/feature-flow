@@ -21,7 +21,7 @@ from pathlib import Path
 from feature_flow import __version__, git, lanes, report, state, suggest, tickets
 
 USAGE = "usage: feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]"
-CATCHES = report.FAILS + ("FOOTPRINT-FAIL", "FEATURE-FAIL")
+CATCHES = report.FAILS + ("FOOTPRINT-FAIL", "FEATURE-FAIL", "ACCEPT-FAIL")
 VERDICT_FILE = "eval-verdict.md"
 PLAN_ANSWERS = ("right", "partly", "wrong")
 FIX_WORDS = re.compile(r"\b(fix(es|ed)?|revert(s|ed)?|bug|hotfix|regression)\b", re.I)
