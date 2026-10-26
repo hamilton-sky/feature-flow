@@ -146,7 +146,7 @@ class Rendering(unittest.TestCase):
 class Command(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.dir = Path(self.tmp.name)
+        self.dir = Path(self.tmp.name).resolve()  # macOS: /var is /private/var, and git names the real path
         subprocess.run(["git", "init", "-q", str(self.dir)], check=True)
         self.cwd = os.getcwd()
         os.chdir(str(self.dir))
