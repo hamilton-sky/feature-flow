@@ -68,6 +68,14 @@ class Parsing(unittest.TestCase):
         self.assertIn(("B", "A", "rows", "arrow"), edges)
         self.assertIn(("E", "F", "", "open"), edges)
 
+    def test_class_lines_with_a_palette_name_colour_the_boxes(self):
+        graph = page.flowchart("flowchart LR\n  A --> B --> C\n  classDef amber fill:#fff\n  class A,B amber\n"
+                               "  class C fancy\n  class Z teal\n")
+        self.assertEqual({n["id"]: n.get("colour") for n in graph["nodes"]}, {"A": "amber", "B": "amber", "C": None})
+        self.assertIn("g.node.c-amber .shape", page.PALETTE_CSS)
+        self.assertEqual(sorted(json.loads(page.PALETTE_JS.split("=", 1)[1].rstrip(";"))),
+                         sorted(c[0] for c in page.COLOURS))
+
     def test_a_chain_on_one_line_links_each_pair(self):
         graph = page.flowchart("graph TD\n  A --> B --> C\n")
         self.assertEqual(graph["dir"], "TD")
@@ -105,7 +113,7 @@ class Rendering(unittest.TestCase):
     def test_each_flowchart_can_be_edited_and_undone(self):
         tools = re.search(r'<div class="tools">(.*?)</div>', self.html).group(1)
         self.assertEqual(re.findall(r'data-act="(\w+)"', tools),
-                         ["add", "shapes", "rename", "connect", "delete", "undo", "redo", "reset", "copy"])
+                         ["add", "shapes", "colour", "rename", "connect", "delete", "undo", "redo", "reset", "copy"])
         self.assertIn('<input class="rename"', tools)
         self.assertEqual(re.findall(r'data-shape="(\w+)"', tools),
                          ["rect", "round", "stadium", "diamond", "cylinder", "hexagon", "circle"])

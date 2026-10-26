@@ -39,12 +39,33 @@ BOXES = (  # what the Add box menu offers: shape, name, what it usually means, i
     ("hexagon", "Hexagon", "a job or a preparation step", '<path d="M6 3h12l4 6l-4 6H6L2 9Z"/>'),
     ("circle", "Circle", "an event or a signal", '<circle cx="12" cy="9" r="7"/>'),
 )
+COLOURS = (  # the colours a box can take: name, hue (outline, and the tint of the fill), light fill for mermaid
+    ("teal", "#0e7268", "#dcefec"), ("green", "#2f8a3e", "#e1f1e3"), ("olive", "#7a8a1c", "#eef1d9"),
+    ("sky", "#0f86b8", "#ddf0f8"), ("blue", "#2f6fdb", "#e0eafb"), ("indigo", "#4a52c9", "#e4e5f8"),
+    ("purple", "#7c4fe0", "#ece5fb"), ("pink", "#c23d72", "#f8e1ea"), ("red", "#c8402f", "#f9e2df"),
+    ("orange", "#d0661a", "#fbe8da"), ("amber", "#b58100", "#f7eed6"), ("grey", "#6b7785", "#eceef1"),
+)
+
+
+def dots(attr, checked):
+    """The colour picker: one round button per colour, then None."""
+    swatch = '<button type="button" role="menuitemradio" aria-checked="%s" data-%s="%s" title="%s" aria-label="%s">%s</button>'
+    return '<span class="dots">%s</span>' % "".join(
+        swatch % (str(name == checked).lower(), attr, name, name.capitalize(), name.capitalize(),
+                  '<i style="--c:%s"></i>' % hue if hue else '<i class="none"></i>')
+        for name, hue, _ in COLOURS + (("", "", ""),)).replace('title=""', 'title="None"').replace('aria-label=""', 'aria-label="None"')
+
+
 TOOLS = ('<span class="split"><button type="button" data-act="add">Add box</button>'
          '<button type="button" data-act="shapes" aria-haspopup="menu" aria-expanded="false" '
-         'aria-label="Pick the kind of box">&#9662;</button><span class="menu" role="menu" hidden>%s</span></span>'
-         % "".join('<button type="button" role="menuitem" data-shape="%s" data-name="%s"><svg viewBox="0 0 24 18" '
-                   'aria-hidden="true">%s</svg><span><b>%s</b><small>%s</small></span></button>' % (shape, name.lower(), icon, name, means)
-                   for shape, name, means, icon in BOXES)
+         'aria-label="Pick the kind and colour of box">&#9662;</button><span class="menu" role="menu" hidden>%s'
+         '<span class="menu-head">Colour of new boxes</span>%s</span></span>'
+         % ("".join('<button type="button" role="menuitem" data-shape="%s" data-name="%s"><svg viewBox="0 0 24 18" '
+                    'aria-hidden="true">%s</svg><span><b>%s</b><small>%s</small></span></button>'
+                    % (shape, name.lower(), icon, name, means) for shape, name, means, icon in BOXES), dots("next", ""))
+         + '<span class="split"><button type="button" data-act="colour" aria-haspopup="menu" aria-expanded="false">'
+           'Colour &#9662;</button><span class="menu" role="menu" hidden><span class="menu-head">Colour of the selected '
+           'box</span>%s</span></span>' % dots("colour", "")
          + "".join('<button type="button" data-act="%s">%s</button>' % pair for pair in (
              ("rename", "Rename"), ("connect", "Connect"), ("delete", "Delete"), ("undo", "Undo"), ("redo", "Redo"),
              ("reset", "Reset"), ("copy", "Copy as mermaid"))))
@@ -182,8 +203,12 @@ def flowchart(text):
             nodes[ident] = {"id": ident, "label": ident, "shape": "rect"}
         return ident
 
+    colours, known = {}, {c[0] for c in COLOURS}
     for line in lines[1:]:
         line = line.rstrip(";")
+        painted = re.match(r"^class\s+([\w,\s-]+?)\s+([\w-]+)$", line)
+        if painted and painted.group(2) in known:
+            colours.update((ident.strip(), painted.group(2)) for ident in painted.group(1).split(","))
         if re.match(r"^(classDef|class|style|linkStyle|click|subgraph|end|direction)\b", line):
             continue
         line = TEXT_LINK.sub(lambda m: " %s|%s| " % (m.group(2), m.group(1)), line)
@@ -210,6 +235,9 @@ def flowchart(text):
                 return None
     if not nodes:
         return None
+    for ident, colour in colours.items():
+        if ident in nodes:
+            nodes[ident]["colour"] = colour
     direction = (head.group(2) or "TD").upper()
     return {"dir": "LR" if direction in ("LR", "RL") else "TD", "nodes": list(nodes.values()), "edges": edges}
 
@@ -308,7 +336,7 @@ def render(text, feature, style_css, style_name, fragment=False):
             % (html.escape(page_title),
                ('<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" '
                 'href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="%s">\n'
-                % html.escape(fonts.group(1)) if fonts else ""), BASE_CSS, style_css))
+                % html.escape(fonts.group(1)) if fonts else ""), BASE_CSS + PALETTE_CSS, style_css))
     content = (
         '<div class="wrap" data-page="%s">\n<nav class="route" aria-label="Sections">'
         '<div class="progress"><div class="bar"><i></i></div><div class="count">0 of %d sections read</div></div>'
@@ -321,7 +349,7 @@ def render(text, feature, style_css, style_name, fragment=False):
         '<h1>%s</h1>%s<div class="meta">%s</div></header>\n%s\n</main>\n</div>\n%s<script>\n%s\n</script>\n'
         % (html.escape(feature), len(nav), "".join(nav), html.escape(style_name), inline(title or page_title),
            blocks(intro, figures), meta_html, "\n".join(body),
-           '<script src="%s"></script>\n' % MERMAID if needs_mermaid else "", BASE_JS))
+           '<script src="%s"></script>\n' % MERMAID if needs_mermaid else "", PALETTE_JS + BASE_JS))
     if fragment:
         return head + content
     return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" '
@@ -434,8 +462,9 @@ figure.dg{margin:0;background:var(--card);border:1px solid var(--line);border-ra
 .dg .tools button{font:inherit;background:var(--box);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 10px;cursor:pointer}
 .dg .tools button:hover{border-color:var(--line-strong)}
 .dg .split{position:relative;display:inline-flex}
-.dg .split>button:first-child{border-radius:6px 0 0 6px}
-.dg .split>button[data-act="shapes"]{border-radius:0 6px 6px 0;border-left:0;padding:3px 7px}
+.dg .split>button[data-act="add"]{border-radius:6px 0 0 6px}
+.dg .split>button[data-act="shapes"]{border-radius:0 6px 6px 0;margin-left:-1px;padding:3px 7px}
+.dg .split>button:hover,.dg .split>button:focus-visible{position:relative;z-index:1}
 .dg .menu{position:absolute;top:calc(100% + 4px);left:0;z-index:5;display:grid;min-width:16rem;padding:4px;background:var(--box);border:1px solid var(--line-strong);border-radius:8px;box-shadow:0 8px 24px rgb(0 0 0 / .14)}
 .dg .menu[hidden]{display:none}
 .dg .tools .menu button{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:center;text-align:left;border:0;border-radius:6px;padding:6px 8px}
@@ -443,6 +472,13 @@ figure.dg{margin:0;background:var(--card);border:1px solid var(--line);border-ra
 .dg .menu svg{width:28px;height:21px;fill:none;stroke:var(--acc);stroke-width:1.6}
 .dg .menu b{display:block;font-weight:500}
 .dg .menu small{display:block;color:var(--muted);font-size:.78rem}
+.dg .menu-head{display:block;padding:8px 8px 4px;font-family:var(--f-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.dg .menu i{display:inline-block;width:18px;height:18px;border-radius:50%;border:2px solid var(--c,var(--line-strong));background:color-mix(in srgb,var(--c,var(--box)) 22%,var(--box));justify-self:center}
+.dg .tools .menu .dots{display:grid;grid-template-columns:repeat(7,auto);justify-content:start;gap:2px;padding:0 4px 4px}
+.dg .tools .menu .dots button{display:block;padding:5px}
+.dg .tools .menu [aria-checked="true"]{background:var(--acc-soft)}
+.dg .tools .menu [aria-checked="true"] i{box-shadow:0 0 0 2px var(--box),0 0 0 4px var(--acc)}
+.dg .menu i.none{border-style:dashed;border-color:var(--line-strong);background:var(--box)}
 .dg .tools button:disabled{opacity:.45;cursor:default}
 .dg .tools button[aria-pressed="true"]{background:var(--acc);color:var(--box);border-color:var(--acc)}
 .dg .tools input.rename{font:inherit;background:var(--box);color:var(--fg);border:1px solid var(--acc);border-radius:6px;padding:3px 8px;min-width:0;width:16rem;max-width:100%}
@@ -455,7 +491,7 @@ figure.dg{margin:0;background:var(--card);border:1px solid var(--line);border-ra
 g.node{cursor:grab}
 g.node.dragging{cursor:grabbing}
 g.node .shape{fill:var(--box);stroke:var(--line-strong);stroke-width:1.3}
-g.node:hover .shape,g.node.dragging .shape{stroke:var(--acc);stroke-width:2}
+.dg g.node:hover .shape,.dg g.node.dragging .shape{stroke:var(--acc);stroke-width:2}
 g.node text{fill:var(--fg);font-family:var(--f-display);font-size:13px;font-weight:500;pointer-events:none}
 g.edge path{fill:none;stroke:var(--line-strong);stroke-width:1.4}
 g.edge.dotted path{stroke-dasharray:4 4}
@@ -466,10 +502,10 @@ g.edge rect{fill:var(--fig-bg,var(--card))}
 @keyframes flow{to{stroke-dashoffset:-12}}
 g.edge{cursor:pointer}
 .dg g.edge path.hit{stroke:transparent;stroke-width:14;stroke-dasharray:none;animation:none;pointer-events:stroke}
-g.node.sel .shape{stroke:var(--acc);stroke-width:2.6}
-g.node.from .shape{stroke:var(--acc);stroke-width:2.6;stroke-dasharray:5 3}
+.dg g.node.sel .shape{stroke:var(--acc);stroke-width:2.6}
+.dg g.node.from .shape{stroke:var(--acc);stroke-width:2.6;stroke-dasharray:5 3}
 g.node:focus{outline:none}
-g.node:focus-visible .shape{stroke:var(--acc);stroke-width:2.6}
+.dg g.node:focus-visible .shape{stroke:var(--acc);stroke-width:2.6}
 .dg g.edge.sel path:not(.hit){stroke:var(--acc);stroke-width:2.4}
 .dg g.edge.sel text{fill:var(--acc)}
 @media (prefers-reduced-motion: reduce){.motion-on g.edge path{animation:none}.route .bar i{transition:none}}
@@ -485,6 +521,11 @@ th{font-family:var(--f-display);font-size:.82rem;text-transform:uppercase;letter
   .route li a{border-left:none;padding-left:0}
 }
 """
+
+PALETTE_CSS = "".join(
+    "g.node.c-%s .shape{fill:color-mix(in srgb,%s 16%%,var(--box));stroke:%s}\n" % (name, hue, hue)
+    for name, hue, _ in COLOURS)
+PALETTE_JS = "\nvar PALETTE = %s;" % json.dumps({name: [hue, fill] for name, hue, fill in COLOURS})
 
 BASE_JS = r"""
 (function () {
@@ -622,14 +663,18 @@ BASE_JS = r"""
   var BRACKETS = { rect: ['[', ']'], round: ['(', ')'], stadium: ['([', '])'], diamond: ['{', '}'], hexagon: ['{{', '}}'], circle: ['((', '))'], cylinder: ['[(', ')]'] };
   var OPS = { arrow: '-->', open: '---', dotted: '-.->', thick: '==>' };
   function clean(g) {  // the graph without what drawing adds, for saving, undo and comparing
-    return { dir: g.dir, nodes: g.nodes.map(function (n) { return { id: n.id, label: n.label, shape: n.shape }; }),
+    return { dir: g.dir, nodes: g.nodes.map(function (n) { return { id: n.id, label: n.label, shape: n.shape, colour: n.colour || '' }; }),
       edges: g.edges.map(function (e) { return { from: e.from, to: e.to, label: e.label, style: e.style }; }) };
   }
   function mermaid(g) {
     var text = function (s) { return '"' + s.replace(/"/g, '#quot;') + '"'; };
     return ['flowchart ' + g.dir].concat(
       g.nodes.map(function (n) { var b = BRACKETS[n.shape] || BRACKETS.rect; return '  ' + n.id + b[0] + text(n.label) + b[1]; }),
-      g.edges.map(function (e) { return '  ' + e.from + ' ' + (OPS[e.style] || OPS.arrow) + (e.label ? '|' + text(e.label) + '|' : '') + ' ' + e.to; })
+      g.edges.map(function (e) { return '  ' + e.from + ' ' + (OPS[e.style] || OPS.arrow) + (e.label ? '|' + text(e.label) + '|' : '') + ' ' + e.to; }),
+      Object.keys(PALETTE).map(function (c) {
+        var ids = g.nodes.filter(function (n) { return n.colour === c; }).map(function (n) { return n.id; });
+        return ids.length ? '  classDef ' + c + ' fill:' + PALETTE[c][1] + ',stroke:' + PALETTE[c][0] + '\n  class ' + ids.join(',') + ' ' + c : '';
+      }).filter(Boolean)
     ).join('\n');
   }
   document.querySelectorAll('figure.graph').forEach(function (fig) {
@@ -642,6 +687,7 @@ BASE_JS = r"""
       else if (kept) Object.keys(kept).forEach(function (id) { if (pos[id]) pos[id] = kept[id]; });  // a page from before editing kept only places
     } catch (e) {}
     var tool = function (act) { return fig.querySelector('[data-act="' + act + '"]'); };
+    var next = '';
     var hint = fig.querySelector('.hint'), help = hint.textContent, edited = fig.querySelector('.edited'), input = fig.querySelector('input.rename');
     var mid = 'arrow-' + fig.dataset.fig, byId = {}, nodes = {}, edges = [];
     var sel = null, linking = null, renaming = null, press = null, last = { at: 0 }, undo = [], redo = [];
@@ -670,13 +716,14 @@ BASE_JS = r"""
       Object.keys(nodes).forEach(function (id) { nodes[id].classList.toggle('sel', !!sel && sel.node === id); nodes[id].classList.toggle('from', linking === id); });
       edges.forEach(function (d, i) { d.grp.classList.toggle('sel', !!sel && sel.edge === i); });
       tool('rename').disabled = tool('delete').disabled = !sel;
-      tool('connect').disabled = !(sel && sel.node);
+      tool('connect').disabled = tool('colour').disabled = !(sel && sel.node);
       tool('connect').setAttribute('aria-pressed', String(!!linking));
       tool('undo').disabled = !undo.length; tool('redo').disabled = !redo.length;
       edited.hidden = JSON.stringify(clean(g)) === first;
       hint.textContent = linking ? 'Click the box the new arrow goes to. Esc cancels.' : help;
     }
     function build() {
+      var had = fig.contains(document.activeElement);  // undo can remove the focused box: keep the keys in this figure
       while (svg.firstChild) svg.removeChild(svg.firstChild);
       byId = {}; nodes = {}; edges = [];
       g.nodes.forEach(function (n) { measure(n); byId[n.id] = n; if (!pos[n.id]) pos[n.id] = spot(); });
@@ -694,7 +741,7 @@ BASE_JS = r"""
           twin: g.edges.some(function (o) { return o.from === e.to && o.to === e.from && o !== e; }) });
       });
       g.nodes.forEach(function (n) {
-        var grp = el('g', { class: 'node', tabindex: 0, role: 'button', 'data-id': n.id, 'aria-label': n.label + ' (drag to move, Enter to rename)' }, nodeLayer);
+        var grp = el('g', { class: 'node' + (PALETTE[n.colour] ? ' c-' + n.colour : ''), tabindex: 0, role: 'button', 'data-id': n.id, 'aria-label': n.label + ' (drag to move, Enter to rename)' }, nodeLayer);
         shape(n, grp);
         n.lines.forEach(function (line, i) {
           var t = el('text', { 'text-anchor': 'middle', y: (i - (n.lines.length - 1) / 2) * 17 + 4.5 }, grp);
@@ -704,7 +751,8 @@ BASE_JS = r"""
       });
       place();
       select(sel);
-      if (sel && sel.node && fig.contains(document.activeElement)) nodes[sel.node].focus({ preventScroll: true });
+      if (sel && sel.node && had) nodes[sel.node].focus({ preventScroll: true });
+      else if (had && !fig.contains(document.activeElement)) svg.focus({ preventScroll: true });
     }
     function spot() {  // a free place for a new box: beside the one selected, else below the rest
       var near = sel && sel.node && pos[sel.node], lr = g.dir === 'LR', p;
@@ -749,11 +797,11 @@ BASE_JS = r"""
     }
 
     // editing: add, rename, connect, delete, undo, redo
-    function add(shape, name) {
+    function add(shape, name, colour) {
       var k = g.nodes.length + 1;
       while (g.nodes.some(function (n) { return n.id === 'N' + k; })) k++;
       var id = 'N' + k;
-      change(function () { pos[id] = spot(); g.nodes.push({ id: id, label: 'New ' + (name || 'box'), shape: shape || 'rect' }); sel = { node: id }; });
+      change(function () { pos[id] = spot(); g.nodes.push({ id: id, label: 'New ' + (name || 'box'), shape: shape || 'rect', colour: colour || '' }); sel = { node: id }; });
       rename();
     }
     function rename() {
@@ -843,22 +891,38 @@ BASE_JS = r"""
       ev.preventDefault();
     });
     tool('add').addEventListener('click', function () { add(); });
-    var menu = fig.querySelector('.menu'), items = Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]'));
-    function open(on) {
-      menu.hidden = !on; tool('shapes').setAttribute('aria-expanded', String(on));
-      if (on) items[0].focus();
-    }
-    tool('shapes').addEventListener('click', function () { open(menu.hidden); });
-    items.forEach(function (item, i) {
-      item.addEventListener('click', function () { open(false); add(item.dataset.shape, item.dataset.name); });
-      item.addEventListener('keydown', function (ev) {
-        var to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[ev.key];
-        if (to !== undefined) { items[(to + items.length) % items.length].focus(); ev.preventDefault(); }
-        if (ev.key === 'Escape') { open(false); tool('shapes').focus(); }
-        if (ev.key !== 'Enter' && ev.key !== ' ') ev.stopPropagation();
+    function dropdown(button, pick) {  // a menu under a toolbar button: arrow keys move, Esc closes
+      var menu = button.parentNode.querySelector('.menu'), items = Array.prototype.slice.call(menu.querySelectorAll('button'));
+      function open(on) {
+        menu.hidden = !on; button.setAttribute('aria-expanded', String(on));
+        if (on) (menu.querySelector('[data-colour][aria-checked="true"]') || items[0]).focus();
+      }
+      button.addEventListener('click', function () { if (menu.hidden) pick(null); open(menu.hidden); });
+      items.forEach(function (item, i) {
+        item.addEventListener('click', function () { if (pick(item) !== 'stay') { open(false); } });
+        item.addEventListener('keydown', function (ev) {
+          var to = { ArrowDown: i + 1, ArrowUp: i - 1, ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: items.length - 1 }[ev.key];
+          if (to !== undefined) { items[(to + items.length) % items.length].focus(); ev.preventDefault(); }
+          if (ev.key === 'Escape') { open(false); button.focus(); }
+          if (ev.key !== 'Enter' && ev.key !== ' ') ev.stopPropagation();
+        });
       });
+      document.addEventListener('pointerdown', function (ev) { if (!menu.hidden && !button.parentNode.contains(ev.target)) open(false); });
+      return items;
+    }
+    var nexts = dropdown(tool('shapes'), function (item) {
+      if (!item) return;
+      if (item.dataset.next === undefined) { add(item.dataset.shape, item.dataset.name, next); return; }
+      next = item.dataset.next;
+      nexts.forEach(function (b) { if (b.dataset.next !== undefined) b.setAttribute('aria-checked', String(b.dataset.next === next)); });
+      return 'stay';
     });
-    document.addEventListener('pointerdown', function (ev) { if (!menu.hidden && !ev.target.closest('.split')) open(false); });
+    var paints = dropdown(tool('colour'), function (item) {
+      var id = sel && sel.node, now = id && byId[id] ? byId[id].colour || '' : '';
+      if (!item) { paints.forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.colour === now)); }); return; }
+      if (id && item.dataset.colour !== now) change(function () { g.nodes.forEach(function (n) { if (n.id === id) n.colour = item.dataset.colour; }); });
+      if (id && nodes[id]) nodes[id].focus({ preventScroll: true });
+    });
     tool('rename').addEventListener('click', rename);
     tool('delete').addEventListener('click', remove);
     tool('connect').addEventListener('click', function () { linking = linking ? null : sel && sel.node; select(sel); });
