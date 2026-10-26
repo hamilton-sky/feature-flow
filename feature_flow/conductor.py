@@ -27,6 +27,11 @@ LEVEL_LINE = re.compile(r"^LEVEL: ([123])[ \t\r\f\v]*$")  # a reviewer raising t
 FINDING = re.compile(r"^[ \t]*[0-9]+\.[ \t]+(blocker|major|minor)\b", re.IGNORECASE)
 CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
 LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}
+BRAINSTORM = "brainstorm.md"  # the user's chosen approach, copied from the state folder into the draft and the plan
+HELPERS = {"scout": "scout", "web": "scout", "architect": "consult", "designer": "consult", "po": "consult",
+           "skeptic": "skeptic"}  # a brainstorm helper and the group its limit counts in
+HELPER_LIMITS = {"normal": {"scout": 2, "web": 1, "consult": 2, "skeptic": 1},
+                 "careful": {"scout": 3, "web": 2, "consult": 3, "skeptic": 1}}  # helpers per brainstorm
 FULL_ROUNDS = 2  # a level 2 ticket's rounds in which a major finding still sends it back
 MAX_LANES = 4
 MAX_BATCH = 5  # most tickets one builder takes at once in fast mode
@@ -126,6 +131,7 @@ class Conductor:
         self.draft_root = state.STATE_DIR / "draft"
         self.draft = self.draft_root / feature
         self.brief_file = state.STATE_DIR / ("brief-%s.md" % feature)
+        self.brainstorm_file = state.STATE_DIR / ("brainstorm-%s.md" % feature)
         self.state_file = state.state_path(folder, feature)
         self.log_file = state.log_path(folder, feature)
         self.findings_file = state.file_path(folder, feature, "findings")
@@ -991,7 +997,7 @@ class Conductor:
         self.log("REPLAN-PROMPT")
         try:
             return prompts.replan(self.scripts, self.feature, self.plan.as_posix(),
-                                  [Path(p).as_posix() for p in open_ones])
+                                  [Path(p).as_posix() for p in open_ones], (self.plan / BRAINSTORM).is_file())
         except FileNotFoundError as err:
             raise Stop(str(err))
 
@@ -1419,16 +1425,59 @@ class Conductor:
         question = self.read_text(question_file, "question").strip("\n")
         if not question:
             raise Stop("the question %s is empty" % question_file)
-        brief = self.brief_file.as_posix() if self.brief_file.is_file() else "(no brief saved yet)"
-        task = ("Your question comes from the planner of the feature `%s`, who is drafting its plan from the brief in "
-                "`%s`. Read the brief and the repository.\n\nThe question:\n\n%s\n\nDo not edit any file. Your final "
-                "reply must end with exactly `ANSWER: GIVEN` or `ANSWER: USER`." % (self.feature, brief, question))
+        if self.brief_file.is_file():
+            source = ("the planner of the feature `%s`, who is drafting its plan from the brief in `%s`. Read the brief "
+                      "and the repository." % (self.feature, self.brief_file.as_posix()))
+        else:
+            source = ("the brainstorm before the feature `%s` is planned: the user is choosing how to build it, and no "
+                      "brief is written yet. Read the repository; the question says what is being weighed." % self.feature)
+        task = ("Your question comes from %s\n\nThe question:\n\n%s\n\nDo not edit any file. Your final reply must end "
+                "with exactly `ANSWER: GIVEN` or `ANSWER: USER`." % (source, question))
         try:
             role_text = prompts.role(self.scripts, prompts.ROLES["ask-" + role])
         except FileNotFoundError as err:
             raise Stop(str(err))
         self.log("CONSULT-%s" % role.upper())
         return "%s\n\n---\n\n%s\n" % (role_text, task)
+
+    def brainstorm_prompt(self, helper, question_file):
+        """A brainstorm helper's prompt. The script counts the helpers per brainstorm and refuses past the limit."""
+        self.no_plan_yet()
+        if helper not in HELPERS:
+            raise Stop("brainstorm-prompt takes %s, not %s" % (", ".join(HELPERS), helper))
+        question = self.read_text(question_file, "question").strip("\n")
+        if not question:
+            raise Stop("the question %s is empty" % question_file)
+        profile = "careful" if os.environ.get("FLOW_PROFILE", "").strip().lower() == "careful" else "normal"
+        group = HELPERS[helper] if helper != "web" else "web"
+        limit = HELPER_LIMITS[profile][group] if self.scouts_on or group not in ("scout", "web") else 0
+        counts_file = self.state_file.parent / ("brainstorm-%s.helpers" % self.feature)
+        counts = dict(line.split("=", 1) for line in (state.read_text(counts_file) or "").splitlines() if "=" in line)
+        used = int(counts.get(group, "0")) if counts.get(group, "0").isdigit() else 0
+        if used >= limit:
+            raise Stop("the brainstorm of %s has used its %d %s helper(s) (%s; FLOW_SCOUTS=off allows no scouts). go "
+                       "on without, or delete %s to start a new brainstorm"
+                       % (self.feature, limit, group, profile, counts_file.as_posix()))
+        try:
+            role_text = prompts.role(self.scripts, prompts.ROLES["skeptic" if helper == "skeptic" else
+                                                               helper if group in ("scout", "web") else "ask-" + helper])
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+        about = ("The user's session is brainstorming how to build the feature `%s`, before it is planned: no brief "
+                 "and no plan exist yet." % self.feature)
+        if group in ("scout", "web"):
+            out = scouts.prompt(role_text, "planner", about + "\n\n" + question)
+        elif helper == "skeptic":
+            out = ("%s\n\n---\n\n%s The options it drafted follow. Read the repository.\n\n%s\n\nDo not edit any "
+                   "file. Your final reply must end with exactly `SKEPTIC: DONE`.\n" % (role_text, about, question))
+        else:
+            out = ("%s\n\n---\n\nYour question comes from the brainstorm. %s Read the repository.\n\nThe question:"
+                   "\n\n%s\n\nDo not edit any file. Your final reply must end with exactly `ANSWER: GIVEN` or "
+                   "`ANSWER: USER`.\n" % (role_text, about, question))
+        counts[group] = str(used + 1)
+        counts_file.write_text("".join("%s=%s\n" % kv for kv in sorted(counts.items())), encoding="utf-8")
+        self.log("BRAINSTORM-%s" % helper.upper())
+        return out.rstrip("\n")
 
     # ---- scouts: cheap read only helpers the session spawns before a role starts --
 
@@ -1979,15 +2028,32 @@ class Conductor:
                 raise Stop("the draft folder %s is outside %s" % (self.draft_text(), self.draft_root.as_posix()))
             shutil.rmtree(str(self.draft))
         (self.draft / (os.environ.get("FLOW_TICKETS") or "tasks")).mkdir(parents=True, exist_ok=True)
+        brainstorm = self.brainstorm_for(text)
+        if brainstorm:
+            shutil.copyfile(str(self.brainstorm_file), str(self.draft / BRAINSTORM))  # again on a findings round
         self.log("PLAN-PROMPT")
         try:
             found = ""
             key = state.read_text(self.plan_scout_key())
             if not findings and key is not None and key.strip() == scouts.brief_key(text):
                 found = scouts.section(self.state_file.parent, self.feature, "plan", len(scouts.plan(text)))
-            return prompts.plan("plan", self.scripts, self.feature, self.draft_text(), text, notes) + found
+            return prompts.plan("plan", self.scripts, self.feature, self.draft_text(), text, notes,
+                                brainstorm) + found
         except FileNotFoundError as err:
             raise Stop(str(err))
+
+    def brainstorm_for(self, text):
+        """True when the brief names the brainstorm on its `Brainstorm:` line; it must be this feature's file."""
+        line = next((l for l in text.splitlines() if l.startswith("Brainstorm:")), None)
+        name = (line or "")[len("Brainstorm:"):].strip().strip("`")
+        if not name or name.startswith("<"):
+            return False
+        if Path(name).resolve() != self.brainstorm_file.resolve():
+            raise Stop("the brief's Brainstorm: line must name %s, not %s" % (self.brainstorm_file.as_posix(), name))
+        if not self.brainstorm_file.is_file():
+            raise Stop("the brief names the brainstorm %s, which does not exist. write it as the brainstorm guide "
+                       "says, or drop the Brainstorm: line" % self.brainstorm_file.as_posix())
+        return True
 
     def plan_review_prompt(self):
         """The plan-reviewer's prompt: the saved brief and the draft, nothing from the planner."""
@@ -1999,7 +2065,8 @@ class Conductor:
         self.log("PLAN-REVIEW-PROMPT")
         try:
             return prompts.plan("plan-review", self.scripts, self.feature, self.draft_text(),
-                                self.read_text(self.brief_file, "brief"))
+                                self.read_text(self.brief_file, "brief"),
+                                brainstorm=(self.draft / BRAINSTORM).is_file())
         except FileNotFoundError as err:
             raise Stop(str(err))
 

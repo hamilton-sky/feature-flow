@@ -290,6 +290,23 @@ def later(plan_dir, end):
             "note": "commit subjects with fix, revert, bug or regression on each ticket's Touches paths"}
 
 
+def brainstorm(plan_dir, rows=()):
+    """{"picked_by": "person"|"agent", "helpers": {helper: count}} when the plan was brainstormed first
+    (plans/<feature>/brainstorm.md), else None."""
+    path = Path(plan_dir) / "brainstorm.md"
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8", errors="replace")
+    line = next((l for l in text.splitlines() if l.startswith("Picked by:")), "")
+    picked = line[len("Picked by:"):].strip().lower()
+    helpers = {}
+    for _, _, event, _ in rows:
+        if event.startswith("BRAINSTORM-"):
+            name = event[len("BRAINSTORM-"):].lower()
+            helpers[name] = helpers.get(name, 0) + 1
+    return {"picked_by": picked if picked in ("person", "agent") else "unknown", "helpers": helpers}
+
+
 # ---- the command -----------------------------------------------------------------------
 
 def build(feature, top, out_dir, home, with_later):
@@ -314,6 +331,7 @@ def build(feature, top, out_dir, home, with_later):
         "totals": totals,
         "tickets": per,
         "driver": driven_by,
+        "brainstorm": brainstorm(plan_dir, rows),
         "you": human,
         "tokens": tokens(home, top, window, rows),
         "verdict": read_verdict(out_dir / VERDICT_FILE),
@@ -337,6 +355,10 @@ def render(record, out_dir, wrote_form):
         lines.append("  settled at plan approval (never built): %s" % ", ".join(t["settled_at_plan"]))
     lines.append("  follow-ups: %d in followups.md%s" % (t.get("followups", 0), ", %d deferred check(s)"
                                                          % t["deferred_checks"] if t.get("deferred_checks") else ""))
+    if record.get("brainstorm"):
+        used = record["brainstorm"].get("helpers") or {}
+        lines.append("  brainstorm: yes, the option picked by %s, %s" % (record["brainstorm"]["picked_by"], ", ".join(
+            "%s x%d" % kv for kv in sorted(used.items())) or "no helpers"))
     lines.append("  active minutes: %s" % (record["active_minutes"] if record["active_minutes"] is not None else "unknown"))
     tok = record["tokens"]
     if tok:

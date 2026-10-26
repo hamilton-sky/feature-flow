@@ -6,6 +6,7 @@ You are the **planner**, called back in the middle of a build. The feature `<fea
 
 - **The bar.** `spec.md`, `commands.md` and the goal do not change. A re-plan never cuts scope: everything the open tickets promised is still promised.
 - **Resolved tickets.** Never edit, renumber or delete a resolved ticket. The flow stops if one changes.
+- **The chosen approach.** If `<plan>/brainstorm.md` exists, the folded tickets still build its Chosen option, never a Rejected one, and the file stays as it is.
 - **Every check.** Every `Done when` item and every `check` block of a ticket you fold away moves into the ticket that takes over its work.
 
 ## How to fold
