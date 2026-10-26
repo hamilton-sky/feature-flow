@@ -29,6 +29,7 @@ CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
 LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}
 FULL_ROUNDS = 2  # a level 2 ticket's rounds in which a major finding still sends it back
 MAX_LANES = 4
+MAX_BATCH = 5  # most tickets one builder takes at once in fast mode
 GAP = 3600  # most seconds one step adds to the time spent: a longer pause is the user away, not work
 
 
@@ -106,6 +107,7 @@ class Conductor:
         self.per_session = _env_int("FLOW_TICKETS_PER_SESSION", 4)
         self.small_files = _env_int("FLOW_SMALL_FILES", 3)
         self.small_lines = _env_int("FLOW_SMALL_LINES", 60)
+        self.batch_size = min(_env_int("FLOW_BATCH", MAX_BATCH), MAX_BATCH)
         self.checks_ran = False
         self.scouts_on = os.environ.get("FLOW_SCOUTS", "on") != "off"
         self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
@@ -454,8 +456,150 @@ class Conductor:
             return self.handoff()
         self.check_replan()
         self.check_budget()
-        self.start_ticket(nxt.out.strip().splitlines()[-1])
+        first = nxt.out.strip().splitlines()[-1]
+        self.start_ticket(first)
+        more = self.batch_for(first)
+        if more:
+            self.st["batch"] = " ".join(more)
+            self.log("BATCH %d" % (len(more) + 1))
         return self.hand_out_build()
+
+    # ---- batches: in fast mode one builder builds a few small tickets, one commit range each --
+
+    def batch_for(self, first):
+        """The ready tickets the builder of first also builds, in order, or [] for none. Only in fast mode
+        with the gate on, no lanes and no relay. Each one is level 1 or 2 (never raised), has a `Touches:`
+        line, and touches nothing another ticket of the batch or a `Sensitive:` path touches."""
+        size = self.batch_size
+        if self.per_session > 0:
+            size = min(size, self.per_session - self.num("session_done"))
+        if size < 2 or not self.fast() or not self.gate_on or self.relay or self.num("lanes") > 1:
+            return []
+        sensitive = tickets.sensitive_patterns(self.show_head(self.commands))
+        chosen = []
+        alone = self.all.get("no_batch", "").split()
+        for path in [first] + [p for p in checks.flow_status(self.scripts, self.feature, "--ready").out.split()
+                               if p != first]:
+            touched, level = self.footprint(path)
+            if (touched is None or level not in (1, 2) or not lanes.disjoint(touched, sensitive)
+                    or tickets.number(path) in alone):
+                if path == first:
+                    return []
+                continue
+            if all(lanes.disjoint(touched, other) for _, other in chosen):
+                chosen.append((path, touched))
+            if len(chosen) == size:
+                break
+        return [path for path, _ in chosen[1:]]
+
+    def batch_note(self):
+        """What the builder of a batch is told on top of the build guide for the first ticket."""
+        rest = self.get("batch").split()
+        return ("This build is a batch of %d small tickets: `%s` (above), then %s. Build them one at a time, in this "
+                "order, each exactly as the guide says for one ticket, with that ticket's path and number in place of "
+                "the first one's: finish one completely (its commits, its Status set to resolved, its Answer) before "
+                "you start the next, and never put two tickets in one commit. The conductor checks each ticket on its "
+                "own commits. If one cannot be finished, set it back to open with an Attempt note and stop: do not "
+                "start the next. Reply with what you built for each ticket."
+                % (len(rest) + 1, self.ticket(), ", ".join("`%s`" % p for p in rest)))
+
+    def ticket_ends(self, paths):
+        """[(path, the commit that resolved it, or None)], walking base..HEAD in order: a ticket's commits
+        follow the last resolved ticket's."""
+        commits = git._git("rev-list", "--reverse", "%s..HEAD" % self.get("base")).stdout.split()
+        out, at = [], 0
+        for path in paths:
+            rel = proof.repo_relative(path)
+            end = None
+            for i in range(at, len(commits)):
+                try:
+                    text = git.show_text("%s:%s" % (commits[i], rel))
+                except RuntimeError:
+                    continue
+                if re.search(r"^Status:[ \t]*(%s)\b" % "|".join(tickets.DONE), "\n".join(text.splitlines()[:20]),
+                             re.MULTILINE | re.IGNORECASE):
+                    end, at = commits[i], i + 1
+                    break
+            out.append((path, end))
+        return out
+
+    def judge_batch(self):
+        """Judge every ticket of a batch on its own commits: the gate once at HEAD (each ticket's end only when
+        that fails, to find the first that broke it), then the floor guard, the footprint, Done when and test
+        first with HEAD detached at the ticket's last commit. A ticket that passes is deferred to the feature
+        review; one that fails is reopened with its findings, to be built again alone."""
+        paths = [self.ticket()] + self.get("batch").split()
+        self.st["batch"] = ""
+        if not git.is_clean():
+            raise Stop("working tree is dirty after the batch of %s, it should have been committed" % self.ticket_name())
+        home = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False).stdout.strip()
+        if not home:
+            raise Stop("HEAD is detached after the batch of %s. a builder must not switch branches" % self.ticket_name())
+        ends = self.ticket_ends(paths)
+        built = [(path, end) for path, end in ends if end]
+        gate = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=self.gate_quick()) if built else None
+        if built:
+            self.log("GATE-PASS" if gate.ok else "GATE-FAIL")
+        broke = None
+        results = []
+        start = self.get("base")
+        self.st["batch_restore"] = home
+        self.save()
+        try:
+            for path, end in built:
+                git._git("checkout", "-q", "--detach", end)
+                self.st.update({"ticket": path, "num": tickets.number(path), "base": start, "due_checks": "",
+                                "level_note": ""})
+                self.st["level"] = self.base_level()
+                failure = None
+                if not gate.ok and broke is None:
+                    result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=self.gate_quick())
+                    if not result.ok:
+                        broke, failure = path, ("gate", result.out)
+                if failure is None:
+                    source, report, _ = self.build_checks(gate=False)
+                    failure = (source, report) if source else None
+                if failure is None and self.measure_level() >= 3:
+                    failure = ("batch", "%s: a batch cannot defer its review, so build it alone"
+                               % self.get("level_note"))
+                results.append((path, start, failure, self.get("due_checks")))
+                start = end
+        finally:
+            git._git("checkout", "-q", home)
+            self.st["batch_restore"] = ""
+            self.save()
+        if built and not gate.ok and broke is None:  # it fails at HEAD but at no ticket's end: blame the last one
+            path, base, _, due = results[-1]
+            results[-1] = (path, base, ("gate", gate.out), due)
+        for path, base, failure, due in results:
+            self.st.update({"ticket": path, "num": tickets.number(path), "base": base, "due_checks": due,
+                            "due_minors": ""})
+            if failure:
+                self.log("BATCH-FAIL")
+                self.all["no_batch"] = " ".join(self.all.get("no_batch", "").split() + [self.get("num")])
+                tickets.append_findings(path, 1, failure[0], failure[1])
+                tickets.set_open(path)
+                if not git.commit_file(path, "chore(%s): %s back to open from its batch" % (self.feature,
+                                                                                         self.get("num"))):
+                    raise Stop("cannot commit %s. this session must be allowed to run git commit" % path)
+                continue
+            self.write_due("%s (left for later)" % self.ticket_name())
+            items = [i for i in self.all.get("deferred", "").split() if not i.startswith(self.get("num") + ":")]
+            self.all["deferred"] = " ".join(items + ["%s:%s" % (self.get("num"), base)])
+            self.log("REVIEW-DEFERRED")
+            self.st["done"] = self.num("done") + 1
+            self.st["session_done"] = self.num("session_done") + 1
+        left = [path for path, end in ends if not end]  # the builder stopped before these: each is built alone
+        for path in left:
+            self.all["no_batch"] = " ".join(self.all.get("no_batch", "").split() + [tickets.number(path)])
+            if tickets.status(path) not in ("open", "parked", "wontfix"):
+                tickets.set_open(path)
+        if left and git.changes():
+            git.commit_paths(left, "chore(%s): %s back to open, not built in the batch"
+                             % (self.feature, ", ".join(tickets.number(p) for p in left)))
+        self.st["phase"] = ""
+        self.save()
+        return self.pick_ticket()
 
     def start_ticket(self, path):
         """Fresh per-ticket state for the ticket at path, based at HEAD, then the smoke test."""
@@ -499,6 +643,8 @@ class Conductor:
 
     def judge_build(self):
         self.check_code(self.flow_edit_allowed())
+        if self.get("batch"):
+            return self.judge_batch()
         status = tickets.status(self.ticket())
         if status not in tickets.DONE:
             if status in tickets.RESET:
@@ -511,32 +657,9 @@ class Conductor:
             return self.hand_out_build()
         if not git.is_clean():
             raise Stop("working tree is dirty after %s, it should have been committed" % self.ticket_name())
-        if self.gate_on:
-            quick = self.gate_quick()
-            result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=quick)
-            self.log("GATE-QUICK" if quick else "GATE-FULL")
-            self.log("GATE-PASS" if result.ok else "GATE-FAIL")
-            if not result.ok:
-                return self.send_back("gate (quick)" if quick else "gate (full)", result.out)
-        result = checks.floor_guard(self.scripts, self.feature, self.get("num"), self.get("base"))
-        self.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
-        if not result.ok:
-            return self.send_back("floor guard", result.out)
-        warnings = [l for l in result.out.splitlines() if l.startswith("warning:")]
-        report = self.footprint_report()
-        if report:
-            return self.send_back("footprint check", report)
-        notes = warnings[:1]
-        if self.gate_on:
-            report, note = self.run_done_when()
-            if report is not None:
-                return self.send_back("done when", report)
-            notes.append(note)
-            report, note = self.run_test_first()
-            if report is not None:
-                return self.send_back("test first", report)
-            if note:
-                notes.append(note)
+        source, report, notes = self.build_checks()
+        if source:
+            return self.send_back(source, report)
         level = self.measure_level()
         if self.fast() and level < 3 and self.gate_on:  # with the gate off, nothing but the review checks it
             return self.defer_review()
@@ -562,6 +685,37 @@ class Conductor:
                          "minors go to the plan's followups.md and the ticket passes" % (self.num("round") + 1))
         self.st["review_notes"] = NOTE_SEP.join(notes)
         return self.hand_out_review()
+
+    def build_checks(self, gate=True):
+        """Run the checks of a build: (source, report, notes) for the first one it fails, else
+        (None, "", the notes for the reviewer)."""
+        if gate and self.gate_on:
+            quick = self.gate_quick()
+            result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=quick)
+            self.log("GATE-QUICK" if quick else "GATE-FULL")
+            self.log("GATE-PASS" if result.ok else "GATE-FAIL")
+            if not result.ok:
+                return "gate (quick)" if quick else "gate (full)", result.out, []
+        result = checks.floor_guard(self.scripts, self.feature, self.get("num"), self.get("base"))
+        self.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
+        if not result.ok:
+            return "floor guard", result.out, []
+        warnings = [l for l in result.out.splitlines() if l.startswith("warning:")]
+        report = self.footprint_report()
+        if report:
+            return "footprint check", report, []
+        notes = warnings[:1]
+        if self.gate_on:
+            report, note = self.run_done_when()
+            if report is not None:
+                return "done when", report, []
+            notes.append(note)
+            report, note = self.run_test_first()
+            if report is not None:
+                return "test first", report, []
+            if note:
+                notes.append(note)
+        return None, "", notes
 
     def footprint_report(self):
         """The paths the build changed outside the ticket's `Touches:` line (read at base), as a report for the
@@ -927,6 +1081,14 @@ class Conductor:
                            "by hand" % (err, self.get("restore")))
             self.st["restore"] = ""
             self.save()
+        if self.get("batch_restore"):
+            try:
+                git._git("checkout", "-q", self.get("batch_restore"))
+            except RuntimeError as err:
+                raise Stop("cannot go back to %s after judging a batch: %s. run `git checkout %s` by hand"
+                           % (self.get("batch_restore"), err, self.get("batch_restore")))
+            self.st["batch_restore"] = ""
+            self.save()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
         if self.get("relay_handoff") == "1":
@@ -1094,6 +1256,9 @@ class Conductor:
         try:
             if phase == "review" and self.get("review_pass") in ("quality", "single"):
                 phase = "review-" + self.get("review_pass")
+            if phase == "build" and self.get("batch"):
+                return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
+                                     ) + "\n" + self.batch_note() + "\n" + self.scout_findings()
             return prompts.build(phase, self.scripts, self.feature, self.ticket(), self.get("num"), self.get("base"),
                                  [n for n in self.get("review_notes").split(NOTE_SEP) + [self.get("edit_note")] if n]
                                  if phase != "build" else (),
