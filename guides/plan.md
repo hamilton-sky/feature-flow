@@ -48,9 +48,9 @@ Then a lazy pass over your draft. For each ticket ask, in order: does the bar st
 
 ## Step 4: Write the files
 
-- `spec.md` from [templates/spec.md](templates/spec.md). One document. Remove the sections that do not apply. Its Problem and Goal carry the brief's What, Why and bar, so the plan never depends on the conversation.
+- `spec.md` from [templates/spec.md](templates/spec.md). One document. Remove the sections that do not apply. Its Problem and Goal carry the brief's What, Why and bar, so the plan never depends on the conversation. Write each acceptance criterion as what a user or caller observes, and name in Interfaces every entry point a test needs: a tester writes the acceptance tests from this file alone, without the tickets.
 - `map.md` from [templates/map.md](templates/map.md).
-- `commands.md` from [templates/commands.md](templates/commands.md), filled with the real commands from Step 2.
+- `commands.md` from [templates/commands.md](templates/commands.md), filled with the real commands from Step 2. Give it an `Acceptance:` line whenever the feature has behaviour a test can reach from outside (a CLI, a route, a public function, a page): the command that runs only the tests under `plans/<feature>/acceptance/`, from the top of the repo, in the project's own test runner (for example `python3 -m pytest plans/<feature>/acceptance`). Before the first ticket, a tester writes those tests from `spec.md` alone, and the conductor runs them once every ticket is resolved. The Test command must not run them, so they never break the gate while the feature is half built. Leave the line out for a feature with nothing to test from outside, such as docs only.
 - `learnings.md` from [templates/learnings.md](templates/learnings.md), left empty. Workers append to it; it is separate from the map because it grows and the map should stay short.
 - One `tasks/NN-slug.md` per ticket from [templates/ticket.md](templates/ticket.md).
 - Screens? Add mockups to the spec using [templates/ui-mockup.md](templates/ui-mockup.md).

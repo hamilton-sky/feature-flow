@@ -39,6 +39,8 @@ Without the script: read every ticket's `Status:` and `Blocked by:` lines and pi
 - The `## Answer` of every ticket it is blocked by. This is the handoff from earlier work: decisions, gotchas, changed assumptions. Trust it over the original plan.
 - Any `## Review findings` in the ticket. They are mandatory fixes from an independent review or the floor guard. Deal with every one first, then prove them again. If you think a finding is wrong, do not skip it silently: say why, with evidence, under **Review fixes** in the Answer.
 
+If the plan has acceptance tests under `plans/<feature>/acceptance/`, a tester wrote them from `spec.md` before the build. You may run them with commands.md's `Acceptance:` command to see where the feature stands, but never change them: the floor guard fails any change there. The conductor runs them once every ticket is resolved.
+
 If the conductor gave you a folder to work in (a lane: a worktree on its own branch while other tickets are built beside yours), change to it first and do everything there: read, edit, run, commit. Never touch a file outside it, never switch its branch, and never merge or rebase.
 
 ## Step 5: Claim

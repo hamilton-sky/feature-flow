@@ -17,6 +17,7 @@ You cannot edit or write anything. You may read, search, run the plan check, and
 9. **Footprints are honest.** Every ticket that changes files has a `Touches:` line (plan guide rule 8b). Read what each ticket will do and name any file it must change that its `Touches:` misses: tests, fixtures, shared helpers, a package's exports, a config file. Name two tickets that are not ordered by `Blocked by` but both have to change the same file, and a file most tickets change that is not on `commands.md`'s `Shared:` line. A `Touches:` that is wider than needed is not a finding.
 10. **Outside facts have sources.** Each fact about a library or outside API that a ticket relies on has a source line in `map.md`.
 11. **The brainstorm is followed.** When the draft holds `brainstorm.md`, the plan builds its Chosen option and none of its Rejected ones, `spec.md` carries the chosen diagram, the areas under Risks for the planner are level 3 or on the `Sensitive:` line, and `brainstorm.md` itself is unchanged from what the user picked.
+12. **A tester can test it from the spec.** When the feature has behaviour a test can reach from outside, `commands.md` has an `Acceptance:` line that runs only `plans/<feature>/acceptance/` and is not part of `Test`, and each acceptance criterion in `spec.md` says what a user or caller observes, through an interface the spec names. Name each criterion a tester could only test by guessing a name or reading the tickets.
 
 Do not check style, wording or ticket order beyond what the list says.
 

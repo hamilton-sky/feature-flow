@@ -12,10 +12,10 @@ ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-q
          "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md",
          "scout": "flow-scout.md", "web": "flow-web.md", "ask-architect": "flow-architect.md",
          "ask-designer": "flow-designer.md", "ask-po": "flow-po.md", "replan": "feature-planner.md",
-         "skeptic": "flow-skeptic.md"}
+         "skeptic": "flow-skeptic.md", "test": "flow-tester.md"}
 GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-quality.md",
           "review-single": "review-single.md", "review-feature": "review-feature.md", "plan": "plan.md",
-          "plan-review": "plan-review.md", "replan": "replan.md"}
+          "plan-review": "plan-review.md", "replan": "replan.md", "test": "test.md"}
 
 
 REPO = "."  # where an install's .feature-flow/ is: the working folder, or the main worktree while a lane works
@@ -131,6 +131,31 @@ def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
     for note in notes:
         task += "\nThe conductor notes: %s" % note
     parts = [role_text, "---", "The feature review guide follows. Follow it exactly.", guide, "---", task]
+    return "\n\n".join(parts) + "\n"
+
+
+def tester(scripts, feature, plan, base, command, folder, rulings=(), notes=()):
+    """The tester's prompt: write the acceptance tests from the plan's spec, or (with rulings) change the ones the
+    product owner ruled wrong. It never gets the tickets or anything a builder wrote."""
+    role_text = role(scripts, ROLES["test"])
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES["test"])), scripts)
+    for placeholder, value in (("<feature>", feature), ("<plan>", plan), ("<folder>", folder), ("<base>", base),
+                               ("<acceptance>", command)):
+        guide = guide.replace(placeholder, value)
+    if rulings:
+        task = ("Your task: the product owner ruled some acceptance tests of the feature `%s` wrong. Change those "
+                "tests in `%s` as the rulings below say, and nothing else. The plan is in `%s`. Commit your change." %
+                (feature, folder, plan))
+        task += "\n\nThe rulings:\n\n" + "\n".join("- " + r for r in rulings)
+    else:
+        task = ("Your task: write the acceptance tests of the feature `%s` from its spec, before any of it is built. "
+                "The plan is in `%s`. Write the tests only under `%s`, so that `%s` runs them, and commit them. The "
+                "work starts at commit `%s`." % (feature, plan, folder, command, base))
+    task += ("\nRun `git log` and `git status` yourself before you start: a git snapshot taken when your session began "
+             "can be stale.\nWhen you are done, reply with what you tested and what you could not.")
+    for note in notes:
+        task += "\nThe conductor notes: %s" % note
+    parts = [role_text, "---", "The test guide follows. Follow it exactly.", guide, "---", task]
     return "\n\n".join(parts) + "\n"
 
 

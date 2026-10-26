@@ -24,6 +24,7 @@ ASK_HEADING = re.compile(r"^## Ask: (architect|designer|po|user)[ \t]*$", re.MUL
 MAX_ASKS = 2  # questions one ticket may send to a consultant before the next one goes to the user
 OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
 LEVEL_LINE = re.compile(r"^LEVEL: ([123])[ \t\r\f\v]*$")  # a reviewer raising the ticket's level
+RULING = re.compile(r"^RULING: (TEST|CODE) WRONG[ \t\r\f\v]*$")  # the product owner on a disputed acceptance test
 FINDING = re.compile(r"^[ \t]*[0-9]+\.[ \t]+(blocker|major|minor)\b", re.IGNORECASE)
 CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
 LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}
@@ -432,6 +433,157 @@ class Conductor:
                                  ". %d ticket(s) already deferred still get the feature review at the end"
                                  % len(self.deferred()))
 
+    # ---- the tester: acceptance tests written from spec.md before the build, run once every ticket is done --
+
+    def acceptance_command(self):
+        """commands.md's Acceptance command as committed, or "" when the plan has none: then there is no tester."""
+        return tickets.commands_text_value(self.show_head(self.commands), "Acceptance")
+
+    def acceptance_folder(self):
+        """Where the tester's tests live, relative to the repo, with a trailing slash. Inside the plan folder, so
+        the floor guard already keeps every builder out of it."""
+        return proof.repo_relative(self.plan / "acceptance").rstrip("/") + "/"
+
+    def tests_due(self):
+        """True when the plan has an Acceptance command and no acceptance tests are committed yet."""
+        if not self.acceptance_command():
+            return False
+        listed = git._git("ls-tree", "-r", "--name-only", "HEAD", "--", self.acceptance_folder(), check=False)
+        return listed.returncode == 0 and not listed.stdout.strip()
+
+    def hand_out_test(self, retry=False):
+        """Hand the tester its task: write the acceptance tests, or (with rulings) fix the ones the product owner
+        ruled wrong. Like the feature review, it is no ticket's phase and has no lane."""
+        self.count_run()
+        if not retry:
+            self.all.update({"test_base": git.head(), "test_attempt": 0, "test_note": "",
+                             "test_mode": "fix" if self.all.get("accept_rulings") else "write"})
+        self.all.update({"phase": "test", "num": "accept", "ticket": ""})
+        self.all["test_attempt"] = self.num_all("test_attempt") + 1
+        self.all["relay_handoff"] = "1" if self.relay else ""
+        self.snapshot_code()
+        self.save()
+        return self.emit("TEST %s %s" % (self.plan.as_posix(), self.all["test_base"]))
+
+    def judge_test(self):
+        """The tester's commits may change only the acceptance folder. The Test command must still pass with them
+        in place, and newly written tests must fail before anything is built."""
+        self.check_code()
+        base = self.all.get("test_base", "")
+        if not git.is_clean():
+            raise Stop("working tree is dirty after the tester of %s: its tests should have been committed" % self.feature)
+        folder = self.acceptance_folder()
+        changed = [p for p in git._git("diff", "--name-only", "--no-renames", base, "HEAD").stdout.splitlines() if p.strip()]
+        outside = [p for p in changed if not p.startswith(folder)]
+        if outside:
+            raise Stop("the tester of %s changed %s, outside %s, where only its acceptance tests may go. take its "
+                       "commits out with `git reset --hard %s` and run next to hand the tests out again"
+                       % (self.feature, ", ".join(outside[:5]), folder, base[:12]))
+        note = ""
+        if not changed:
+            note = "the last tester committed nothing under %s" % folder
+        elif self.gate_on:
+            result = checks.gate(self.scripts, self.feature, self.gate_timeout)
+            self.log("TEST-GATE-PASS" if result.ok else "TEST-GATE-FAIL")
+            if not result.ok:
+                note = ("with the acceptance tests committed, the gate fails. keep them where only the Acceptance "
+                        "command runs them, never in what commands.md's Test command runs. the last lines: %s"
+                        % " ".join(gate.tail(result.out, 15).split())[:1200])
+        if not note and self.all.get("test_mode") != "fix":
+            result = self.run_acceptance()
+            if result.ok:
+                note = ("the acceptance tests pass before anything is built, so they cannot fail. each one must fail "
+                        "now, on an assertion about what spec.md promises, and pass once the feature is built")
+        if note:
+            if self.num_all("test_attempt") >= self.max_retries:
+                raise Stop("the tester of %s did not finish after %d attempt(s): %s"
+                           % (self.feature, self.num_all("test_attempt"), note))
+            self.all["test_note"] = note
+            return self.hand_out_test(retry=True)
+        self.log("TEST-FIXED" if self.all.get("test_mode") == "fix" else "TEST-WRITTEN")
+        for key in ("phase", "test_base", "test_attempt", "test_note", "test_mode", "accept_rulings", "accept_sha"):
+            self.all[key] = ""
+        self.save()
+        return self.dispatch() if self.num("lanes") > 1 else self.pick_ticket()
+
+    def run_acceptance(self):
+        """Run the Acceptance command from the top of the repo. It must leave the working tree as it was."""
+        self.all["num"] = "accept"
+        result = checks.smoke(self.acceptance_command(), self.gate_timeout)
+        dirty = git.changes()
+        if dirty:
+            raise Stop("the Acceptance command of %s changed the working tree: %s. it must not change it"
+                       % (self.feature, " ".join(dirty[:5])))
+        return result
+
+    def check_acceptance(self):
+        """Every ticket is resolved: first the tests the product owner ruled wrong go back to the tester, then the
+        acceptance tests run. A failure becomes a fix ticket. Returns the next line, or None when they pass (or the
+        plan has no Acceptance command)."""
+        if not self.acceptance_command():
+            return None
+        if self.all.get("accept_rulings"):
+            return self.hand_out_test()
+        head = git.head()
+        if self.all.get("accept_sha") == head:
+            return None
+        result = self.run_acceptance()
+        if result.ok:
+            self.log("ACCEPT-PASS")
+            self.all["accept_sha"] = head
+            self.save()
+            return None
+        self.log("ACCEPT-FAIL")
+        round_no = self.num_all("accept_round") + 1
+        if round_no > self.max_rounds:
+            raise Stop("the acceptance tests of %s still fail after %d round(s) of fixes. the user decides what happens "
+                       "next: the last fix ticket says what failed" % (self.feature, self.max_rounds))
+        path = self.acceptance_ticket(round_no, result)
+        if not git.commit_file(path, "chore(%s): acceptance test fixes, round %d" % (self.feature, round_no)):
+            raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
+        self.all.update({"accept_round": round_no, "accept_num": tickets.number(str(path)), "phase": ""})
+        self.save()
+        return self.dispatch() if self.num("lanes") > 1 else self.pick_ticket()
+
+    def acceptance_ticket(self, round_no, result):
+        """Write the failing acceptance run as a new open ticket, numbered after the last one."""
+        folder = self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
+        nums = [int(tickets.number(p)) for p in tickets.ticket_files(str(folder)) if tickets.number(p).isdigit()]
+        path = folder / ("%02d-acceptance-fixes-%d.md" % (max(nums or [0]) + 1, round_no))
+        out = gate.tail(result.out + ("\nthe Acceptance command timed out after %d minutes\n" % self.gate_timeout
+                                      if getattr(result, "timed_out", False) else ""), 60)
+        quoted = "\n".join("    " + line for line in out.strip("\n").splitlines()) or "    (no output)"
+        tests = self.acceptance_folder()
+        path.write_text(
+            "# Make the acceptance tests pass, round %d\n\n"
+            "Type: task\nStatus: open\nBlocked by: —\nTest first: no\nLevel: 2\n"
+            "Check: none the conductor runs the acceptance tests again once every ticket is resolved\n\n"
+            "Every ticket is resolved, but the acceptance tests fail. The tester wrote them in `%s` from spec.md "
+            "before the build, so they check what the product owner asked for, not how it was built. Fix the code "
+            "so they pass. You may run them with `%s`.\n\n"
+            "If you are sure a test asks for something spec.md does not say, do not work around it, and do not "
+            "change the test: the floor guard fails any change under `%s`. Add a `## Ask: po` section to this ticket "
+            "that names the test, what it expects and the spec.md line it disagrees with, and stop. The product owner "
+            "rules on it. A test it rules wrong is left failing here and goes back to the tester once this ticket is "
+            "resolved.\n\n"
+            "## Not in this ticket\n\n- Any file under `%s`.\n\n"
+            "## Done when\n\n- `%s` passes, apart from tests the product owner ruled wrong in this ticket.\n"
+            "- commands.md's Test command passes.\n\n"
+            "## The failing run\n\n%s\n\n## Answer\n"
+            % (round_no, tests, self.acceptance_command(), tests, tests, self.acceptance_command(), quoted),
+            encoding="utf-8")
+        return path
+
+    def test_prompt(self):
+        rulings = [r for r in self.all.get("accept_rulings", "").split(NOTE_SEP) if r]
+        try:
+            return prompts.tester(self.scripts, self.feature, self.plan.as_posix(), self.all.get("test_base", ""),
+                                  self.acceptance_command(), self.acceptance_folder(),
+                                  rulings if self.all.get("test_mode") == "fix" else (),
+                                  [n for n in (self.all.get("test_note", ""),) if n])
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+
     def pick_ticket(self):
         """Hand out the next ready ticket, or finish."""
         check = checks.flow_status(self.scripts, self.feature, "--check")
@@ -441,8 +593,13 @@ class Conductor:
         if dirty:
             raise Stop("working tree is not clean, commit or stash first: %s%s"
                        % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
+        if self.tests_due():
+            return self.hand_out_test()
         nxt = checks.flow_status(self.scripts, self.feature, "--next")
         if nxt.code == 10:
+            line = self.check_acceptance()
+            if line is not None:
+                return line
             if self.deferred():
                 return self.hand_out_final()
             done = self.num("done")
@@ -612,7 +769,7 @@ class Conductor:
         self.st["limit"] = self.run_limit()
         self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                         "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
-                        "spec_ok": "", "level_note": "", "edit_note": "", "due_checks": "", "due_minors": "", "asks": 0, "ask_role": "", "ask_from": "",
+                        "spec_ok": "", "level_note": "", "level_raised": "", "edit_note": "", "due_checks": "", "due_minors": "", "asks": 0, "ask_role": "", "ask_from": "",
                         "ticket_clock": self.all.get("spent", 0)})
         self.st["level"] = self.base_level()
         self.snapshot_code()
@@ -679,10 +836,14 @@ class Conductor:
                     notes.append(small)
         else:
             notes.append(self.get("level_note"))
-            if level < 3:
+            if proof.review_mode(self.ticket_at_base()) != "full":  # `Review: full` asks for both passes
+                # at level 3 too: in the field a separate spec pass never caught what the conductor's checks had not
                 self.st["review_pass"] = "single"
+                self.st["level_raised"] = ""
                 self.log("REVIEW-SINGLE")
-                notes.append("one review covers the spec and quality passes: do the spec checklist first")
+                notes.append("one review covers the spec and quality passes: do the spec checklist first" +
+                             (", then probe the change as a hostile caller, as the guide says for level 3"
+                              if level == 3 else ""))
         if self.st["review_pass"] == "spec" and self.get("spec_ok"):
             self.st["review_pass"] = "quality"
             notes.append("the spec review passed in an earlier round, so this round has the quality review only")
@@ -1075,6 +1236,14 @@ class Conductor:
             if self.get("relay_handoff") == "1":
                 return self.handoff()
             return self.judge_final()
+        if self.all.get("phase") == "test":
+            if lane is not None:
+                raise Stop("next %s: the tester has no lane. run next without one" % lane)
+            if not self.plan.is_dir():
+                raise Stop("no plan folder %s" % self.plan)
+            if self.get("relay_handoff") == "1":
+                return self.handoff()
+            return self.judge_test()
         if self.num("lanes") > 1:
             return self.lane_next(lane)
         if lane is not None:
@@ -1141,7 +1310,7 @@ class Conductor:
                            % nums)
         dropped = self.drop_lanes()
         had_run = self.state_file.is_file()
-        keys = ("deferred", "fast") + (("budget", "spent", "budget_offer") if self.all.get("budget") else ())
+        keys = ("deferred", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if self.all.get("budget") else ())
         kept = {k: self.all[k] for k in keys if self.all.get(k)}  # a deferred ticket still owes its review,
         # and a budget's time stays spent
         for path, kind in ((self.state_file, "state"), (self.findings_file, "findings")):
@@ -1217,7 +1386,8 @@ class Conductor:
         self.st["edit_note"] = ""
         verdict = self.take_verdict()
         review_pass = self.get("review_pass", "spec")
-        raised = review_pass == "single" and self.num("level") == 3  # a reviewer raised it in this pass
+        raised = review_pass == "single" and self.get("level_raised") == "1"  # a reviewer raised it to 3 in this pass
+        self.st["level_raised"] = ""
         if verdict == "pass" and (review_pass == "spec" or raised):
             self.st["review_pass"] = "quality"
             self.st["review_attempt"] = 0
@@ -1248,6 +1418,10 @@ class Conductor:
             if lane is not None:
                 raise Stop("prompt %s: the feature review has no lane. run prompt without one" % lane)
             return self.final_prompt()
+        if self.all.get("phase") == "test":
+            if lane is not None:
+                raise Stop("prompt %s: the tester has no lane. run prompt without one" % lane)
+            return self.test_prompt()
         if self.num("lanes") > 1 or lane is not None:
             with self.in_lane(self.lane_number(lane, "prompt")):
                 return self.prompt_text()
@@ -1316,6 +1490,11 @@ class Conductor:
         self.save()
         return self.emit_ask()
 
+    def disputes_tests(self):
+        """True for a question from the builder of an acceptance fix ticket: it may dispute a tester's test."""
+        return (self.get("ask_from") == "build" and bool(self.all.get("accept_num"))
+                and self.get("num") == self.all.get("accept_num"))
+
     def emit_ask(self):
         return self.emit("ASK %s %s %s %s%s" % (self.get("ask_role"), self.ticket(), self.get("num"), self.get("base"),
                                                 self.lane_word()))
@@ -1340,13 +1519,18 @@ class Conductor:
 
     def record_answer(self, text):
         found = ""
+        ruling = ""
         for line in text.splitlines():
             match = ANSWER.match(line)
             if match:
                 found = match.group(1).lower()
+            match = RULING.match(line)
+            if match:
+                ruling = match.group(1).lower()
+        self.st["ruling"] = ruling
         if found:
             answer = section_after(text, "## Answer") or "\n".join(l for l in text.splitlines() if not ANSWER.match(l))
-            lines = demote(answer).strip("\n").splitlines()
+            lines = [l for l in demote(answer).strip("\n").splitlines() if not RULING.match(l)]
             state.write_text(self.ask_file("answer"), "\n".join(lines[:60]) + "\n")
         self.st["verdict"] = found or "none"
         self.save()
@@ -1387,6 +1571,16 @@ class Conductor:
                                                                   " ".join(answer.split())[:1500]))
             self.st["review_notes"] = NOTE_SEP.join(notes)
             return self.hand_out_review()
+        ruling = self.get("ruling")
+        self.st["ruling"] = ""
+        if ruling and self.disputes_tests():
+            self.log("RULING-%s" % ruling.upper())
+            if ruling == "test":
+                self.all["accept_rulings"] = NOTE_SEP.join(
+                    [r for r in self.all.get("accept_rulings", "").split(NOTE_SEP) if r]
+                    + [" ".join(("%s THE PRODUCT OWNER: %s" % (question, answer)).split())[:2000]])
+                answer += ("\n\nThe product owner ruled the test wrong: leave it failing and finish the rest. The tester "
+                           "changes it once this ticket is resolved.")
         tickets.append_section(self.ticket(), "Consulted (%s)" % role,
                                "**Question:**\n\n%s\n\n**Answer:**\n\n%s" % (demote(question), answer))
         if not git.commit_file(self.ticket(), "chore(%s): %s answer from the %s" % (self.feature, self.get("num"), role)):
@@ -1406,6 +1600,12 @@ class Conductor:
                 "commit. Your final reply must end with exactly `ANSWER: GIVEN` or `ANSWER: USER`."
                 % (asker, self.get("num"), self.feature, self.plan.as_posix(), self.get("base"), rel, self.get("base"),
                    question))
+        if role == "po" and self.disputes_tests():
+            task += ("\n\nThe builder disputes an acceptance test. The tester wrote it from spec.md before the build, "
+                     "without seeing the code. Rule on it from spec.md alone, not from what was built: put the line "
+                     "`RULING: TEST WRONG` (the test asks for what spec.md does not say, and the tester changes it) or "
+                     "`RULING: CODE WRONG` (the code must change to pass it) above your ANSWER line, and quote the "
+                     "spec.md line you ruled by.")
         if self.get("edit_note"):
             task += "\n\nThe conductor notes: %s" % self.get("edit_note")
         if self.lane:
@@ -1494,7 +1694,7 @@ class Conductor:
 
     def scout_questions(self):
         """[(agent, role, question)] for the phase handed out last: a build's first attempt above level 1 (or with
-        no level), a level 3 ticket's first spec review, and the first round of the feature review."""
+        no level), a level 3 ticket's first review, and the first round of the feature review."""
         if not self.scouts_on:
             return []
         phase = self.get("phase")
@@ -1512,16 +1712,17 @@ class Conductor:
         if phase == "build" and self.num("attempt") == 1:
             return scouts.build(proof.repo_relative(self.ticket()), self.get("base"), lanes.touches(self.ticket_at_base()) or [],
                                 self.num("level"))
-        if (phase == "review" and self.num("level") == 3 and self.get("review_pass") == "spec"
+        if (phase == "review" and self.num("level") == 3 and self.get("review_pass") in ("spec", "single")
                 and self.num("review_attempt") == 1):
             return scouts.review(self.get("base"), tasks)
         return []
 
     def pending_phase(self, command, lane):
         """A context for the pending phase's state: the feature review's, the lane's, or the run's."""
-        if self.all.get("phase") == "final":
+        if self.all.get("phase") in ("final", "test"):
             if lane is not None:
-                raise Stop("%s %s: the feature review has no lane. run %s without one" % (command, lane, command))
+                raise Stop("%s %s: the %s has no lane. run %s without one" % (
+                    command, lane, "tester" if self.all.get("phase") == "test" else "feature review", command))
             return contextlib.nullcontext()
         if self.num("lanes") > 1 or lane is not None:
             return self.in_lane(self.lane_number(lane, command))
@@ -1618,6 +1819,8 @@ class Conductor:
         """Record the reviewer's reply. Exit 2 (NoPhase) unless a review is pending."""
         self.check_owner()
         reply = Path(reply).resolve()
+        if self.all.get("phase") == "test":
+            raise NoPhase("the tester has no verdict: the conductor judges its tests itself. run next")
         if self.all.get("phase") == "final":
             if lane is not None:
                 raise Stop("verdict for lane %s: the feature review has no lane. run verdict without one" % lane)
@@ -1656,6 +1859,7 @@ class Conductor:
         if asked > (level or 2):  # a ticket without a Level line already gets level 2 reviews or more
             self.st["level"] = asked
             self.st["level_note"] = self.describe_level(asked, "a reviewer raised it")
+            self.st["level_raised"] = "1" if asked == 3 else ""
             notes = [n for n in self.get("review_notes").split(NOTE_SEP) if n and not n.startswith("this ticket is level")]
             self.st["review_notes"] = NOTE_SEP.join([self.st["level_note"]] + notes)
             self.log("LEVEL-RAISE")
@@ -1771,6 +1975,8 @@ class Conductor:
             raise Stop("the main worktree is not clean, and only merges may change it while lanes run: %s"
                        % " ".join(dirty[:5]))
         busy = self.busy_lanes()
+        if not busy and self.tests_due():
+            return self.hand_out_test()
         check = checks.flow_status(self.scripts, self.feature, "--check")
         if not check.ok:
             raise Stop("ticket check failed, fix the tickets first")
@@ -1980,6 +2186,9 @@ class Conductor:
 
     def finish(self):
         """Every ticket is merged: remove the lanes and report, as pick_ticket does without lanes."""
+        line = self.check_acceptance()
+        if line is not None:
+            return line
         if self.deferred():
             return self.hand_out_final()
         lanes.remove_all(self.top, self.feature)

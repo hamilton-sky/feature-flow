@@ -49,7 +49,7 @@ Edit, write, stage, commit, stash, check out or reset anything. You may run read
 
 ## Verdict: does it meet the ticket, and is it good?
 
-This is a small ticket, so one pass covers both the spec and the quality. Do these four in order.
+One pass covers both the spec and the quality. Do these four in order.
 
 1. **Scope**: over `<base>..$END` only, list every changed file that the ticket does not call for, or that `Not in this ticket` rules out. Unrelated refactors, renames and reformatting count. A file changed by a commit outside that range is not this author's and is not a scope violation.
 
@@ -63,6 +63,8 @@ This is a small ticket, so one pass covers both the spec and the quality. Do the
 - checks made weaker instead of being met: skipped or deleted tests, silenced linters, empty catches, lowered thresholds, tests that cannot fail
 - code that need not exist: something the standard library, the platform or the codebase already provides; a feature nobody asked for; a longer way of doing a shorter thing
 - anything a later ticket will trip over
+
+If the conductor's notes say the ticket is **level 3** (boundary), also probe the change as a hostile caller. For every input it adds or touches (each field, argument, file, environment value and route), ask what a caller who controls that input can make it do: skip a check, act as someone else, read or print a secret, go past a cost or run limit, win a race, or lose data. Name each input you probed, and report each way through as a `blocker` or `major` finding.
 
 Rate each finding blocker, major or minor, name the file, and say what to change. A `blocker` is a bug, a hole or lost data; a `major` is something that should be fixed before the feature ships; a `minor` is a nicety. From a level 2 ticket's third round, the conductor sends the ticket back only for a `blocker`, or a Done when, scope or test first failure, and writes the majors to the plan's `followups.md`.
 

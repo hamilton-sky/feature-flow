@@ -32,7 +32,7 @@ def build(ticket, base, touches, level):
 
 
 def review(base, tasks):
-    """[(agent, role, question)] before a level 3 ticket's spec review, or the feature review."""
+    """[(agent, role, question)] before a level 3 ticket's first review, or the feature review."""
     return [("flow-scout", "reviewer",
              "The change from commit `%s` to HEAD is about to be reviewed. List what it touches with "
              "`git diff --stat %s..HEAD -- . ':(exclude)%s/'`. Find the rules it must follow: how similar code in this "

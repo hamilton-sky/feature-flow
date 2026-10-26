@@ -247,6 +247,7 @@ def run(argv, out, err, environ=None):
     m_rel = rel("%s/%s/map.md" % (root, feature))
     c_rel = rel("%s/%s/commands.md" % (root, feature))
     l_rel = rel("%s/%s/learnings.md" % (root, feature))
+    a_rel = m_rel.rsplit("/", 1)[0] + "/acceptance/"
 
     added = []
 
@@ -271,6 +272,9 @@ def run(argv, out, err, environ=None):
         elif path == c_rel:
             if not allows("commands-edit"):
                 add_finding("commands-edit", path, "the frozen commands file was changed")
+        elif path.startswith(a_rel):  # no Floor line allows it: only the tester writes there
+            add_finding("acceptance-edit", path, "the tester's acceptance tests were changed. if one is wrong, ask the "
+                        "product owner with ## Ask: po")
         else:
             if not allows("ticket-edit"):
                 add_finding("ticket-edit", path, "only your own ticket, map.md and learnings.md may change")
