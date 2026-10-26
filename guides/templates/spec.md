@@ -37,9 +37,10 @@ Not in scope: <list, with where each one lives instead>
 
 ## Design
 
-<How it fits into the existing system: components, data flow. An ASCII diagram is welcome:
-boxes `[ ]`, arrows `──►`, at most 70 columns, one arrow label per data or event passed.
-Show the happy path and the main failure path. Show only parts this feature adds or changes.>
+<How it fits into the existing system: components, data flow. A diagram is welcome: a ```mermaid
+block (the chosen diagram from brainstorm.md when there is one), or ASCII with boxes `[ ]`, arrows `──►`,
+at most 70 columns. One arrow label per data or event passed. Show the happy path and the main failure
+path. Show only parts this feature adds or changes.>
 
 ### Decisions
 

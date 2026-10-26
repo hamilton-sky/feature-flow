@@ -187,6 +187,13 @@ class Consult(unittest.TestCase):
         rc, out = repo.flow("consult-prompt", "architect", str(question))
         self.assertEqual(rc, 0, out)
         self.assertIn("You are the architect", out)
+        self.assertIn("comes from the brainstorm before the feature `f` is planned", out)
+        self.assertIn("Which storage fits a 10k row export?", out)
+        brief = repo.path(".feature-flow/state/brief-f.md")
+        brief.parent.mkdir(parents=True, exist_ok=True)
+        brief.write_text("Feature: f\nWhat: an export\nThe bar: `true` exits 0\n", encoding="utf-8")
+        rc, out = repo.flow("consult-prompt", "architect", str(question))
+        self.assertEqual(rc, 0, out)
         self.assertIn("comes from the planner of the feature `f`", out)
         self.assertIn("Which storage fits a 10k row export?", out)
         self.assertEqual(repo.flow("consult-prompt", "boss", str(question)),

@@ -14,6 +14,7 @@ Write everything inside `<draft>`, laid out as the plan will be:
 ├── map.md             destination, decisions so far, open questions
 ├── commands.md        the real commands, frozen once approved
 ├── learnings.md       empty, workers append to it
+├── brainstorm.md      the user's chosen approach, when there was a brainstorm (never edit it)
 └── tasks/
     ├── 01-slug.md     one ticket per file
     └── 02-slug.md
@@ -24,6 +25,8 @@ Write only inside `<draft>` (on a findings round, rewrite the draft files there)
 ## Step 1: Read the brief
 
 The brief is the whole ask. Plan what it says: its What, Why, scope and bar. Each line under Unsure is an assumption you may keep or replace with what the code shows; say which in your reply. Lines under `Decided:` are the user's answers and win over everything above them. Lines under `Consulted:` are answers from the architect, designer or product owner: follow them unless the code shows they are wrong, and say so in your reply. A gap the code cannot close goes under Open questions in `map.md`, or becomes a `settle` ticket when later tickets depend on it. If the brief has no bar, stop and reply `PLAN: QUESTIONS`.
+
+If the draft holds `brainstorm.md` (your prompt says so), the user already chose how to build the feature there. Follow its Chosen option, copy its diagram into `spec.md`'s Design, make the areas under its Risks for the planner level 3 tickets or put them on a `Sensitive:` line, and never build a Rejected option. Leave the file as it is. Its Consulted answers count as `Consulted:` lines.
 
 If your prompt carries review findings from an earlier round, the draft is already there: fix each finding in it, or say in your reply why it stays.
 

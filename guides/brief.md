@@ -4,6 +4,10 @@ You are the user's session. You turn what the user wants into an approved **feat
 
 The conductor commands below are `python3 scripts/flow.py <feature> <command>`. The state folder is `.feature-flow/state/`, which git ignores.
 
+## Step 0: Brainstorm, when it helps
+
+When the user asked for `brainstorm` or `careful`, or the idea is fuzzy (no bar yet, two real ways to build it, more than two Unsure lines), follow the brainstorm guide ([brainstorm.md](brainstorm.md)) first: it ends with the user's pick and comes back here to write the brief from it. Skip it with `fast`, for an import, and with `auto` when no one can pick.
+
 ## Step 1: Write the brief
 
 If the conversation before this already describes the work, write the brief from it. If it does not, ask only what the code cannot tell you (what it does and why, what is in and out of scope, dependencies on other work, and the bar), then write the brief from the answers.
@@ -16,13 +20,14 @@ In scope: <what this covers>
 Out: <what it does not cover, and anything the conversation set aside>
 The bar: <one command and what it should print, or the observable outcome that proves the whole feature>
 Unsure: <each thing you assumed, marked as an assumption>
+Brainstorm: <.feature-flow/state/brainstorm-<feature>.md, only when Step 0 ran>
 ```
 
 Every line comes from the conversation or is marked as an assumption under Unsure. Never fill a gap with a guess. If there is no bar, ask for one: the brief is not ready without it. If `plans/<feature>/` already exists, say so and ask for another name; adding tickets to an existing plan is a hand edit that follows the ticket rules in the plan guide, not this flow.
 
 ## Step 2: Approval 1
 
-Show the brief and ask: plan this? yes, edit, or cancel. On an edit, change the brief and show it again. On cancel, stop. Skip the question only in auto mode.
+Show the brief and ask: plan this? yes, edit, or cancel. On an edit, change the brief and show it again. On cancel, stop. Skip the question only in auto mode. After a brainstorm, show the brief right after the user's pick: this one yes covers the pick too.
 
 On yes, save the brief with the shell, not a file tool:
 
