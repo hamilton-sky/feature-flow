@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.24: seeing the brainstorm
+
+| Version | Added |
+|---|---|
+| 0.24.0 | **Brainstorm review page** (`feature-flow brainstorm-page <feature>`): one HTML file with a section sidebar, a light or dark switch, and flowchart diagrams you can edit (drag, add boxes of seven kinds, 12 colours, rename, connect, delete, undo and redo) and copy back as mermaid. **Lenses**: a read only `flow-lens` helper looks at the options as `positive`, `researcher`, `open-minded`, `artistic`, `ux` or `security`, limited per profile. **Styles**: `route` and `blueprint` token files in `guides/styles/`, picked by `--style`, a `Style:` line or `FLOW_STYLE`. |
+
 ## 0.19 to 0.23: from the first field run
 
 A field run on a separate application repo (two features) found 7 issues in review, all real, and listed the friction. These releases answer it.
