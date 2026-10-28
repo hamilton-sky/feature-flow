@@ -13,11 +13,9 @@ import time
 from pathlib import Path
 
 from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, scouts, state, suggest, tickets
-from feature_flow.conductor import buildchecks
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import REGISTRY, Phase
 from feature_flow.conductor.phases.build import Build
-from feature_flow.conductor.phases.final import Final
 from feature_flow.conductor.phases.review import Review
 from feature_flow.conductor.phases.test import Test
 from feature_flow.conductor.planning import BRAINSTORM, Planner
@@ -25,6 +23,7 @@ from feature_flow.conductor.policy import levels, limits
 from feature_flow.conductor.policy.levels import CONVERT
 from feature_flow.conductor.policy.review import FINDING, FULL_ROUNDS, followups_only
 from feature_flow.conductor.replies import demote, section_after  # the package exports them
+from feature_flow.conductor.schedulers import BatchScheduler, FacadeLanes
 from feature_flow.conductor.settings import MAX_LANES, Settings, _env_int, mode_ok
 from feature_flow.conductor.store import NOTE_SEP, RunState, TicketState
 
@@ -80,6 +79,7 @@ class Conductor:
         self.all = RunState.load(self.state_file)  # the whole run state
         self.st = TicketState(self.all)  # the ticket's view of it, one lane's while a lane works
         self.per_session = settings.session_limit(self.driver())  # an agent driver: no handoffs
+        self.sched = None  # the scheduler, picked once per call by scheduler()
 
     # ---- small helpers -------------------------------------------------
 
@@ -220,15 +220,7 @@ class Conductor:
     def pass_ticket(self):
         self.write_due("%s (left for later)" % self.ticket_name())
         self.note_slowest()
-        if self.lane:  # counted once its merge lands; None tells lane_next to merge it
-            self.st["phase"] = "merge"
-            self.save()
-            return None
-        self.st["phase"] = ""
-        self.st["done"] = self.num("done") + 1
-        self.st["session_done"] = self.num("session_done") + 1
-        self.save()
-        return self.pick_ticket()
+        return self.scheduler().on_passed(self)
 
     def pass_with_followups(self, source, findings):
         """A level 2 ticket past its full rounds whose review found no blocker: append the findings to the
@@ -272,273 +264,6 @@ class Conductor:
         return "OK fast %s%s" % (value, "" if value == "on" or not self.deferred() else
                                  ". %d ticket(s) already deferred still get the feature review at the end"
                                  % len(self.deferred()))
-
-    # ---- the tester: acceptance tests written from spec.md before the build, run once every ticket is done --
-
-    def acceptance_command(self):
-        """commands.md's Acceptance command as committed, or "" when the plan has none: then there is no tester."""
-        return tickets.commands_text_value(self.show_head(self.commands), "Acceptance")
-
-    def acceptance_folder(self):
-        """Where the tester's tests live, relative to the repo, with a trailing slash. Inside the plan folder, so
-        the floor guard already keeps every builder out of it."""
-        return proof.repo_relative(self.plan / "acceptance").rstrip("/") + "/"
-
-    def tests_due(self):
-        """True when the plan has an Acceptance command and no acceptance tests are committed yet."""
-        if not self.acceptance_command():
-            return False
-        listed = git._git("ls-tree", "-r", "--name-only", "HEAD", "--", self.acceptance_folder(), check=False)
-        return listed.returncode == 0 and not listed.stdout.strip()
-
-    def run_acceptance(self):
-        """Run the Acceptance command from the top of the repo. It must leave the working tree as it was."""
-        self.all["num"] = "accept"
-        result = checks.smoke(self.acceptance_command(), self.gate_timeout)
-        dirty = git.changes()
-        if dirty:
-            raise Stop("the Acceptance command of %s changed the working tree: %s. it must not change it"
-                       % (self.feature, " ".join(dirty[:5])))
-        return result
-
-    def check_acceptance(self):
-        """Every ticket is resolved: first the tests the product owner ruled wrong go back to the tester, then the
-        acceptance tests run. A failure becomes a fix ticket. Returns the next line, or None when they pass (or the
-        plan has no Acceptance command)."""
-        if not self.acceptance_command():
-            return None
-        if self.all.get("accept_rulings"):
-            return Test.hand_out(self)
-        head = git.head()
-        if self.all.get("accept_sha") == head:
-            return None
-        result = self.run_acceptance()
-        if result.ok:
-            self.log("ACCEPT-PASS")
-            self.all["accept_sha"] = head
-            self.save()
-            return None
-        self.log("ACCEPT-FAIL")
-        round_no = self.num_all("accept_round") + 1
-        if round_no > self.max_rounds:
-            raise Stop("the acceptance tests of %s still fail after %d round(s) of fixes. the user decides what happens "
-                       "next: the last fix ticket says what failed" % (self.feature, self.max_rounds))
-        path = self.acceptance_ticket(round_no, result)
-        if not git.commit_file(path, "chore(%s): acceptance test fixes, round %d" % (self.feature, round_no)):
-            raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
-        self.all.update({"accept_round": round_no, "accept_num": tickets.number(str(path)), "phase": ""})
-        self.save()
-        return self.dispatch() if self.num("lanes") > 1 else self.pick_ticket()
-
-    def acceptance_ticket(self, round_no, result):
-        """Write the failing acceptance run as a new open ticket, numbered after the last one."""
-        folder = self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
-        nums = [int(tickets.number(p)) for p in tickets.ticket_files(str(folder)) if tickets.number(p).isdigit()]
-        path = folder / ("%02d-acceptance-fixes-%d.md" % (max(nums or [0]) + 1, round_no))
-        out = gate.tail(result.out + ("\nthe Acceptance command timed out after %d minutes\n" % self.gate_timeout
-                                      if getattr(result, "timed_out", False) else ""), 60)
-        quoted = "\n".join("    " + line for line in out.strip("\n").splitlines()) or "    (no output)"
-        tests = self.acceptance_folder()
-        path.write_text(
-            "# Make the acceptance tests pass, round %d\n\n"
-            "Type: task\nStatus: open\nBlocked by: —\nTest first: no\nLevel: 2\n"
-            "Check: none the conductor runs the acceptance tests again once every ticket is resolved\n\n"
-            "Every ticket is resolved, but the acceptance tests fail. The tester wrote them in `%s` from spec.md "
-            "before the build, so they check what the product owner asked for, not how it was built. Fix the code "
-            "so they pass. You may run them with `%s`.\n\n"
-            "If you are sure a test asks for something spec.md does not say, do not work around it, and do not "
-            "change the test: the floor guard fails any change under `%s`. Add a `## Ask: po` section to this ticket "
-            "that names the test, what it expects and the spec.md line it disagrees with, and stop. The product owner "
-            "rules on it. A test it rules wrong is left failing here and goes back to the tester once this ticket is "
-            "resolved.\n\n"
-            "## Not in this ticket\n\n- Any file under `%s`.\n\n"
-            "## Done when\n\n- `%s` passes, apart from tests the product owner ruled wrong in this ticket.\n"
-            "- commands.md's Test command passes.\n\n"
-            "## The failing run\n\n%s\n\n## Answer\n"
-            % (round_no, tests, self.acceptance_command(), tests, tests, self.acceptance_command(), quoted),
-            encoding="utf-8")
-        return path
-
-    def pick_ticket(self):
-        """Hand out the next ready ticket, or finish."""
-        check = checks.flow_status(self.scripts, self.feature, "--check")
-        if not check.ok:
-            raise Stop("ticket check failed, fix the tickets first")
-        dirty = git.changes()
-        if dirty:
-            raise Stop("working tree is not clean, commit or stash first: %s%s"
-                       % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
-        if self.tests_due():
-            return Test.hand_out(self)
-        nxt = checks.flow_status(self.scripts, self.feature, "--next")
-        if nxt.code == 10:
-            line = self.check_acceptance()
-            if line is not None:
-                return line
-            if self.deferred():
-                return Final.hand_out(self)
-            done = self.num("done")
-            followups = self.num("followups")
-            self.st["phase"] = ""
-            self.st["owner"] = ""
-            self.save()
-            return self.emit("DONE %s is complete: %d ticket(s) resolved in this run%s" % (
-                self.feature, done, "; %d passed with follow-ups in %s" % (followups, (self.plan / "followups.md").as_posix())
-                if followups else ""))
-        if nxt.code == 11:
-            raise Stop("stuck: unfinished tickets remain but none is ready. run: python3 scripts/flow-status.py %s"
-                       % self.feature)
-        if nxt.code != 0:
-            raise Stop("flow-status.py failed with exit code %d" % nxt.code)
-        if self.per_session > 0 and self.num("session_done") >= self.per_session:
-            return self.handoff()
-        self.check_replan()
-        self.check_budget()
-        first = nxt.out.strip().splitlines()[-1]
-        self.start_ticket(first)
-        more = self.batch_for(first)
-        if more:
-            self.st["batch"] = " ".join(more)
-            self.log("BATCH %d" % (len(more) + 1))
-        return Build.hand_out(self)
-
-    # ---- batches: in fast mode one builder builds a few small tickets, one commit range each --
-
-    def batch_for(self, first):
-        """The ready tickets the builder of first also builds, in order, or [] for none. Only in fast mode
-        with the gate on, no lanes and no relay. Each one is level 1 or 2 (never raised), has a `Touches:`
-        line, and touches nothing another ticket of the batch or a `Sensitive:` path touches."""
-        size = self.batch_size
-        if self.per_session > 0:
-            size = min(size, self.per_session - self.num("session_done"))
-        if not mode_ok("batch", size=size, fast_mode=self.fast(), gate_on=self.gate_on, relay=self.relay,
-                       lanes=self.num("lanes")):
-            return []
-        sensitive = tickets.sensitive_patterns(self.show_head(self.commands))
-        chosen = []
-        alone = self.all.get("no_batch", "").split()
-        for path in [first] + [p for p in checks.flow_status(self.scripts, self.feature, "--ready").out.split()
-                               if p != first]:
-            touched, level = self.footprint(path)
-            if (touched is None or level not in (1, 2) or not lanes.disjoint(touched, sensitive)
-                    or tickets.number(path) in alone):
-                if path == first:
-                    return []
-                continue
-            if all(lanes.disjoint(touched, other) for _, other in chosen):
-                chosen.append((path, touched))
-            if len(chosen) == size:
-                break
-        return [path for path, _ in chosen[1:]]
-
-    def ticket_ends(self, paths):
-        """[(path, the commit that resolved it, or None)], walking base..HEAD in order: a ticket's commits
-        follow the last resolved ticket's."""
-        commits = git._git("rev-list", "--reverse", "%s..HEAD" % self.get("base")).stdout.split()
-        out, at = [], 0
-        for path in paths:
-            rel = proof.repo_relative(path)
-            end = None
-            for i in range(at, len(commits)):
-                try:
-                    text = git.show_text("%s:%s" % (commits[i], rel))
-                except RuntimeError:
-                    continue
-                if re.search(r"^Status:[ \t]*(%s)\b" % "|".join(tickets.DONE), "\n".join(text.splitlines()[:20]),
-                             re.MULTILINE | re.IGNORECASE):
-                    end, at = commits[i], i + 1
-                    break
-            out.append((path, end))
-        return out
-
-    def judge_batch(self):
-        """Judge every ticket of a batch on its own commits: the gate once at HEAD (each ticket's end only when
-        that fails, to find the first that broke it), then the floor guard, the footprint, Done when and test
-        first with HEAD detached at the ticket's last commit. A ticket that passes is deferred to the feature
-        review; one that fails is reopened with its findings, to be built again alone."""
-        paths = [self.ticket()] + self.get("batch").split()
-        self.st["batch"] = ""
-        if not git.is_clean():
-            raise Stop("working tree is dirty after the batch of %s, it should have been committed" % self.ticket_name())
-        home = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False).stdout.strip()
-        if not home:
-            raise Stop("HEAD is detached after the batch of %s. a builder must not switch branches" % self.ticket_name())
-        ends = self.ticket_ends(paths)
-        built = [(path, end) for path, end in ends if end]
-        gate = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=self.gate_quick()) if built else None
-        if built:
-            self.log("GATE-PASS" if gate.ok else "GATE-FAIL")
-        broke = None
-        results = []
-        start = self.get("base")
-        self.st["batch_restore"] = home
-        self.save()
-        try:
-            for path, end in built:
-                git._git("checkout", "-q", "--detach", end)
-                self.st.update({"ticket": path, "num": tickets.number(path), "base": start, "due_checks": "",
-                                "level_note": ""})
-                self.st["level"] = self.base_level()
-                failure = None
-                if not gate.ok and broke is None:
-                    result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=self.gate_quick())
-                    if not result.ok:
-                        broke, failure = path, ("gate", result.out)
-                if failure is None:
-                    source, report, _ = buildchecks.run(self, buildchecks.pipeline(self, gate=False))
-                    failure = (source, report) if source else None
-                if failure is None and self.measure_level() >= 3:
-                    failure = ("batch", "%s: a batch cannot defer its review, so build it alone"
-                               % self.get("level_note"))
-                results.append((path, start, failure, self.get("due_checks")))
-                start = end
-        finally:
-            git._git("checkout", "-q", home)
-            self.st["batch_restore"] = ""
-            self.save()
-        if built and not gate.ok and broke is None:  # it fails at HEAD but at no ticket's end: blame the last one
-            path, base, _, due = results[-1]
-            results[-1] = (path, base, ("gate", gate.out), due)
-        for path, base, failure, due in results:
-            self.st.update({"ticket": path, "num": tickets.number(path), "base": base, "due_checks": due,
-                            "due_minors": ""})
-            if failure:
-                self.log("BATCH-FAIL")
-                self.all["no_batch"] = " ".join(self.all.get("no_batch", "").split() + [self.get("num")])
-                tickets.append_findings(path, 1, failure[0], failure[1])
-                tickets.set_open(path)
-                if not git.commit_file(path, "chore(%s): %s back to open from its batch" % (self.feature,
-                                                                                         self.get("num"))):
-                    raise Stop("cannot commit %s. this session must be allowed to run git commit" % path)
-                continue
-            self.write_due("%s (left for later)" % self.ticket_name())
-            items = [i for i in self.all.get("deferred", "").split() if not i.startswith(self.get("num") + ":")]
-            self.all["deferred"] = " ".join(items + ["%s:%s" % (self.get("num"), base)])
-            self.log("REVIEW-DEFERRED")
-            self.st["done"] = self.num("done") + 1
-            self.st["session_done"] = self.num("session_done") + 1
-        left = [path for path, end in ends if not end]  # the builder stopped before these: each is built alone
-        for path in left:
-            self.all["no_batch"] = " ".join(self.all.get("no_batch", "").split() + [tickets.number(path)])
-            if tickets.status(path) not in ("open", "parked", "wontfix"):
-                tickets.set_open(path)
-        if left and git.changes():
-            git.commit_paths(left, "chore(%s): %s back to open, not built in the batch"
-                             % (self.feature, ", ".join(tickets.number(p) for p in left)))
-        self.st["phase"] = ""
-        self.save()
-        return self.pick_ticket()
-
-    def start_ticket(self, path):
-        """Fresh per-ticket state for the ticket at path, based at HEAD, then the smoke test."""
-        self.st["limit"] = self.run_limit()
-        self.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
-                        "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
-                        "spec_ok": "", "level_note": "", "level_raised": "", "edit_note": "", "due_checks": "", "due_minors": "", "asks": 0, "ask_role": "", "ask_from": "",
-                        "ticket_clock": self.all.get("spent", 0)})
-        self.st["level"] = self.base_level()
-        self.snapshot_code()
-        self.run_smoke()
 
     def snapshot_code(self):
         whole, each = codehash.flow_code(self.scripts)
@@ -860,7 +585,13 @@ class Conductor:
         phase = REGISTRY.get(self.get("phase"))
         if phase is not None:
             return phase.judge(self).line
-        return self.pick_ticket()
+        return self.scheduler().next(lane)
+
+    def scheduler(self):
+        """The scheduler of this call, picked once: lanes, else one ticket at a time (a batch when it may be)."""
+        if self.sched is None:
+            self.sched = FacadeLanes(self) if self.num_all("lanes") > 1 else BatchScheduler(self)
+        return self.sched
 
     def pending(self):
         """The class of the phase pending in this view of the state: Phase, whose defaults do nothing, for none."""
@@ -1158,7 +889,7 @@ class Conductor:
             raise Stop("the main worktree is not clean, and only merges may change it while lanes run: %s"
                        % " ".join(dirty[:5]))
         busy = self.busy_lanes()
-        if not busy and self.tests_due():
+        if not busy and self.scheduler().end.tests_due():
             return Test.hand_out(self)
         check = checks.flow_status(self.scripts, self.feature, "--check")
         if not check.ok:
@@ -1184,7 +915,7 @@ class Conductor:
         if busy:
             return self.emit("WAIT %s" % ",".join(map(str, busy)))
         if ready.code == 10:
-            return self.finish()
+            return self.scheduler().end.finish()
         raise Stop("stuck: unfinished tickets remain but none is ready. run: python3 scripts/flow-status.py %s"
                    % self.feature)
 
@@ -1215,7 +946,7 @@ class Conductor:
                 lanes.git_in(".", "checkout", "-q", "-B", lanes.branch(self.feature, tickets.number(path)), head)
             except RuntimeError as err:
                 raise Stop("cannot put lane %d on a branch for %s: %s" % (k, tickets.name(path), err))
-            self.start_ticket(path)
+            self.scheduler().start_ticket(path)
             self.log("LEASE-%d" % k)
             return Build.hand_out(self)
 
@@ -1351,7 +1082,7 @@ class Conductor:
             except RuntimeError as err:
                 raise Stop("cannot reset lane %d for the rebuild of %s: %s" % (k, self.ticket_name(), err))
             self.st.clear()
-            self.start_ticket(path)
+            self.scheduler().start_ticket(path)
             self.st["rebuilds"] = 1
             tickets.append_section(path, "Rebuild (%s)" % problem, (
                 "This ticket was built and passed its review in a lane, but %s. It is built again from the feature "
@@ -1363,22 +1094,6 @@ class Conductor:
                            % self.ticket_name())
             self.log("REBUILD")
             return Build.hand_out(self)
-
-    def finish(self):
-        """Every ticket is merged: remove the lanes and report, as pick_ticket does without lanes."""
-        line = self.check_acceptance()
-        if line is not None:
-            return line
-        if self.deferred():
-            return Final.hand_out(self)
-        lanes.remove_all(self.top, self.feature)
-        done = self.num("done")
-        followups = self.num("followups")
-        self.all["owner"] = ""
-        self.save()
-        return self.emit("DONE %s is complete: %d ticket(s) resolved in this run%s" % (
-            self.feature, done, "; %d passed with follow-ups in %s" % (followups, (self.plan / "followups.md").as_posix())
-            if followups else ""))
 
     def drop_lanes(self):
         """For reset: remove the feature's lane worktrees and delete its ticket branches. Returns what it did."""

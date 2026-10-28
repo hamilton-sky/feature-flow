@@ -54,7 +54,7 @@ class Final(Phase):
                 ws.all[key] = ""
             ws.save()
             ws.log("FEATURE-PASS")
-            return Outcome(ws.dispatch() if ws.num("lanes") > 1 else ws.pick_ticket())
+            return Outcome(ws.scheduler().resume())
         if verdict == "fail":
             round_no = ws.num("final_round") + 1
             if round_no > ws.max_rounds:
@@ -66,7 +66,7 @@ class Final(Phase):
             ws.all.update({"phase": "", "final_round": round_no, "review_attempt": 0, "review_sha": ""})
             ws.save()
             ws.log("FEATURE-FAIL")
-            return Outcome(ws.dispatch() if ws.num("lanes") > 1 else ws.pick_ticket())
+            return Outcome(ws.scheduler().resume())
         if ws.num("review_attempt") >= ws.max_retries:
             raise Stop("no verdict from the feature review of %s after %d attempt(s)" % (ws.feature, ws.max_retries))
         return Outcome(cls.hand_out(ws, retry=True))

@@ -36,7 +36,7 @@ class Test(Phase):
         base = ws.all.get("test_base", "")
         if not git.is_clean():
             raise Stop("working tree is dirty after the tester of %s: its tests should have been committed" % ws.feature)
-        folder = ws.acceptance_folder()
+        folder = ws.scheduler().end.acceptance_folder()
         changed = [p for p in git._git("diff", "--name-only", "--no-renames", base, "HEAD").stdout.splitlines() if p.strip()]
         outside = [p for p in changed if not p.startswith(folder)]
         if outside:
@@ -54,7 +54,7 @@ class Test(Phase):
                         "command runs them, never in what commands.md's Test command runs. the last lines: %s"
                         % " ".join(gate.tail(result.out, 15).split())[:1200])
         if not note and ws.all.get("test_mode") != "fix":
-            result = ws.run_acceptance()
+            result = ws.scheduler().end.run_acceptance()
             if result.ok:
                 note = ("the acceptance tests pass before anything is built, so they cannot fail. each one must fail "
                         "now, on an assertion about what spec.md promises, and pass once the feature is built")
@@ -68,14 +68,15 @@ class Test(Phase):
         for key in ("phase", "test_base", "test_attempt", "test_note", "test_mode", "accept_rulings", "accept_sha"):
             ws.all[key] = ""
         ws.save()
-        return Outcome(ws.dispatch() if ws.num("lanes") > 1 else ws.pick_ticket())
+        return Outcome(ws.scheduler().resume())
 
     @classmethod
     def prompt(cls, ws):
         rulings = [r for r in ws.all.get("accept_rulings", "").split(NOTE_SEP) if r]
+        end = ws.scheduler().end
         try:
             return prompts.tester(ws.scripts, ws.feature, ws.plan.as_posix(), ws.all.get("test_base", ""),
-                                  ws.acceptance_command(), ws.acceptance_folder(),
+                                  end.acceptance_command(), end.acceptance_folder(),
                                   rulings if ws.all.get("test_mode") == "fix" else (),
                                   [n for n in (ws.all.get("test_note", ""),) if n])
         except FileNotFoundError as err:

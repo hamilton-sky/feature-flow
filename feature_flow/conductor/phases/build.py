@@ -26,7 +26,7 @@ class Build(Phase):
     def judge(cls, ws):
         ws.check_code(ws.flow_edit_allowed())
         if ws.get("batch"):
-            return Outcome(ws.judge_batch())
+            return Outcome(ws.scheduler().judge_batch())
         status = tickets.status(ws.ticket())
         if status not in tickets.DONE:
             if status in tickets.RESET:
@@ -61,22 +61,10 @@ class Build(Phase):
         if ws.get("batch"):
             try:
                 return prompts.build("build", ws.scripts, ws.feature, ws.ticket(), ws.get("num"), ws.get("base"),
-                                     ) + "\n" + cls.batch_note(ws) + "\n" + ws.scout_findings()
+                                     ) + "\n" + ws.scheduler().batch_note() + "\n" + ws.scout_findings()
             except FileNotFoundError as err:
                 raise Stop(str(err))
         return ticket_prompt(ws, "build")
-
-    @classmethod
-    def batch_note(cls, ws):
-        """What the builder of a batch is told on top of the build guide for the first ticket."""
-        rest = ws.get("batch").split()
-        return ("This build is a batch of %d small tickets: `%s` (above), then %s. Build them one at a time, in this "
-                "order, each exactly as the guide says for one ticket, with that ticket's path and number in place of "
-                "the first one's: finish one completely (its commits, its Status set to resolved, its Answer) before "
-                "you start the next, and never put two tickets in one commit. The conductor checks each ticket on its "
-                "own commits. If one cannot be finished, set it back to open with an Attempt note and stop: do not "
-                "start the next. Reply with what you built for each ticket."
-                % (len(rest) + 1, ws.ticket(), ", ".join("`%s`" % p for p in rest)))
 
     @classmethod
     def scout_questions(cls, ws):

@@ -1,0 +1,74 @@
+"""One ticket at a time: hand out the lowest ready ticket, and end through the shared end of run."""
+
+from feature_flow import checks, git, tickets
+from feature_flow.conductor.errors import Stop
+from feature_flow.conductor.phases.build import Build
+from feature_flow.conductor.schedulers.end import EndOfRun
+
+
+class SerialScheduler:
+    """The scheduler protocol: next(lane) is the next line when no phase is pending, on_passed(ws) counts a ticket
+    whose phase passed it, resume() is the next line after the tester or the feature review."""
+
+    lanes = False
+
+    def __init__(self, c):
+        self.c = c
+        self.end = EndOfRun(c, self, lanes=self.lanes)
+
+    def next(self, lane=None):
+        return self.pick_ticket()
+
+    def on_passed(self, ws):
+        ws.st["phase"] = ""
+        ws.st["done"] = ws.num("done") + 1
+        ws.st["session_done"] = ws.num("session_done") + 1
+        ws.save()
+        return self.resume()
+
+    def resume(self):
+        return self.next(None)
+
+    def pick_ticket(self):
+        """Hand out the next ready ticket, or finish."""
+        c = self.c
+        check = checks.flow_status(c.scripts, c.feature, "--check")
+        if not check.ok:
+            raise Stop("ticket check failed, fix the tickets first")
+        dirty = git.changes()
+        if dirty:
+            raise Stop("working tree is not clean, commit or stash first: %s%s"
+                       % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
+        line = self.end.tester()
+        if line is not None:
+            return line
+        nxt = checks.flow_status(c.scripts, c.feature, "--next")
+        if nxt.code == 10:
+            return self.end.finish()
+        if nxt.code == 11:
+            raise Stop("stuck: unfinished tickets remain but none is ready. run: python3 scripts/flow-status.py %s"
+                       % c.feature)
+        if nxt.code != 0:
+            raise Stop("flow-status.py failed with exit code %d" % nxt.code)
+        if c.per_session > 0 and c.num("session_done") >= c.per_session:
+            return c.handoff()
+        c.check_replan()
+        c.check_budget()
+        return self.begin(nxt.out.strip().splitlines()[-1])
+
+    def begin(self, first):
+        """Start the ticket at first and hand out its build."""
+        self.start_ticket(first)
+        return Build.hand_out(self.c)
+
+    def start_ticket(self, path):
+        """Fresh per-ticket state for the ticket at path, based at HEAD, then the smoke test."""
+        c = self.c
+        c.st["limit"] = c.run_limit()
+        c.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
+                     "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
+                     "spec_ok": "", "level_note": "", "level_raised": "", "edit_note": "", "due_checks": "", "due_minors": "", "asks": 0, "ask_role": "", "ask_from": "",
+                     "ticket_clock": c.all.get("spent", 0)})
+        c.st["level"] = c.base_level()
+        c.snapshot_code()
+        c.run_smoke()
