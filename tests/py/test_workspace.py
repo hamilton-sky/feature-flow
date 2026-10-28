@@ -85,7 +85,7 @@ class Lanes(unittest.TestCase):
         self.assertEqual((ws.kind, ws.lane, ws.folder, ws.top), (LANE, 1, path, run.c.top))
         with ws.entered() as inside:
             self.assertIs(inside, ws)
-            self.assertEqual(Path.cwd().resolve(), path.resolve())
+            self.assertEqual((Path.cwd().resolve(), inside.folder.resolve()), (run.c.top.resolve(), path.resolve()))
         self.assertEqual(Path.cwd().resolve(), run.c.top.resolve())
 
     def test_a_lane_phase_reads_its_role_from_the_main_worktree(self):
@@ -167,7 +167,7 @@ class CodeFingerprint(unittest.TestCase):
     def test_a_lane_snapshot_names_the_main_worktrees_role(self):
         with self.ws.entered():
             self.ws.snapshot_code()
-            self.assertEqual(Path.cwd().resolve(), self.lane.resolve())
+            self.assertEqual((Path.cwd().resolve(), self.ws.folder.resolve()), (self.run.c.top.resolve(), self.lane.resolve()))
         names = codehash.load(self.ws.get("code_files"))
         main = hashlib.sha256((self.run.c.top / self.ROLE).read_bytes()).hexdigest()
         self.assertEqual(names.get(self.ROLE.as_posix()), main)
