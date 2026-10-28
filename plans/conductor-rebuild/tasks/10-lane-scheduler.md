@@ -6,7 +6,7 @@ Blocked by: 09
 Test first: yes
 Level: 3
 Floor: allow flow-edit
-Touches: feature_flow/conductor/, tests/py/test_schedulers.py, tests/py/test_trust_drive.py, tests/py/test_trust_runner.py
+Touches: feature_flow/conductor/, tests/py/test_schedulers.py, tests/py/test_trust_drive.py, tests/py/test_trust_runner.py, tests/py/test_phases.py (only to add "merge" to WORDS)
 
 Step 7 of the design, lanes last. Add `LaneScheduler` to `feature_flow/conductor/schedulers/`: `lane_next`, `dispatch`, `busy_lanes`, `lane_key`, `lane_number`, `lane_dir`, `footprint`, `lease`, `make_worktree`, `integrate`, `merge_in_place`, `refresh`, `rebuild`, `finish` (through ticket 09's `EndOfRun`) and `drop_lanes` (which `reset` calls). A merge phase class (the phase protocol, `lane_scoped` True) holds the `merge` step of a passed lane ticket, and `REGISTRY` gains `merge`; `LaneScheduler.on_passed` queues the merge. The facade picks `LaneScheduler` when the run has lanes, once per call, so `num("lanes") > 1` is decided in one place; the lane checks of `next`, `prompt`, `verdict` and `scouts` with and without a lane argument keep today's STOP texts.
 
