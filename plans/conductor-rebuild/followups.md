@@ -54,3 +54,9 @@ What the run left for later: minor findings of passing reviews, the findings a l
 - 1. minor feature_flow/conductor/workspace.py Workspace.__getattr__: still forwards every missing name to the Conductor; an allow-list would enforce the lane view. (single review)
 - 2. minor feature_flow/conductor/workspace.py _working_in: two call sites (entered, flow_code); ticket 15 should remove both. (single review)
 - 3. minor tests/py/test_schedulers.py:304 stale "as in_lane gives it" comment. (single review)
+
+## 13-cwd-keyword-in-the-helpers (left for later)
+
+- 1. minor feature_flow/gate.py: a cwd with no plan makes the gate print "nothing to run" and exit 0; ticket 15 passes lane folders, so fail when cwd is given and is not a folder. (single review)
+- 2. minor feature_flow/proc.py, feature_flow/checks.py: a missing cwd makes Popen raise FileNotFoundError out of checks.smoke/gate instead of a failing Result. (single review)
+- 3. minor feature_flow/floorguard.py, feature_flow/status.py: _under defined twice with the same body. (single review)
