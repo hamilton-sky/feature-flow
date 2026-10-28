@@ -8,3 +8,4 @@ dist/
 *.egg-info/
 node_modules/
 packages/forkboard/tests/browser/package-lock.json
+*.whl
