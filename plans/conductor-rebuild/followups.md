@@ -29,3 +29,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 ## 07-build-check-pipeline (left for later)
 
 - 1. minor tests/py/test_buildchecks.py: Handle is a hand-written fake of the Conductor surface; a renamed conductor attribute would not be noticed here. Add one test against a real Conductor, or check that Conductor has every attribute Handle provides. (single review)
+
+## 08-phase-classes-and-registry (left for later)
+
+- 1. minor feature_flow/conductor/phases/test.py: Test.scout_questions raises NoPhase where old code returned []; scout-prompt in a tester phase would give NoPhase instead of "no scout k: there are 0". Hard to reach. Fix: return []. (single review)
+- 2. minor feature_flow/conductor/phases/base.py: Phase.lane_scoped defaults True, so prompt_text's not-lane_scoped guard is nearly dead. Fix: drop it or comment why. (single review)
