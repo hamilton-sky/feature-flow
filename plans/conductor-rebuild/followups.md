@@ -10,3 +10,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - deferred check, needs the build module (pip install build) and the network: `python3 tests/package_smoke.py` (here: exit 1)
 - 1. minor feature_flow/conductor/planning.py: Planner copies the conductor's attributes once when built; safe because it is built fresh on every call. A later ticket that caches a Planner would read stale scouts_on and paths. (single review)
+
+## 04-settings-and-mode-rules (left for later)
+
+- 1. minor feature_flow/conductor/facade.py: Conductor.__init__ overwrites self.per_session with session_limit(driver), so self.settings.per_session (4) and self.per_session (0) disagree for an agent driver; a later ticket reading self.settings.per_session gets the wrong value. Document settings.per_session as the raw value, or have callers use session_limit. (single review)
+- 2. minor feature_flow/conductor/settings.py: mode_ok rebuilds the name->rule dict on every call; build it once at module level. (single review)
