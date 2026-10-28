@@ -131,7 +131,8 @@ class RealChecks(unittest.TestCase):
         self.repo.path("plans/f/commands.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def base(self):
-        self.repo.commit("plan")
+        if self.repo.porcelain():
+            self.repo.commit("plan")
         return Handle(self.repo.head())
 
     def work(self, rel, message="work"):

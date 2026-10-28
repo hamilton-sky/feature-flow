@@ -43,3 +43,4 @@
 
 - None.
 - 06 — policy/levels.py (declared, measured, describe, CONVERT, LEVEL_NAMES), policy/review.py (after_checks returns only the added notes, on_fail, followups_only, FINDING, FULL_ROUNDS) and policy/limits.py (round_cap) are pure; the facade reads, saves and logs, and imports followups_only back so the package export is the same object; describe_level is gone.
+- 07 — buildchecks.py: Gate, FloorGuard, Footprint, DoneWhen, TestFirst each run(c) -> (source|None, report, notes); pipeline(c, gate=True) picks them (Gate only with gate and gate_on, DoneWhen/TestFirst only with gate_on), run(c, checks) stops at the first failure; judge_build/judge_batch call it (batch with gate=False); NOTE_SEP moved to store.py.

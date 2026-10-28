@@ -14,16 +14,16 @@ import time
 from pathlib import Path
 
 from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, scouts, state, suggest, tickets
+from feature_flow.conductor import buildchecks
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.planning import BRAINSTORM, Planner
 from feature_flow.conductor.policy import levels, limits, review
 from feature_flow.conductor.policy.levels import CONVERT
 from feature_flow.conductor.policy.review import FINDING, FULL_ROUNDS, followups_only
 from feature_flow.conductor.settings import MAX_LANES, Settings, _env_int, mode_ok
-from feature_flow.conductor.store import RunState, TicketState
+from feature_flow.conductor.store import NOTE_SEP, RunState, TicketState
 
 
-NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
 VERDICT = re.compile(r"^REVIEW: (PASS|FAIL|ASK (?:architect|designer|po|user))[ \t\r\f\v]*$")
 ANSWER = re.compile(r"^ANSWER: (GIVEN|USER)[ \t\r\f\v]*$")  # the last line of a consultant's reply
 ASK_HEADING = re.compile(r"^## Ask: (architect|designer|po|user)[ \t]*$", re.MULTILINE)  # a builder's question
@@ -673,7 +673,7 @@ class Conductor:
                     if not result.ok:
                         broke, failure = path, ("gate", result.out)
                 if failure is None:
-                    source, report, _ = self.build_checks(gate=False)
+                    source, report, _ = buildchecks.run(self, buildchecks.pipeline(self, gate=False))
                     failure = (source, report) if source else None
                 if failure is None and self.measure_level() >= 3:
                     failure = ("batch", "%s: a batch cannot defer its review, so build it alone"
@@ -773,7 +773,7 @@ class Conductor:
             return self.hand_out_build()
         if not git.is_clean():
             raise Stop("working tree is dirty after %s, it should have been committed" % self.ticket_name())
-        source, report, notes = self.build_checks()
+        source, report, notes = buildchecks.run(self, buildchecks.pipeline(self))
         if source:
             return self.send_back(source, report)
         level = self.measure_level()
@@ -789,53 +789,6 @@ class Conductor:
             self.log(event)
         self.st["review_notes"] = NOTE_SEP.join(notes + more)
         return self.hand_out_review()
-
-    def build_checks(self, gate=True):
-        """Run the checks of a build: (source, report, notes) for the first one it fails, else
-        (None, "", the notes for the reviewer)."""
-        if gate and self.gate_on:
-            quick = self.gate_quick()
-            result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=quick)
-            self.log("GATE-QUICK" if quick else "GATE-FULL")
-            self.log("GATE-PASS" if result.ok else "GATE-FAIL")
-            if not result.ok:
-                return "gate (quick)" if quick else "gate (full)", result.out, []
-        result = checks.floor_guard(self.scripts, self.feature, self.get("num"), self.get("base"))
-        self.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
-        if not result.ok:
-            return "floor guard", result.out, []
-        warnings = [l for l in result.out.splitlines() if l.startswith("warning:")]
-        report = self.footprint_report()
-        if report:
-            return "footprint check", report, []
-        notes = warnings[:1]
-        if self.gate_on:
-            report, note = self.run_done_when()
-            if report is not None:
-                return "done when", report, []
-            notes.append(note)
-            report, note = self.run_test_first()
-            if report is not None:
-                return "test first", report, []
-            if note:
-                notes.append(note)
-        return None, "", notes
-
-    def footprint_report(self):
-        """The paths the build changed outside the ticket's `Touches:` line (read at base), as a report for the
-        builder, or "" when they are all inside it or the ticket has no such line."""
-        patterns = lanes.touches(self.ticket_at_base())
-        if patterns is None:
-            return ""
-        changed = git.diff_names(self.get("base"), "HEAD", self.plan.as_posix())
-        outside = [p for p in changed if not tickets.matches_sensitive(p, patterns)]
-        self.log("FOOTPRINT-FAIL" if outside else "FOOTPRINT-PASS")
-        if not outside:
-            return ""
-        return ("the build changed paths outside the ticket's `Touches:` line (%s): %s. tickets run side by side "
-                "because their Touches do not overlap, so change only what Touches names. if the ticket cannot be done "
-                "inside it, say so in the Answer and stop: the plan has to change, not the footprint"
-                % (" ".join(patterns) or "empty", ", ".join(outside[:20])))
 
     def base_level(self):
         """The level known before the build, from the ticket at base: its `Level:` line, raised to 3 by
@@ -895,56 +848,6 @@ class Conductor:
             return git.show_text("%s:%s" % (self.get("base"), rel))
         text = Path(self.ticket()).read_text(encoding="utf-8")
         return text.split("\n## Answer", 1)[0]
-
-    def run_done_when(self):
-        """Run the ticket's check block. Returns (failure report or None, note for the reviewer)."""
-        try:
-            found = proof.checks_in(self.ticket_at_base())
-        except proof.ParseError as err:
-            raise Stop("%s has a check block the conductor cannot read: %s" % (self.ticket_name(), err))
-        self.checks_ran = bool(found)
-        if not found:
-            self.log("DONEWHEN-SKIP")
-            return None, "the conductor ran no Done when checks: the ticket has no check block"
-        deferred = []
-        ok, report = proof.run_checks(found, self.gate_timeout, deferred)
-        dirty = git.changes()
-        if dirty:
-            raise Stop("a Done when check of %s changed the working tree: %s. a check command must not change it"
-                       % (self.ticket_name(), " ".join(dirty[:5])))
-        self.log("DONEWHEN-PASS" if ok else "DONEWHEN-FAIL")
-        if not ok:
-            return report, ""
-        if not deferred:
-            return None, "the conductor ran %d Done when check(s) and all passed" % len(found)
-        self.log("DONEWHEN-DEFERRED %d" % len(deferred))
-        self.st["due_checks"] = NOTE_SEP.join("deferred check, needs %s: `%s` (here: %s)" % (c.needs, c.command, got)
-                                              for c, got in deferred)
-        return None, ("the conductor ran %d Done when check(s): %d passed, and %d that need what this host lacks did "
-                      "not pass and are deferred, not met: %s. they go to the plan's followups.md. judge only what "
-                      "can be checked here, and do not count a deferred check as MET"
-                      % (len(found), len(found) - len(deferred), len(deferred),
-                         "; ".join("`%s` (needs %s)" % (c.command, c.needs) for c, _ in deferred)))
-
-    def run_test_first(self):
-        """For a `Test first: yes` ticket, prove a test-only commit failed the Test command.
-        Returns (failure report or None, note for the reviewer or "")."""
-        if not proof.wants_test_first(self.ticket_at_base()):
-            return None, ""
-        test = tickets.commands_value(self.commands, "Test")
-        if not test:
-            self.log("TESTFIRST-SKIP")
-            return None, "the conductor did not check test first: commands.md has no Test command"
-
-        def remember(value):
-            self.st["restore"] = value
-            self.save()
-        try:
-            ok, text = proof.test_first(self.get("base"), test, self.plan, self.gate_timeout, remember)
-        except proof.GitError as err:
-            raise Stop("test first check of %s: %s" % (self.ticket_name(), err))
-        self.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")
-        return (None, text) if ok else (text, "")
 
     # ---- commands ------------------------------------------------------
 

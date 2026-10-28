@@ -1,7 +1,7 @@
 # Make the build checks an ordered pipeline that batches reuse
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 06
 Test first: yes
 Level: 3
@@ -43,3 +43,22 @@ prints over 400: []
 - `feature_flow/checks.py`, `feature_flow/proof.py`
 
 ## Answer
+
+- **Built**:
+  - New `feature_flow/conductor/buildchecks.py` (133 lines): classes `Gate`, `FloorGuard`, `Footprint`, `DoneWhen`, `TestFirst`. Each has `run(c)`, which takes the conductor and returns `(source or None, report, notes)`. `pipeline(c, gate=True)` builds the ordered list: `Gate` only when `gate and c.gate_on`, then `FloorGuard` and `Footprint`, then `DoneWhen` and `TestFirst` only when `c.gate_on`. `run(c, checks)` stops at the first failure with `(source, report, [])`, or returns `(None, "", notes)`. The bodies are the old `build_checks`, `footprint_report`, `run_done_when` and `run_test_first`, with the same log events, sources, report and note texts, and Stop messages. The side effects are also the same: `c.checks_ran`, `c.st["due_checks"]`, and `c.st["restore"]` with `c.save()` through `remember`.
+  - `feature_flow/conductor/facade.py` (2058 to 1961 lines): the four methods are removed. `judge_build` calls `buildchecks.run(self, buildchecks.pipeline(self))`. `judge_batch` calls `buildchecks.run(self, buildchecks.pipeline(self, gate=False))`, and its own gate at HEAD is unchanged. `NOTE_SEP` is now imported from `store`.
+  - `feature_flow/conductor/store.py`: `NOTE_SEP` moved here (the state-file format) so that `buildchecks` does not import the facade.
+  - New `tests/py/test_buildchecks.py` (17 tests). Five pipeline tests use stub checks: the order with notes collected, the stop at the first failure, the full pipeline, the batch pipeline without `Gate`, and gate-off. Twelve tests run the real classes against a throwaway `helpers.Repo` through a small `Handle` fake of the conductor: `Gate` full fail and quick pass; `FloorGuard` pass, and fail on an edit to another ticket; `Footprint` pass, fail, and no Touches line; `DoneWhen` pass, fail, skip, deferred (`due_checks`), and the dirty-tree Stop; `TestFirst` pass (restore saved, then cleared), off, skip, and fail; and the pipeline stopping at the footprint before Done when.
+  - Test-only commit 9d75274: the discover command failed with `ImportError: cannot import name 'buildchecks' from 'feature_flow.conductor'`. After that commit I changed one helper in the test file: `base()` commits only when the tree has changes. Without that fix, three tests crashed on an empty `git commit`. No assertion changed.
+- **Proof**:
+  - `python3 -m unittest discover -s tests/py -p "test_buildchecks.py" -v`: `Ran 17 tests`, `OK`, exit 0.
+  - The class check printed `['Gate', 'FloorGuard', 'Footprint', 'DoneWhen', 'TestFirst']`, exit 0.
+  - The 400-line check printed `over 400: []`, exit 0. buildchecks.py has 133 lines and store.py has 91.
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0. I also ran these alone, and each printed OK: test_golden, test_proof, test_batch_drive, test_lanes_drive, test_policy, test_trust_drive, test_trust_runner, test_conductor_package. None of those test files changed.
+- **Decisions**:
+  - The checks take the conductor as a plain handle (`c`) and use only these attributes: `scripts`, `feature`, `plan`, `commands`, `gate_timeout`, `gate_on`, `checks_ran`, `st`, `get`, `log`, `save`, `ticket_name`, `ticket_at_base`, `gate_quick`. That is why a small fake works in the tests.
+  - Each check returns a list of notes. `FloorGuard` returns its first `warning:` line, `DoneWhen` always returns its one note, and `TestFirst` returns its note only when it is non-empty. This is exactly the old `notes.append` / `if note` behaviour.
+  - `pipeline` and `run` are module functions, not a Pipeline class. The batch passes `gate=False`, and ticket 09's `BatchScheduler` can call it the same way.
+  - None of the four source strings moved (`"BUILD %s %s %s%s"`, `return "OK %s" % token`, and the `check_code` docstring are still in facade.py), so `test_trust_drive.py` and `test_trust_runner.py` are unchanged.
+- **Shortcuts taken**: none.
+- **For later tickets**: ticket 08/09: `judge_build` and `judge_batch` now call `buildchecks.run(self, buildchecks.pipeline(self[, gate=False]))`, and `build_checks`, `footprint_report`, `run_done_when` and `run_test_first` no longer exist on `Conductor`. Import `NOTE_SEP` from `feature_flow.conductor.store`. The facade still re-exports it by import.

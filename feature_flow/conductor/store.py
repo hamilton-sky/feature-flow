@@ -12,6 +12,7 @@ from feature_flow.conductor.errors import Stop
 # the run's own state keys; every other key belongs to one lane and is stored as L<k>.<key>
 RUN_KEYS = frozenset(("owner", "limit", "runs", "done", "session_done", "followups", "lanes", "relay_handoff",
                       "findings_for"))
+NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
 
 
 class Scoped:
