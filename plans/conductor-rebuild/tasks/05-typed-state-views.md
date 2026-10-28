@@ -1,7 +1,7 @@
 # Add RunState and TicketState views over the state file
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 04
 Test first: yes
 Level: 3
@@ -45,3 +45,22 @@ prints over 400: []
 - `tests/py/test_lanes.py`, `tests/py/test_proof.py` (`conductor()` helper)
 
 ## Answer
+
+- **Built**:
+  - New `feature_flow/conductor/store.py` (90 lines): `RUN_KEYS` and `Scoped`, moved verbatim from `lanes.py`; `number(value, key, path)`, the damaged-number Stop in one place; `RunState(dict)` with `path`, `RunState.load(path)` (through `state.load`, the not-UTF-8 Stop moved here with the same text), `num` and `save` (through `state.save`); `TicketState(Scoped)` with `num`, lane 0 meaning outside lanes (prefix `""`, every key passes through). It imports only `state` and `errors`, never `lanes`.
+  - `feature_flow/lanes.py`: the two definitions removed, replaced by `from feature_flow.conductor.store import RUN_KEYS, Scoped` (re-exported under the old names).
+  - `feature_flow/conductor/facade.py`: `self.all = RunState.load(self.state_file)`, `self.st = TicketState(self.all)`; `num` is `self.st.num`, `num_all` is `self.all.num`, `save` is `self.all.save()`; `reset` builds `RunState(self.state_file, kept)` and a fresh `TicketState`; `in_lane` uses `TicketState(self.all, lane)`. `get` stays `self.st.get(key, default)`, so `test_proof`'s plain-dict `c.st` still works for `ticket_at_base`.
+  - New `tests/py/test_store.py` (10 tests). Test-only commit d891001 failed with `ImportError: cannot import name 'store' from 'feature_flow.conductor'`.
+  - None of the three planted source strings moved; `test_trust_drive.py` and `test_trust_runner.py` are unchanged.
+- **Proof**:
+  - `python3 -m unittest discover -s tests/py -p "test_store.py" -v`: `Ran 10 tests`, `OK`.
+  - The RUN_KEYS check prints `same True`. Importing `feature_flow.conductor.store` first, `feature_flow.lanes` first, or `feature_flow.conductor` alone all import cleanly.
+  - The 400-line check prints `over 400: []`, exit 0 (store.py 90, facade.py 2112).
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0; `tests/py/test_lanes.py` and `tests/py/golden/` unchanged. `test_golden.py` alone: 14 tests OK; `test_lanes test_proof test_settings test_conductor_package`: 76 tests OK.
+  - Acceptance: 25 failures, the identical list of test names as at the base commit f9d716a (checked in a detached worktree); A3 and A4 (resume) pass.
+- **Decisions**:
+  - `RunState` subclasses `dict`, so the ~60 `self.all[...]`, `.get`, `.update`, `.setdefault` and `for key in self.all` sites, and `state.save`, work unchanged; it carries the file path so `num` and `save` need no conductor.
+  - `self.st` is a `TicketState` outside lanes too (lane 0, empty prefix), rather than the `RunState` itself. Its `clear` then drops every key, as `dict.clear` did.
+  - `Scoped` stays exactly as it was (prefix `L<k>.` for every lane, including 0) so `lanes.Scoped` behaves the same; `TicketState` subclasses it and only changes lane 0 and adds `num`.
+- **Shortcuts taken**: `TicketState.num` reads the file path from `self.root.path`, so a `TicketState` over a plain dict can read and write but not `num`. Nothing builds one that way today; give it a path argument if a phase ever needs one over a bare dict.
+- **For later tickets**: ticket 12 can pass `self.all` (RunState) and `self.st` (TicketState) to phases as they are. `lane_key` and the merge's `L%d.` key scan still read `self.all` directly; `TicketState(self.all, k).get(key, "")` and `.clear()` could replace them when the lane code moves.

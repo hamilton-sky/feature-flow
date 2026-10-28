@@ -37,6 +37,7 @@
 - 01 — Golden test drives 13 CLI sessions in throwaway repos and compares stdout, exit codes, log events and sorted state keys with tests/py/golden/*.txt (shas, tokens, repo/lane paths and the interpreter replaced by placeholders); `python3 tests/py/test_golden.py --record` rewrites them.
 - 03 — conductor.py is now feature_flow/conductor/ (facade.py holds Conductor; errors.py Stop/NoPhase; planning.py a Planner built per call from the conductor's paths, the facade forwarding the 7 plan commands); 4 packages in pyproject; flowrepo copies the package folder.
 - 04 — settings.py holds MAX_LANES, MAX_BATCH, _env_int, a frozen Settings (Settings.load in __init__'s old order; session_limit(driver) applies the agent rule after the state loads) and MODE_RULES (6 rows) asked through mode_ok(name, **facts) from start, lane_next and batch_for; FLOW_LANES/DRIVER/FAST stay read in start.
+- 05 — store.py holds RUN_KEYS, Scoped (lanes.py re-exports both), RunState(dict) with path/load/num/save, and TicketState(Scoped) with num (lane 0: no prefix); facade's self.all is a RunState, self.st a TicketState over it.
 
 ## Open questions
 

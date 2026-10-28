@@ -17,6 +17,7 @@ from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.planning import BRAINSTORM, Planner
 from feature_flow.conductor.settings import MAX_LANES, Settings, _env_int, mode_ok
+from feature_flow.conductor.store import RunState, TicketState
 
 
 NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
@@ -113,11 +114,8 @@ class Conductor:
         self.log_file = state.log_path(folder, feature)
         self.findings_file = state.file_path(folder, feature, "findings")
         state.read_bytes(self.findings_file, "findings")  # so a call that never touches it still reports it
-        try:
-            self.st = state.load(self.state_file, "state")
-        except UnicodeDecodeError:
-            raise Stop("the state file %s is damaged: it is not UTF-8 text" % self.state_file)
-        self.all = self.st  # the whole run state; self.st is one lane's view of it while a lane works
+        self.all = RunState.load(self.state_file)  # the whole run state
+        self.st = TicketState(self.all)  # the ticket's view of it, one lane's while a lane works
         self.per_session = settings.session_limit(self.driver())  # an agent driver: no handoffs
 
     # ---- small helpers -------------------------------------------------
@@ -130,13 +128,10 @@ class Conductor:
         return self.st.get(key, default)
 
     def num(self, key):
-        try:
-            return int(self.st.get(key, "0") or 0)
-        except ValueError:
-            raise Stop("the state file %s is damaged: %s is not a number" % (self.state_file, key))
+        return self.st.num(key)
 
     def save(self):
-        state.save(self.state_file, self.all, "state")
+        self.all.save()
 
     def log(self, event):
         state.log(self.log_file, self.get("num"), event)
@@ -1040,10 +1035,7 @@ class Conductor:
         self.all["budget_offer"] = ""  # a new budget earns a new offer once it runs out
 
     def num_all(self, key):
-        try:
-            return int(self.all.get(key, "0") or 0)
-        except ValueError:
-            raise Stop("the state file %s is damaged: %s is not a number" % (self.state_file, key))
+        return self.all.num(key)
 
     def tick(self):
         """Add the time since the last step to the time spent, up to GAP for one step."""
@@ -1291,7 +1283,8 @@ class Conductor:
                 path.unlink()
         if not reopened and not had_run and not dropped:
             return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
-        self.st = self.all = dict(kept)
+        self.all = RunState(self.state_file, kept)
+        self.st = TicketState(self.all)
         if kept:
             self.save()
         self.log("RESET")
@@ -1807,7 +1800,7 @@ class Conductor:
         if not lanes.is_worktree(self.top, path):
             raise Stop("lane %d (%s) is gone. run reset to drop the lanes and start again" % (lane, path))
         saved = self.st, self.lane
-        self.st, self.lane = lanes.Scoped(self.all, lane), lane
+        self.st, self.lane = TicketState(self.all, lane), lane
         prompts.REPO = str(self.top)  # the guides and roles stay the main worktree's, never the lane's copies
         os.chdir(str(path))
         try:
