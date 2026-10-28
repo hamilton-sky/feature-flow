@@ -1668,7 +1668,7 @@ class Conductor:
         about = ("The user's session is brainstorming how to build the feature `%s`, before it is planned: no brief "
                  "and no plan exist yet." % self.feature)
         if group in ("scout", "web"):
-            out = scouts.prompt(role_text, "planner", about + "\n\n" + question)
+            out = scouts.prompt(role_text, "planner", about + "\n\n" + question, codeintel=group == "scout")
         elif group == "lens":
             out = ("%s\n\n---\n\nYour lens is `%s`. Its guide follows.\n\n%s\n\n---\n\n%s The options it drafted "
                    "follow. Read the repository.\n\n%s\n\nDo not edit any file. Your final reply must end with exactly "
@@ -1766,7 +1766,7 @@ class Conductor:
             role_text = prompts.role(self.scripts, agent + ".md")
         except FileNotFoundError as err:
             raise Stop(str(err))
-        return scouts.prompt(role_text, role, question, workdir)
+        return scouts.prompt(role_text, role, question, workdir, codeintel=agent == "flow-scout")
 
     def scout_findings(self):
         """The scout replies saved for the phase handed out last, as a section for its prompt, or ""."""

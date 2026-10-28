@@ -5,6 +5,8 @@ Reads the run log and state in .feature-flow/state/, the plan's tickets, and, wh
 Claude Code session transcripts of this repo (for tokens). Writes <out>/eval.json, and the first time
 <out>/eval-verdict.md, a short form you fill in: was the plan right, what did you fix by hand, and was
 each catch real or a false alarm. Run it again after filling the form and eval.json carries your answers.
+When the agents asked codeintel (feature_flow/codeintel.py), the record counts their queries and what they said
+of each answer, and the form asks whether it helped.
 --later also looks at the commits made after the run for fixes and reverts on the files each ticket
 touched: run it a week or two after the feature is done. <out> is plans/<feature>/ unless --out is given,
 so the record is committed with the plan and survives a cloud session. Nothing is sent anywhere.
@@ -18,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from feature_flow import __version__, git, lanes, report, state, suggest, tickets
+from feature_flow import __version__, codeintel, git, lanes, report, state, suggest, tickets
 
 USAGE = "usage: feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]"
 CATCHES = report.FAILS + ("FOOTPRINT-FAIL", "FEATURE-FAIL", "ACCEPT-FAIL")
@@ -137,20 +139,15 @@ def _inside(cwd, top):
         return False
 
 
-def tokens(home, top, window, rows):
-    """Token use of the Claude Code sessions (and their subagents) that worked in this repo during the
-    run, summed from the transcripts' usage records, each message counted once. Split per ticket by
-    time slice: a record goes to the ticket of the last log line before it (approximate; with lanes
-    the slices overlap, so no split is given). None when there is nothing to read."""
+def records(home, top, window):
+    """(file, record) for each transcript record written in this repo during the run, from Claude Code's session
+    transcripts (and their subagents'). Nothing when there is no window or no transcripts."""
     projects = Path(home) / "projects"
     if window is None or not projects.is_dir():
-        return None
+        return
     start, end = window
     since = start.timestamp() - 60
     top = Path(top).resolve()
-    marks = sorted((t, num) for t, num, _, _ in rows if t is not None)
-    seen, total, models, per = set(), {}, {}, {}
-    files = 0
     for path in projects.rglob("*.jsonl"):
         try:
             if path.stat().st_mtime < since:
@@ -158,46 +155,59 @@ def tokens(home, top, window, rows):
             handle = open(path, encoding="utf-8", errors="replace")
         except OSError:
             continue
-        used = False
         with handle:
             for line in handle:
-                if '"usage"' not in line:
+                if '"message"' not in line:
                     continue
                 try:
                     item = json.loads(line)
                 except ValueError:
                     continue
-                message = item.get("message") if isinstance(item, dict) else None
-                usage = message.get("usage") if isinstance(message, dict) else None
-                if not isinstance(usage, dict) or not _inside(item.get("cwd") or "", top):
+                if not isinstance(item, dict) or not isinstance(item.get("message"), dict):
+                    continue
+                if not _inside(item.get("cwd") or "", top):
                     continue
                 when = parse_iso(item.get("timestamp"))
                 if when is None or when < start or when > end:
                     continue
-                key = (message.get("id"), item.get("requestId"))
-                if key != (None, None):
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                used = True
-                counts = {
-                    "input": int(usage.get("input_tokens") or 0),
-                    "output": int(usage.get("output_tokens") or 0),
-                    "cache_read": int(usage.get("cache_read_input_tokens") or 0),
-                    "cache_write": int(usage.get("cache_creation_input_tokens") or 0),
-                }
-                add(total, counts)
-                add(models.setdefault(message.get("model") or "unknown", {}), counts)
-                num = "-"
-                for t, n in marks:
-                    if t > when:
-                        break
-                    num = n
-                add(per.setdefault(num, {}), counts)
-        files += used
+                yield path, item
+
+
+def tokens(found, rows):
+    """Token use of the transcript records found, summed from their usage records, each message counted once.
+    Split per ticket by time slice: a record goes to the ticket of the last log line before it (approximate; with
+    lanes the slices overlap, so no split is given). None when there is nothing to read."""
+    marks = sorted((t, num) for t, num, _, _ in rows if t is not None)
+    seen, total, models, per, files = set(), {}, {}, {}, set()
+    for path, item in found:
+        message = item["message"]
+        usage = message.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        key = (message.get("id"), item.get("requestId"))
+        if key != (None, None):
+            if key in seen:
+                continue
+            seen.add(key)
+        files.add(path)
+        counts = {
+            "input": int(usage.get("input_tokens") or 0),
+            "output": int(usage.get("output_tokens") or 0),
+            "cache_read": int(usage.get("cache_read_input_tokens") or 0),
+            "cache_write": int(usage.get("cache_creation_input_tokens") or 0),
+        }
+        add(total, counts)
+        add(models.setdefault(message.get("model") or "unknown", {}), counts)
+        when = parse_iso(item.get("timestamp"))
+        num = "-"
+        for t, n in marks:
+            if t > when:
+                break
+            num = n
+        add(per.setdefault(num, {}), counts)
     if not total:
         return None
-    return {"source": "claude-code transcripts", "files": files, "total": total, "by_model": models,
+    return {"source": "claude-code transcripts", "files": len(files), "total": total, "by_model": models,
             "by_ticket": per, "by_ticket_note": "approximate: split by the time between log lines"}
 
 
@@ -217,7 +227,7 @@ def add(into, counts):
 
 # ---- the human verdict ---------------------------------------------------------------
 
-def verdict_template(feature, catches, driven_by="person"):
+def verdict_template(feature, catches, driven_by="person", asked_codeintel=False):
     minutes = ("minutes-of-your-time: (roughly, answering questions and reviewing)" if driven_by != "agent" else
                "minutes-of-your-time: (an agent drove this run: only the minutes you spent yourself, 0 if none)")
     lines = [
@@ -230,6 +240,11 @@ def verdict_template(feature, catches, driven_by="person"):
         "would-use-again: (yes | no)",
         minutes,
         "note: ",
+    ]
+    if asked_codeintel:
+        lines += ["codeintel: (helped | no difference | misled: did codeintel's answers help this run?)",
+                  "codeintel-note: (an answer it got wrong or could not give, for a codeintel issue)"]
+    lines += [
         "",
         "## Catches",
         "",
@@ -256,7 +271,8 @@ def read_verdict(path):
             word = re.match(r"[a-z]*", value.lower()).group(0)
             if word in ("real", "false"):
                 catches[key] = word
-        elif key in ("plan", "hand-fixes", "would-use-again", "minutes-of-your-time", "note"):
+        elif key in ("plan", "hand-fixes", "would-use-again", "minutes-of-your-time", "note", "codeintel",
+                     "codeintel-note"):
             answers[key.replace("-", "_")] = value
     if "plan" in answers and answers["plan"].split()[0].lower() not in PLAN_ANSWERS:
         answers["plan_unrecognised"] = answers.pop("plan")
@@ -320,6 +336,7 @@ def build(feature, top, out_dir, home, with_later):
     spent = run_state.get("spent", "")
     plan_dir = Path(top) / os.environ.get("FLOW_DIR", "plans") / feature
     driven_by = driver(rows, run_state)
+    found = list(records(home, top, window))
     totals["settled_at_plan"] = settled_at_plan(plan_dir, per)
     totals["followups"] = followups(plan_dir)
     record = {
@@ -333,7 +350,8 @@ def build(feature, top, out_dir, home, with_later):
         "driver": driven_by,
         "brainstorm": brainstorm(plan_dir, rows),
         "you": human,
-        "tokens": tokens(home, top, window, rows),
+        "tokens": tokens(found, rows),
+        "codeintel": codeintel.use(item for _, item in found),
         "verdict": read_verdict(out_dir / VERDICT_FILE),
     }
     if record["tokens"] and totals["lanes"]:
@@ -369,6 +387,12 @@ def render(record, out_dir, wrote_form):
     else:
         lines.append("  tokens: not found (no Claude Code transcripts for this repo in the run window,"
                      " or a log from before 0.15.0)")
+    ci = record.get("codeintel")
+    if ci:
+        lines.append("  codeintel: %d quer%s (%s); the agents said %s" % (
+            sum(ci["queries"].values()), "y" if sum(ci["queries"].values()) == 1 else "ies",
+            ", ".join("%s x%d" % kv for kv in sorted(ci["queries"].items())) or "none seen",
+            ", ".join("%s x%d" % (v, ci["said"][v]) for v in codeintel.VERDICTS if ci["said"].get(v)) or "nothing"))
     you = record["you"]
     lines.append("  %s: %d stop(s), %d question(s), %d handoff(s), %d reset(s)"
                  % ("needed the driving agent (not you)" if record.get("driver") == "agent" else "needed you",
@@ -377,7 +401,8 @@ def render(record, out_dir, wrote_form):
     if verdict:
         lines.append("  your verdict: plan %s, %s hand fix(es), %s real catch(es), %s false alarm(s)"
                      % (verdict.get("plan", "?"), verdict.get("hand_fixes", "?"),
-                        verdict.get("real_catches", "?"), verdict.get("false_alarms", "?")))
+                        verdict.get("real_catches", "?"), verdict.get("false_alarms", "?"))
+                     + (", codeintel %s" % verdict["codeintel"] if verdict.get("codeintel") else ""))
     elif wrote_form:
         lines.append("  fill in %s, then run eval again" % (out_dir / VERDICT_FILE))
     else:
@@ -430,7 +455,8 @@ def main(argv, out=None, err=None):
     form = out_dir / VERDICT_FILE
     wrote_form = not form.exists()
     if wrote_form:
-        form.write_text(verdict_template(feature, catches, record["driver"]), encoding="utf-8")
+        form.write_text(verdict_template(feature, catches, record["driver"], bool(record["codeintel"])),
+                        encoding="utf-8")
     (out_dir / "eval.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     out.write(render(record, out_dir, wrote_form))
     return 0

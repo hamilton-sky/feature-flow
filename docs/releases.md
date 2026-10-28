@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.27: codeintel for the agents
+
+| Version | Added |
+|---|---|
+| 0.27.0 | **codeintel, optional** ([README](../README.md#codeintel-optional)): when [codeintel](https://github.com/hamilton-sky/codeintel) is installed and has the repository indexed, scouts are told to ask it who calls what and where code lives, and reviewers to ask it which callers the change left behind (`--op changed`). Each ends its reply with a line per question saying whether the answer helped, and `eval` counts them; the verdict form asks whether codeintel helped. `pip install "feature-flow-cli[codeintel]"` installs both; `FLOW_CODEINTEL=off` leaves it out. Nothing changes without it. |
+
 ## 0.25: reviewing the brainstorm together
 
 | Version | Added |

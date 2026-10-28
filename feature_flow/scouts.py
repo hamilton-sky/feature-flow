@@ -8,6 +8,8 @@ import hashlib
 import shlex
 from pathlib import Path
 
+from feature_flow import codeintel as code_intel, prompts
+
 MAX = 3  # most scouts for one phase
 LINES = 60  # most lines of one reply that go into the prompt
 
@@ -82,9 +84,12 @@ def listing(folder, feature, slot, found):
                      for k, (agent, _, _) in enumerate(found, 1))
 
 
-def prompt(role_text, role, question, workdir=None):
-    """A scout's whole prompt: its role file, then the role it scouts for and the question."""
+def prompt(role_text, role, question, workdir=None, codeintel=False):
+    """A scout's whole prompt: its role file, then the role it scouts for and the question, and with codeintel
+    the section on asking codeintel when it is ready."""
     task = "ROLE: %s\n\n%s\n\nReply in the shape your role gives, and change nothing." % (role, question)
+    if codeintel:
+        task += code_intel.note("scout", prompts.REPO)
     if workdir is not None:
         task = ("Work in the folder `%s`: it is the worktree the %s will work in. Run `cd %s` before any git "
                 "command, and read every path here relative to it, as `%s/<path>`.\n\n%s"
