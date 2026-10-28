@@ -25,3 +25,7 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - 1. minor feature_flow/conductor/facade.py (judge_build): small_note() and proof.review_mode(ticket_at_base()) are now evaluated before the defer decision, so a level 0 ticket in fast mode or with the gate off pays for extra git work that is thrown away. Compute small_note only when it can be used, or pass a thunk. (single review)
 - 2. minor feature_flow/conductor/policy/review.py: after_checks takes nine positional arguments and the facade passes them by position; swapped flags would go unnoticed. Pass them as keyword arguments at the call site. (single review)
+
+## 07-build-check-pipeline (left for later)
+
+- 1. minor tests/py/test_buildchecks.py: Handle is a hand-written fake of the Conductor surface; a renamed conductor attribute would not be noticed here. Add one test against a real Conductor, or check that Conductor has every attribute Handle provides. (single review)
