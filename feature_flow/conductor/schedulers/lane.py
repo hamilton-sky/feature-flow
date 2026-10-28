@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from feature_flow import checks, gate, git, lanes, state, tickets
+from feature_flow.conductor import guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases import REGISTRY
 from feature_flow.conductor.phases.build import Build
@@ -107,16 +108,15 @@ class LaneScheduler(SerialScheduler):
         ready = checks.flow_status(c.scripts, c.feature, "--ready")
         if ready.code not in (0, 10, 11):
             raise Stop("flow-status.py failed with exit code %d" % ready.code)
-        if c.per_session > 0 and c.num("session_done") + len(busy) >= c.per_session:
-            return c.emit("WAIT %s" % ",".join(map(str, busy))) if busy else c.handoff()
+        line = guards.before_ticket(c, busy, only=("session",))
+        if line is not None:
+            return line
         leased = {self.lane_key(k, "ticket") for k in busy}
         running = [self.footprint(self.lane_key(k, "ticket")) for k in busy]
         shared = lanes.touches("Touches: " + tickets.commands_text_value(c.show_head(c.commands), "Shared")) or []
         free = [k for k in range(1, c.num("lanes") + 1) if k not in busy]
         if ready.code == 0 and free:
-            if not busy:
-                c.check_replan()
-            c.check_budget(offer=not busy)  # a stop while lanes work would strand them
+            guards.before_ticket(c, busy, only=("replan", "budget"))  # with busy lanes: no re-plan check, no offer
             for path in ready.out.strip().splitlines():
                 if path in leased:
                     continue

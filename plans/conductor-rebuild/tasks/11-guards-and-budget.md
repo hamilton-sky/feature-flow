@@ -1,7 +1,7 @@
 # Run the checks before each ticket as an ordered list of guards
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 10
 Test first: yes
 Level: 3
@@ -48,3 +48,28 @@ prints facade strings True
 - the facade and schedulers: `pick_ticket`, `dispatch`, `start_ticket`, `run_smoke`, `handoff`, `check_replan`, the budget section, `next`
 
 ## Answer
+
+- **Built**:
+  - New `feature_flow/conductor/budget.py` (101 lines): `GAP`, `set_budget`, `tick`, `spent_minutes`, `note_slowest`, `budget_report`, `budget_cmd`, `check_budget`, moved from the facade as they were, as functions of the conductor (`self` -> `c`, `self.x()` -> `x(c)` within the module). Texts, state keys and log events unchanged.
+  - New `feature_flow/conductor/guards.py` (152 lines): `check_replan`, `smoke_command`, `run_smoke` moved from the facade as they were; `Guard` (`name`, `stage`, `run(c, busy)` -> None or a line); `SessionHandoff` ("session": `WAIT <busy>` with busy lanes, else `handoff()`), `Replan` (only with no lane busy), `Budget` (`check_budget(offer=not busy)`), `Smoke` (stage "start"); `BEFORE_TICKET = (SessionHandoff(), Replan(), Budget(), Smoke())`; `before_ticket(c, busy=(), stage="pick", only=None)` runs them in order and returns the first line. `mark_relay(c, view)`, `Relay`, `AFTER_PHASE = (Relay(),)`, `after_phase(c)`.
+  - `schedulers/serial.py`: `pick_ticket` calls `guards.before_ticket(c)` where the handoff / `check_replan` / `check_budget` lines were; `start_ticket` calls `guards.before_ticket(c, stage="start")` after `snapshot_code` where `run_smoke` was.
+  - `schedulers/lane.py`: `dispatch` calls `before_ticket(c, busy, only=("session",))` where its session check was, and `before_ticket(c, busy, only=("replan", "budget"))` where its re-plan and budget calls were (same places, so its other differences stay: the session check before the ready/free test, the others only with a ready ticket and a free lane).
+  - `facade.py` (851 -> 731 lines): the moved code is gone; `budget_cmd` forwards to `budget.budget_cmd`; `num_all` stays (others use it); `pass_ticket`, `start` and `next` call `time_budget.note_slowest/set_budget/tick` (the module is imported as `time_budget` because `start` has a local `budget`); both relay checks in `next` are `guards.after_phase(self)` at the same spot. `handoff`, `start`'s `return "OK %s" % token` and `check_code` unchanged. Unused import `gate` dropped.
+  - `phases/build.py`, `review.py`, `test.py`, `final.py`: `ws.<st|all>["relay_handoff"] = "1" if ws.relay else ""` -> `guards.mark_relay(ws, ws.<st|all>)`. The `BUILD %s %s %s%s` string is untouched.
+  - New `tests/py/test_guards.py` (18 tests): order and stages of `BEFORE_TICKET`; all pass in order; the session handoff wins and nothing later runs; a re-plan Stop wins over the budget; `only` keeps the order; lane variants (WAIT with busy lanes, HANDOFF with none, busy lanes count to the limit, no re-plan check and `offer=False` beside busy lanes, a real `dispatch` beside a busy lane and with none, `lease` recorded); serial `pick_ticket` runs the guards then the smoke after the code snapshot, and hands off at the session limit before the others; relay: `after_phase`, `mark_relay`, `next` hands off before judging a ticket phase (`build`) and a run-wide one (`test`) with `judge` patched to fail, and a build handed out under `FLOW_RELAY=1` hands off on the next call.
+  - Test-only commit e237381: the discover command failed with `ImportError: cannot import name 'budget' from 'feature_flow.conductor'`.
+- **Proof**:
+  - `python3 -m unittest discover -s tests/py -p "test_guards.py" -v`: `Ran 18 tests`, `OK`.
+  - `before each ticket: 4` (exit 0).
+  - `over 400: []` (exit 0); largest is still `schedulers/lane.py`.
+  - `facade strings True` (exit 0).
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0. Also ran test_budget_drive, test_agent_driven, test_golden, test_schedulers, test_phases, test_conductor_package, test_trust_drive, test_trust_runner, test_lanes_drive, test_timeout, test_guards together: `Ran 172 tests`, `OK`. No existing test changed (test_trust_drive.py and test_trust_runner.py untouched: no source string moved).
+  - Acceptance: 15 failures, the same list as at 52a5105 (diffed against a base worktree).
+- **Decisions**:
+  - The guards call the moved functions (`check_replan`, `run_smoke`, `budget.check_budget`) through module lookups, so a test can replace each with a recorder; the facade no longer has `check_replan`, `check_budget`, `run_smoke`, `tick`, ... methods (nothing outside called them but the schedulers and the facade itself).
+  - Smoke is the fourth guard with `stage = "start"`, run by `start_ticket` after the snapshot, so the order stays: it only runs once the pick guards let a ticket start.
+  - The lane scheduler runs subsets (`only=`) at its two existing places rather than all at once: moving its session check after the ready/free test would change what a lane run prints at the session limit when nothing is ready.
+  - `handoff()` stays a facade method: `next`, the guards and both schedulers use it.
+- **Shortcuts taken**: none.
+- **For later tickets**:
+  - Ticket 16 (facade under 300): the facade is 731 lines; the budget and guard code is out of it. `num_all` is still there for `end.py`, `test.py` and `budget.py`.

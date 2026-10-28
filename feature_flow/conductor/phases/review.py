@@ -4,6 +4,7 @@ import os
 import re
 
 from feature_flow import git, scouts, state
+from feature_flow.conductor import guards
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import ask as ask_phase
 from feature_flow.conductor.phases.base import Outcome, Phase, read_reply, review_notes, ticket_prompt
@@ -83,7 +84,7 @@ class Review(Phase):
         ws.st["review_pass"] = ws.get("review_pass") or "spec"
         ws.st["review_attempt"] = ws.num("review_attempt") + 1
         ws.st["review_sha"] = git.head()
-        ws.st["relay_handoff"] = "1" if ws.relay else ""
+        guards.mark_relay(ws, ws.st)
         ws.save()
         return ws.emit("REVIEW %s %s %s%s" % (ws.ticket(), ws.get("num"), ws.get("base"), ws.lane_word()))
 

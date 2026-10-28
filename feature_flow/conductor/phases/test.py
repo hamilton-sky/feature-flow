@@ -2,6 +2,7 @@
 ruled wrong. It is no ticket's phase and has no lane; the conductor judges its tests itself."""
 
 from feature_flow import checks, gate, git, prompts
+from feature_flow.conductor import guards
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases.base import Outcome, Phase
 from feature_flow.conductor.store import NOTE_SEP
@@ -23,7 +24,7 @@ class Test(Phase):
                            "test_mode": "fix" if ws.all.get("accept_rulings") else "write"})
         ws.all.update({"phase": "test", "num": "accept", "ticket": ""})
         ws.all["test_attempt"] = ws.num_all("test_attempt") + 1
-        ws.all["relay_handoff"] = "1" if ws.relay else ""
+        guards.mark_relay(ws, ws.all)
         ws.snapshot_code()
         ws.save()
         return ws.emit("TEST %s %s" % (ws.plan.as_posix(), ws.all["test_base"]))

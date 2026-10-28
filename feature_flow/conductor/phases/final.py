@@ -4,6 +4,7 @@ reviewed once. It is no ticket's phase and has no lane; a failure becomes a fix 
 import os
 
 from feature_flow import git, prompts, scouts, state, tickets
+from feature_flow.conductor import guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases.base import Outcome, Phase
 from feature_flow.conductor.phases.review import record_verdict, take_verdict
@@ -35,7 +36,7 @@ class Final(Phase):
         ws.all["review_attempt"] = (ws.num("review_attempt") if retry else 0) + 1  # not the last ticket's count
         ws.all["review_sha"] = git.head()
         ws.all["verdict"] = ""
-        ws.all["relay_handoff"] = "1" if ws.relay else ""
+        guards.mark_relay(ws, ws.all)
         ws.save()
         return ws.emit("REVIEW %s all %s" % (ws.plan.as_posix(), ws.all["final_base"]))
 

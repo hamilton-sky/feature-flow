@@ -1,7 +1,7 @@
 """The build of a ticket: handed to a builder, then judged by the check pipeline and the review policy."""
 
 from feature_flow import git, lanes, prompts, proof, scouts, tickets
-from feature_flow.conductor import buildchecks
+from feature_flow.conductor import buildchecks, guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases import ask as ask_phase
 from feature_flow.conductor.phases import review as review_phase
@@ -18,7 +18,7 @@ class Build(Phase):
         ws.count_run()
         ws.st["phase"] = "build"
         ws.st["attempt"] = ws.num("attempt") + 1
-        ws.st["relay_handoff"] = "1" if ws.relay else ""
+        guards.mark_relay(ws, ws.st)
         ws.save()
         return ws.emit("BUILD %s %s %s%s" % (ws.ticket(), ws.get("num"), ws.get("base"), ws.lane_word()))
 

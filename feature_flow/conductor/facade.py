@@ -12,7 +12,9 @@ import secrets
 import time
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, scouts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, git, lanes, prompts, proof, scouts, state, suggest, tickets
+from feature_flow.conductor import budget as time_budget
+from feature_flow.conductor import guards
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import REGISTRY, Phase
 from feature_flow.conductor.phases.build import Build
@@ -27,7 +29,6 @@ from feature_flow.conductor.store import NOTE_SEP, RunState, TicketState
 
 
 OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
-GAP = 3600  # most seconds one step adds to the time spent: a longer pause is the user away, not work
 
 
 def owner_hash(token):
@@ -108,28 +109,6 @@ class Conductor:
         return tickets.name(self.ticket())
 
     # ---- the checks ----------------------------------------------------
-
-    def smoke_command(self):
-        cmd = os.environ.get("FLOW_SMOKE", "")
-        if not cmd:
-            cmd = tickets.commands_value(self.commands, "Smoke")
-        return "" if cmd.startswith("<") else cmd
-
-    def run_smoke(self):
-        cmd = self.smoke_command()
-        if not cmd:
-            return
-        result = checks.smoke(cmd, self.gate_timeout)
-        if not result.ok:
-            log = self.state_file.with_name("%s.smoke.log" % self.feature)
-            text = result.out
-            if result.timed_out:
-                text += "\nsmoke test timed out after %d minutes\n" % self.gate_timeout
-            log.write_text(gate.tail(text), encoding="utf-8")
-            raise Stop("smoke test %s before %s: the base is already broken. fix it first. command: %s. "
-                       "the last %d lines are in %s"
-                       % ("timed out after %d minutes" % self.gate_timeout if result.timed_out else "failed",
-                          self.ticket_name(), cmd, gate.TAIL, log))
 
     def gate_quick(self):
         """True when this ticket's gate may run Quick in place of Test."""
@@ -217,7 +196,7 @@ class Conductor:
 
     def pass_ticket(self):
         self.write_due("%s (left for later)" % self.ticket_name())
-        self.note_slowest()
+        time_budget.note_slowest(self)
         return self.scheduler().on_passed(self)
 
     def pass_with_followups(self, source, findings):
@@ -374,94 +353,12 @@ class Conductor:
 
     # ---- the time budget: fast mode when over, then a re-plan the user says yes to --
 
-    def set_budget(self, value):
-        """FLOW_BUDGET or `budget <value>`: minutes of work (a number, or +N to add), or off."""
-        if value in ("off", "0"):
-            self.all["budget"] = ""
-            return
-        add = value.startswith("+")
-        try:
-            minutes = int(value[1:] if add else value)
-        except ValueError:
-            minutes = 0
-        if minutes <= 0:
-            raise Stop("the budget is a number of minutes, +minutes or off, not %s" % value)
-        self.all["budget"] = (self.num_all("budget") if add else 0) + minutes
-        self.all["budget_offer"] = ""  # a new budget earns a new offer once it runs out
-
     def num_all(self, key):
         return self.all.num(key)
 
-    def tick(self):
-        """Add the time since the last step to the time spent, up to GAP for one step."""
-        now = int(time.time())
-        seen = self.num_all("seen")
-        if seen:
-            self.all["spent"] = self.num_all("spent") + min(max(now - seen, 0), GAP)
-        self.all["seen"] = now
-
-    def spent_minutes(self):
-        return self.num_all("spent") // 60
-
-    def note_slowest(self):
-        """Remember the ticket that took longest, to tell a stuck ticket from a slow plan."""
-        took = self.num_all("spent") - self.num("ticket_clock")
-        slowest = self.all.get("slowest", "").split(":")
-        if len(slowest) != 3 or took > int(slowest[1] or 0):
-            builds = max(self.num("attempt"), 1) + self.num("round")  # a review round starts the attempts again
-            self.all["slowest"] = "%s:%d:%d" % (self.get("num"), took, builds)
-
-    def budget_report(self):
-        budget = self.num_all("budget")
-        if not budget:
-            return "OK no budget. %d active minute(s) spent so far" % self.spent_minutes()
-        return "OK budget %d minute(s), %d spent, fast %s%s" % (
-            budget, self.spent_minutes(), "on" if self.fast() else "off",
-            " (switched on by the budget at minute %s)" % self.all["budget_fast"] if self.all.get("budget_fast") else "")
-
     def budget_cmd(self, value=None):
         """`budget` reports; `budget <minutes>|+<minutes>|off` sets it between phases."""
-        if value is None:
-            return self.budget_report()
-        self.check_owner()
-        self.tick()
-        self.set_budget(value)
-        self.save()
-        self.log("BUDGET-%s" % value.upper())
-        return self.budget_report()
-
-    def check_budget(self, offer=True):
-        """Before a ticket starts: over the budget, switch to fast mode first. Still over once fast mode has had
-        a ticket, stop once and offer a re-plan, which only the user can say yes to. Nothing is cut silently."""
-        budget = self.num_all("budget")
-        if not budget or self.num_all("spent") < budget * 60:
-            return
-        if not self.fast():
-            self.all["fast"] = "1"
-            self.all["budget_fast"] = self.spent_minutes()
-            self.all["fast_done"] = self.num_all("done")
-            self.save()
-            self.log("BUDGET-FAST")
-            return
-        if self.all.get("budget_offer") or not offer:
-            return
-        if self.all.get("budget_fast") and self.num_all("done") <= self.num_all("fast_done"):
-            return  # fast mode has not finished a ticket yet
-        self.all["budget_offer"] = "1"
-        self.save()
-        self.log("BUDGET-OVER")
-        check = checks.flow_status(self.scripts, self.feature, "--counts")
-        counts = dict(part.split("=", 1) for part in check.out.split() if "=" in part)
-        left = int(counts.get("open", 0) or 0) + int(counts.get("claimed", 0) or 0)
-        note = ""
-        slowest = self.all.get("slowest", "").split(":")
-        if len(slowest) == 3 and int(slowest[1]) * 2 > self.num_all("spent") and int(slowest[2]) > 1:
-            note = ("Most of it went to ticket %s (%d minute(s), %s attempts): that ticket is stuck, not the plan, so "
-                    "look at it first. " % (slowest[0], int(slowest[1]) // 60, slowest[2]))
-        raise Stop("over the time budget for %s: %d of %d active minute(s) spent, %d ticket(s) left, fast mode on. %s"
-                   "To finish sooner, the open tickets can be re-planned into fewer with the same bar: with the user's "
-                   "yes, run replan-prompt and give it to the feature-planner. To go on as planned, run next, and "
-                   "`budget <minutes>` sets a new budget" % (self.feature, self.spent_minutes(), budget, left, note))
+        return time_budget.budget_cmd(self, value)
 
     def replan_prompt(self):
         """The feature-planner's prompt to fold the open tickets into fewer. Only between tickets."""
@@ -483,25 +380,6 @@ class Conductor:
                                   [Path(p).as_posix() for p in open_ones], (self.plan / BRAINSTORM).is_file())
         except FileNotFoundError as err:
             raise Stop(str(err))
-
-    def check_replan(self):
-        """After a re-plan was handed out: the resolved tickets must be as they were, and the plan committed."""
-        sha = self.all.get("replan_sha")
-        if not sha:
-            return
-        folder = (self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")).as_posix()
-        changed = git._git("diff", "--name-only", sha, "HEAD", "--", folder, check=False).stdout.split()
-        for path in changed:
-            try:
-                before = git.show_text("%s:%s" % (sha, path))
-            except RuntimeError:
-                continue  # a new ticket
-            if re.search(r"^Status:[ \t]*(resolved|done|closed)\b", before, re.MULTILINE | re.IGNORECASE):
-                raise Stop("the re-plan changed %s, which was resolved before it. put it back with `git checkout %s "
-                           "-- %s` and commit" % (path, sha[:12], path))
-        self.all["replan_sha"] = ""
-        if changed:
-            self.log("REPLAN")
 
     def start(self):
         if not self.plan.is_dir():
@@ -533,7 +411,7 @@ class Conductor:
             self.st["fast"] = "1" if fast == "1" else ""
         budget = os.environ.get("FLOW_BUDGET", "")
         if budget:
-            self.set_budget(budget)
+            time_budget.set_budget(self, budget)
         self.st["seen"] = int(time.time())  # the time between sessions is not spent on the feature
         self.save()
         self.log("TAKEOVER" if takeover else "START")
@@ -544,13 +422,14 @@ class Conductor:
 
     def next(self, lane=None):
         self.check_owner()
-        self.tick()
+        time_budget.tick(self)
         wide = self.run_wide("next", lane)
         if wide is not None:
             if not self.plan.is_dir():
                 raise Stop("no plan folder %s" % self.plan)
-            if self.get("relay_handoff") == "1":
-                return self.handoff()
+            line = guards.after_phase(self)
+            if line is not None:
+                return line
             return wide.judge(self).line
         if self.scheduler().lanes:
             return self.scheduler().next(lane)
@@ -574,8 +453,9 @@ class Conductor:
             self.save()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
-        if self.get("relay_handoff") == "1":
-            return self.handoff()
+        line = guards.after_phase(self)
+        if line is not None:
+            return line
         if "limit" not in self.st:
             self.st["limit"] = self.run_limit()
             self.st.setdefault("runs", 0)

@@ -1,6 +1,7 @@
 """One ticket at a time: hand out the lowest ready ticket, and end through the shared end of run."""
 
 from feature_flow import checks, floorguard, git, lanes, tickets
+from feature_flow.conductor import guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases.build import Build
 from feature_flow.conductor.policy import levels
@@ -51,10 +52,9 @@ class SerialScheduler:
                        % c.feature)
         if nxt.code != 0:
             raise Stop("flow-status.py failed with exit code %d" % nxt.code)
-        if c.per_session > 0 and c.num("session_done") >= c.per_session:
-            return c.handoff()
-        c.check_replan()
-        c.check_budget()
+        line = guards.before_ticket(c)
+        if line is not None:
+            return line
         return self.begin(nxt.out.strip().splitlines()[-1])
 
     def begin(self, first):
@@ -72,7 +72,7 @@ class SerialScheduler:
                      "ticket_clock": c.all.get("spent", 0)})
         c.st["level"] = c.base_level()
         c.snapshot_code()
-        c.run_smoke()
+        guards.before_ticket(c, stage="start")
 
     def footprint(self, path):
         """(Touches patterns or None, level) of the ticket at path, read at HEAD of the main worktree: what
