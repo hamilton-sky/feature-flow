@@ -13,9 +13,10 @@ import shlex
 import time
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, gate, git, lanes, profiles, prompts, proof, scouts, state, suggest, tickets
+from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, scouts, state, suggest, tickets
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.planning import BRAINSTORM, Planner
+from feature_flow.conductor.settings import MAX_LANES, Settings, _env_int, mode_ok
 
 
 NOTE_SEP = "\t"  # the state file keeps one line per key, so the review notes are tab separated
@@ -30,8 +31,6 @@ FINDING = re.compile(r"^[ \t]*[0-9]+\.[ \t]+(blocker|major|minor)\b", re.IGNOREC
 CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
 LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}
 FULL_ROUNDS = 2  # a level 2 ticket's rounds in which a major finding still sends it back
-MAX_LANES = 4
-MAX_BATCH = 5  # most tickets one builder takes at once in fast mode
 GAP = 3600  # most seconds one step adds to the time spent: a longer pause is the user away, not work
 
 
@@ -74,38 +73,27 @@ def owner_hash(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _env_int(name, default):
-    value = os.environ.get(name, "")
-    try:
-        return int(value) if value.strip() else default
-    except ValueError:
-        raise Stop("%s must be a whole number, not %s" % (name, value))
-
-
 class Conductor:
     def __init__(self, feature, scripts):
         self.feature = feature
         self.scripts = Path(scripts)
-        self.root = Path(os.environ.get("FLOW_DIR") or "plans")
+        self.settings = settings = Settings.load(feature)
+        self.root = settings.root
         self.plan = self.root / feature
         self.commands = self.plan / "commands.md"
-        try:
-            self.profile = profiles.pick(os.environ, tickets.commands_value(self.commands, "Profile"))
-        except profiles.UnknownProfile as err:
-            raise Stop(str(err))
-        filled = profiles.apply(os.environ, self.profile)
-        self.max_retries = _env_int("FLOW_MAX_RETRIES", 2)
-        self.max_rounds = _env_int("FLOW_MAX_REVIEW_ROUNDS", 3)
-        self.gate_timeout = _env_int("FLOW_GATE_TIMEOUT", 30)
-        self.gate_on = os.environ.get("FLOW_GATE", "on") != "off"
-        self.per_session = _env_int("FLOW_TICKETS_PER_SESSION", 4)
-        self.small_files = _env_int("FLOW_SMALL_FILES", 3)
-        self.small_lines = _env_int("FLOW_SMALL_LINES", 60)
-        self.batch_size = min(_env_int("FLOW_BATCH", MAX_BATCH), MAX_BATCH)
+        self.profile = settings.profile
+        self.max_retries = settings.max_retries
+        self.max_rounds = settings.max_rounds
+        self.gate_timeout = settings.gate_timeout
+        self.gate_on = settings.gate_on
+        self.per_session = settings.per_session
+        self.small_files = settings.small_files
+        self.small_lines = settings.small_lines
+        self.batch_size = settings.batch_size
         self.checks_ran = False
-        self.scouts_on = os.environ.get("FLOW_SCOUTS", "on") != "off"
-        self.relay = os.environ.get("FLOW_RELAY", "0") == "1"
-        self.invoke = os.environ.get("FLOW_INVOKE") or "/feature-flow"
+        self.scouts_on = settings.scouts_on
+        self.relay = settings.relay
+        self.invoke = settings.invoke
         top = git.toplevel()
         if top is None:
             raise Stop("not inside a git worktree")
@@ -130,9 +118,7 @@ class Conductor:
         except UnicodeDecodeError:
             raise Stop("the state file %s is damaged: it is not UTF-8 text" % self.state_file)
         self.all = self.st  # the whole run state; self.st is one lane's view of it while a lane works
-        if self.driver() == "agent" and (not os.environ.get("FLOW_TICKETS_PER_SESSION")
-                                         or "FLOW_TICKETS_PER_SESSION" in filled):
-            self.per_session = 0  # an agent has no context to refresh between sessions: no handoffs
+        self.per_session = settings.session_limit(self.driver())  # an agent driver: no handoffs
 
     # ---- small helpers -------------------------------------------------
 
@@ -624,7 +610,8 @@ class Conductor:
         size = self.batch_size
         if self.per_session > 0:
             size = min(size, self.per_session - self.num("session_done"))
-        if size < 2 or not self.fast() or not self.gate_on or self.relay or self.num("lanes") > 1:
+        if not mode_ok("batch", size=size, fast_mode=self.fast(), gate_on=self.gate_on, relay=self.relay,
+                       lanes=self.num("lanes")):
             return []
         sensitive = tickets.sensitive_patterns(self.show_head(self.commands))
         chosen = []
@@ -1178,19 +1165,15 @@ class Conductor:
             raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
                        % (self.feature, owner[:8]))
         wanted = _env_int("FLOW_LANES", 1)
-        if not 1 <= wanted <= MAX_LANES:
-            raise Stop("FLOW_LANES must be 1 to %d, not %d" % (MAX_LANES, wanted))
-        if wanted > 1 and self.relay:
-            raise Stop("FLOW_RELAY hands off after every phase, which lanes cannot do. drop one of them")
-        if wanted > 1 and Path.cwd().resolve() != self.top:
-            raise Stop("run the conductor from the top of the repo (%s) to use lanes" % self.top)
+        mode_ok("lanes_range", lanes=wanted)
+        mode_ok("lanes_relay", lanes=wanted, relay=self.relay)
+        mode_ok("lanes_top", lanes=wanted, cwd=Path.cwd().resolve(), top=self.top)
         busy = self.busy_lanes()
         if busy and wanted != self.num("lanes"):
             raise Stop("lane(s) %s still hold tickets from the last session, which ran with FLOW_LANES=%d. start with "
                        "that, or reset to drop them" % (",".join(map(str, busy)), self.num("lanes")))
         driver = os.environ.get("FLOW_DRIVER", "")
-        if driver not in ("", "person", "agent"):
-            raise Stop("FLOW_DRIVER must be person or agent, not %s" % driver)
+        mode_ok("driver", driver=driver)
         token = secrets.token_hex(8)
         if driver:
             self.st["driver"] = driver
@@ -1198,8 +1181,7 @@ class Conductor:
         self.st["session_done"] = 0
         self.st["lanes"] = wanted if wanted > 1 else ""
         fast = os.environ.get("FLOW_FAST", "")
-        if fast not in ("", "0", "1"):
-            raise Stop("FLOW_FAST must be 1 or 0, not %s" % fast)
+        mode_ok("fast", fast=fast)
         if fast:
             self.st["fast"] = "1" if fast == "1" else ""
         budget = os.environ.get("FLOW_BUDGET", "")
@@ -1838,8 +1820,7 @@ class Conductor:
     def lane_next(self, lane):
         """`next` with lanes. With a lane: judge the phase that lane just finished. Then, or without a lane,
         merge what passed, lease ready tickets to free lanes, and hand out the next phase."""
-        if self.relay:
-            raise Stop("FLOW_RELAY hands off after every phase, which lanes cannot do. drop one of them")
+        mode_ok("lanes_relay", lanes=self.num("lanes"), relay=self.relay)
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
         if "limit" not in self.all:
