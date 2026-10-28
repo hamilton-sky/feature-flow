@@ -1,7 +1,7 @@
 # Pull the level rules and the review decisions into pure policy functions
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 05
 Test first: yes
 Level: 3
@@ -51,3 +51,25 @@ prints over 400: []
 - `feature_flow/proof.py` (`declared_level`, `review_mode`), `tests/py/test_levels.py`
 
 ## Answer
+
+- **Built**:
+  - New `feature_flow/conductor/policy/levels.py` (45 lines): `CONVERT`, `LEVEL_NAMES`, `declared(text, flow_edit)`, `measured(level, sensitive_hits, files, lines, binary, small_files, small_lines)`, `describe(level, why="")`, with today's reason texts. It imports only `re` and the two pure text readers `declared_level` and `review_mode` from `feature_flow.proof` (functions, not the module).
+  - New `feature_flow/conductor/policy/review.py` (65 lines): `FINDING`, `FULL_ROUNDS`, `followups_only` (moved from the facade unchanged), `after_checks(...) -> (decision, review_pass, notes, events)` and `on_fail(...) -> "followups" | "send_back"`.
+  - New `feature_flow/conductor/policy/limits.py` (8 lines): `round_cap(level, max_rounds)`.
+  - `feature_flow/conductor/facade.py` (2112 to 2058 lines): `base_level`, `measure_level`, `footprint`, `judge_build` after the checks, `judge_review`'s FAIL branch and `round_cap` call the policy functions. The facade still does the reading (ticket at base, flow-edit flag, Sensitive hits, diff size, small note), the saving (`level`, `level_note`, `review_pass`, `level_raised`, `review_notes`) and the logging (`LEVEL-N`, `REVIEW-SMALL`, `REVIEW-SINGLE`). `describe_level` is removed, and its three callers use `levels.describe`. The facade imports `CONVERT`, `FINDING`, `FULL_ROUNDS` and `followups_only` from the policy modules, so `feature_flow.conductor.followups_only` (`__init__.py` unchanged) is the same object as `review.followups_only`.
+  - New `tests/py/test_policy.py`: 9 tests holding 13 declared, 9 measured, 4 describe, 16 after_checks, 11 on_fail and 6 round_cap rows, plus a purity check. The test-only commit 3e97e80 failed with `ImportError: cannot import name 'levels' from 'feature_flow.conductor.policy'`.
+  - None of the three source strings moved (`"BUILD %s %s %s%s"`, `return "OK %s" % token` and the `check_code` docstring are still in facade.py), so `test_trust_drive.py` and `test_trust_runner.py` are unchanged.
+- **Proof**:
+  - `python3 -m unittest discover -s tests/py -p "test_policy.py" -v`: `Ran 9 tests`, `OK`.
+  - The import check printed `policy ok` (exit 0).
+  - The purity check printed `impure []` (exit 0).
+  - The 400-line check printed `over 400: []` (exit 0).
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0. `test_golden.py` alone: 14 tests OK. `test_levels*.py` (test_levels and test_levels_drive): 28 tests OK. No test file other than the new one changed.
+  - Acceptance `test_rebuild_maintainer.py`: the Levels and Review classes (declared, measured, describe, after_checks, on_fail, round_cap) now pass. The only two failures left are the phases REGISTRY and the schedulers (tickets 08 and 09).
+- **Decisions**:
+  - `after_checks` returns only the notes it adds. The facade appends them after `build_checks`' notes, which keeps today's order. On `defer` it returns `("defer", "", [], [])`, and the facade sets nothing before `defer_review`, as before.
+  - `level_raised` is cleared by the facade when the events include `REVIEW-SINGLE`, which is exactly where the old code cleared it. A level 0 small single pass still leaves it alone.
+  - Laziness kept where it costs git: `measure_level` reads the Sensitive hits only when there are patterns and the level is below 3, and reads the diff size only at level 1 without hits. Two reads are now eager, both side-effect free and already done earlier in the same build: `small_note()` runs at level 0 even when the gate is off, no checks ran, or the review is deferred; and `review_mode(ticket_at_base())` runs at every level. `flow_edit_allowed()` (one `git show`) now runs on every `base_level` call, not only below level 3 after the other two reasons.
+  - `footprint` uses `levels.declared(text_at_HEAD, "flow-edit" in allow_line(text_at_HEAD))` and ignores the reason. That is the same level as before: the old code raised to 3 on the same three conditions, and when the level is already 3 nothing changes.
+- **Shortcuts taken**: levels.py imports `declared_level` and `review_mode` from `feature_flow.proof`. They are pure text functions, but importing them loads `proof`, which imports `git` and `os` transitively. Copying them into levels.py would make the module stand alone, but at the cost of two copies of the header parsing. That is worth doing if `proof` ever gains import-time side effects.
+- **For later tickets**: ticket 07 (build-check pipeline) can keep calling `review.after_checks` with the notes the pipeline returns. Ticket 08 moves `judge_build` and `judge_review` into phases: take the `after_checks` and `on_fail` call sites as they are. `FULL_ROUNDS` and `FINDING` live in `policy/review.py`, and `CONVERT` in `policy/levels.py`. The facade only imports them.

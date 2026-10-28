@@ -8,3 +8,4 @@ ticket number. Never edit or delete another line. Keep it short; a human prunes 
 - (03) The system python3 has no `build` module: `python3 -m venv <scratch>/venv && <scratch>/venv/bin/pip install build`, then run `<scratch>/venv/bin/python tests/package_smoke.py` (prints `all passed`).
 - (04) 3 tests in acceptance/test_rebuild_modes.py fail already at f10963b: twins compares state code_files, which list the package files instead of conductor.py. Check a failure there against the base commit (git worktree add --detach <scratch>/base <sha>) before chasing it.
 - (05) Acceptance has 25 failures already at f9d716a (not just the 3 from 04): compare the failing test names with the base commit's, do not expect zero.
+- (06) run.sh counts the whole unittest discovery as one passing line, so its total (466) does not grow when you add a test file; check your own file with the discover -p command.

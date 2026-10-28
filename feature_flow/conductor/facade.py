@@ -16,6 +16,9 @@ from pathlib import Path
 from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts, proof, scouts, state, suggest, tickets
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.planning import BRAINSTORM, Planner
+from feature_flow.conductor.policy import levels, limits, review
+from feature_flow.conductor.policy.levels import CONVERT
+from feature_flow.conductor.policy.review import FINDING, FULL_ROUNDS, followups_only
 from feature_flow.conductor.settings import MAX_LANES, Settings, _env_int, mode_ok
 from feature_flow.conductor.store import RunState, TicketState
 
@@ -28,27 +31,7 @@ MAX_ASKS = 2  # questions one ticket may send to a consultant before the next on
 OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
 LEVEL_LINE = re.compile(r"^LEVEL: ([123])[ \t\r\f\v]*$")  # a reviewer raising the ticket's level
 RULING = re.compile(r"^RULING: (TEST|CODE) WRONG[ \t\r\f\v]*$")  # the product owner on a disputed acceptance test
-FINDING = re.compile(r"^[ \t]*[0-9]+\.[ \t]+(blocker|major|minor)\b", re.IGNORECASE)
-CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
-LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}
-FULL_ROUNDS = 2  # a level 2 ticket's rounds in which a major finding still sends it back
 GAP = 3600  # most seconds one step adds to the time spent: a longer pause is the user away, not work
-
-
-def followups_only(findings):
-    """True when a FAIL reply's only reasons are major or minor findings: no blocker, no NOT MET bullet,
-    no missing test first and no scope problem. Such a level 2 ticket may pass with follow-ups."""
-    severities = []
-    for line in findings.splitlines():
-        match = FINDING.match(line)
-        if match:
-            severities.append(match.group(1).lower())
-        if "NOT MET" in line or re.match(r"^[ \t]*-[ \t]*test first:[ \t]*MISSING", line, re.IGNORECASE):
-            return False
-        scope = re.match(r"^[ \t]*-[ \t]*scope:[ \t]*(.*)$", line, re.IGNORECASE)
-        if scope and scope.group(1).strip().upper() != "OK":
-            return False
-    return bool(severities) and "blocker" not in severities
 
 
 def section_after(text, heading):
@@ -222,7 +205,7 @@ class Conductor:
 
     def round_cap(self):
         """The send-back rounds this ticket may have: 1 at level 1, else FLOW_MAX_REVIEW_ROUNDS."""
-        return min(1, self.max_rounds) if self.num("level") == 1 else self.max_rounds
+        return limits.round_cap(self.num("level"), self.max_rounds)
 
     def send_back(self, source, findings):
         """Write the findings into the ticket, reopen it, commit, and build again."""
@@ -794,33 +777,17 @@ class Conductor:
         if source:
             return self.send_back(source, report)
         level = self.measure_level()
-        if self.fast() and level < 3 and self.gate_on:  # with the gate off, nothing but the review checks it
+        decision, review_pass, more, events = review.after_checks(
+            level, self.fast(), self.gate_on, self.checks_ran, self.small_note() if level == 0 else "",
+            proof.review_mode(self.ticket_at_base()), self.get("spec_ok"), self.num("round"), self.get("level_note"))
+        if decision == "defer":
             return self.defer_review()
-        self.st["review_pass"] = "spec"
-        if level == 0:
-            if self.gate_on and self.checks_ran:
-                small = self.small_note()
-                if small:
-                    self.st["review_pass"] = "single"
-                    self.log("REVIEW-SMALL")
-                    notes.append(small)
-        else:
-            notes.append(self.get("level_note"))
-            if proof.review_mode(self.ticket_at_base()) != "full":  # `Review: full` asks for both passes
-                # at level 3 too: in the field a separate spec pass never caught what the conductor's checks had not
-                self.st["review_pass"] = "single"
+        self.st["review_pass"] = review_pass
+        for event in events:
+            if event == "REVIEW-SINGLE":
                 self.st["level_raised"] = ""
-                self.log("REVIEW-SINGLE")
-                notes.append("one review covers the spec and quality passes: do the spec checklist first" +
-                             (", then probe the change as a hostile caller, as the guide says for level 3"
-                              if level == 3 else ""))
-        if self.st["review_pass"] == "spec" and self.get("spec_ok"):
-            self.st["review_pass"] = "quality"
-            notes.append("the spec review passed in an earlier round, so this round has the quality review only")
-        if level == 2 and self.num("round") >= FULL_ROUNDS:
-            notes.append("this is round %d: from now on only a blocker finding sends the ticket back. majors and "
-                         "minors go to the plan's followups.md and the ticket passes" % (self.num("round") + 1))
-        self.st["review_notes"] = NOTE_SEP.join(notes)
+            self.log(event)
+        self.st["review_notes"] = NOTE_SEP.join(notes + more)
         return self.hand_out_review()
 
     def build_checks(self, gate=True):
@@ -873,23 +840,9 @@ class Conductor:
     def base_level(self):
         """The level known before the build, from the ticket at base: its `Level:` line, raised to 3 by
         `Review: full`, `Type: convert` or `Floor: allow flow-edit`. 0 when none of these is there."""
-        text = self.ticket_at_base()
-        level = proof.declared_level(text)
-        why = ""
-        if level < 3:
-            if proof.review_mode(text) == "full":
-                why = "the ticket says Review: full"
-            elif CONVERT.search(text.split("\n## ", 1)[0]):
-                why = "the ticket is Type: convert"
-            elif self.flow_edit_allowed():
-                why = "the ticket edits the flow's own code (Floor: allow flow-edit)"
-        if why:
-            level = 3
-        self.st["level_note"] = self.describe_level(level, why) if level else ""
+        level, why = levels.declared(self.ticket_at_base(), self.flow_edit_allowed())
+        self.st["level_note"] = levels.describe(level, why) if level else ""
         return level
-
-    def describe_level(self, level, why=""):
-        return "this ticket is level %d (%s)%s" % (level, LEVEL_NAMES[level], ", raised because " + why if why else "")
 
     def commands_at_base(self):
         """commands.md as it was at the base commit, or "" when it was not there."""
@@ -903,20 +856,17 @@ class Conductor:
         """Raise the ticket's level from the built diff, never lower it: a path on commands.md's
         `Sensitive:` line makes it 3, and a level 1 diff over the small limits makes it 2."""
         level = self.num("level")
-        why = ""
+        hit = []
         patterns = tickets.sensitive_patterns(self.commands_at_base())
         if patterns and level < 3:
             hit = [p for p in git.diff_names(self.get("base"), "HEAD", self.plan.as_posix())
                    if tickets.matches_sensitive(p, patterns)]
-            if hit:
-                level, why = 3, "the diff touches a Sensitive path in commands.md: %s" % ", ".join(hit[:3])
-        if level == 1:
+        files, lines, binary = 0, 0, False
+        if level == 1 and not hit:  # the size only matters to a level 1 diff that no Sensitive path raised
             files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix())
-            if binary or files > self.small_files or lines > self.small_lines:
-                level, why = 2, "the diff (%d files, %d lines%s) is over the small limits" % (
-                    files, lines, ", a binary file" if binary else "")
+        level, why = levels.measured(level, hit, files, lines, binary, self.small_files, self.small_lines)
         if why:
-            self.st["level_note"] = self.describe_level(level, why)
+            self.st["level_note"] = levels.describe(level, why)
         self.st["level"] = level
         if level:
             self.log("LEVEL-%d" % level)
@@ -1366,8 +1316,7 @@ class Conductor:
                            % (self.lane, self.lane))
             findings = state.read_text(self.findings_file, "findings") or ""
             source = {"quality": "quality review", "single": "single review"}.get(review_pass, "spec review")
-            if (self.num("level") == 2 and self.num("round") >= FULL_ROUNDS and review_pass != "spec"
-                    and followups_only(findings)):
+            if review.on_fail(self.num("level"), self.num("round"), review_pass, findings) == "followups":
                 return self.pass_with_followups(source, findings)
             return self.send_back(source, findings)
         if self.num("review_attempt") >= self.max_retries:
@@ -1743,7 +1692,7 @@ class Conductor:
             asked = 0  # the feature review has no ticket level to raise
         if asked > (level or 2):  # a ticket without a Level line already gets level 2 reviews or more
             self.st["level"] = asked
-            self.st["level_note"] = self.describe_level(asked, "a reviewer raised it")
+            self.st["level_note"] = levels.describe(asked, "a reviewer raised it")
             self.st["level_raised"] = "1" if asked == 3 else ""
             notes = [n for n in self.get("review_notes").split(NOTE_SEP) if n and not n.startswith("this ticket is level")]
             self.st["review_notes"] = NOTE_SEP.join([self.st["level_note"]] + notes)
@@ -1900,10 +1849,7 @@ class Conductor:
         """(Touches patterns or None, level) of the ticket at path, read at HEAD of the main worktree: what
         decides whether it may run beside another. The level is raised to 3 as base_level raises it."""
         text = self.show_head(path)
-        level = proof.declared_level(text)
-        floor = floorguard.allow_line(text).split()
-        if proof.review_mode(text) == "full" or CONVERT.search(text.split("\n## ", 1)[0]) or "flow-edit" in floor:
-            level = 3
+        level, _ = levels.declared(text, "flow-edit" in floorguard.allow_line(text).split())
         return lanes.touches(text), level
 
     def lease(self, k, path):

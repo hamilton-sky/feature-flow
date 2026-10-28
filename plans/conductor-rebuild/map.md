@@ -42,3 +42,4 @@
 ## Open questions
 
 - None.
+- 06 — policy/levels.py (declared, measured, describe, CONVERT, LEVEL_NAMES), policy/review.py (after_checks returns only the added notes, on_fail, followups_only, FINDING, FULL_ROUNDS) and policy/limits.py (round_cap) are pure; the facade reads, saves and logs, and imports followups_only back so the package export is the same object; describe_level is gone.
