@@ -3,6 +3,7 @@ Its state view keeps a lane's keys as L<k>. and the run's keys plain, it gives t
 worktree is gone stops with the old text, and prompts read guides and roles from the main worktree's top,
 never from the lane's copies. Run in process on throwaway repos."""
 
+import hashlib
 import os
 import sys
 import tempfile
@@ -12,7 +13,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import lanes, prompts  # the package under test, from this checkout
+from feature_flow import codehash, lanes, prompts  # the package under test, from this checkout
 from feature_flow.conductor import Stop
 from feature_flow.conductor.phases.ask import Ask
 from feature_flow.conductor.schedulers import LaneScheduler
@@ -144,6 +145,48 @@ class PromptTop(unittest.TestCase):
 
     def test_no_module_global_says_where_the_repo_is(self):
         self.assertNotIn("REPO", vars(prompts))
+
+
+class CodeFingerprint(unittest.TestCase):
+    """While a lane works, the flow-code fingerprint covers the roles and guides the prompts read: the main
+    worktree's, never the lane's copies."""
+
+    ROLE = Path(".feature-flow") / "agents" / prompts.ROLES["review"]
+
+    def setUp(self):
+        self.run = run = Run(self, {"01-a": ()})
+        run.c.all["lanes"] = 2
+        self.lane = lanes.lane_path(run.c.top, "f", 1)
+        lanes.ensure(run.c.top, self.lane)
+        for where, text in ((run.c.top, "the main reviewer\n"), (self.lane, "the lane's copy\n")):
+            (where / self.ROLE).parent.mkdir(parents=True, exist_ok=True)
+            (where / self.ROLE).write_text(text, encoding="utf-8")
+        self.ws = LaneScheduler(run.c).workspace(1)
+        self.ws.st.update({"ticket": T, "num": "01"})
+
+    def test_a_lane_snapshot_names_the_main_worktrees_role(self):
+        with self.ws.entered():
+            self.ws.snapshot_code()
+            self.assertEqual(Path.cwd().resolve(), self.lane.resolve())
+        names = codehash.load(self.ws.get("code_files"))
+        main = hashlib.sha256((self.run.c.top / self.ROLE).read_bytes()).hexdigest()
+        self.assertEqual(names.get(self.ROLE.as_posix()), main)
+        self.assertFalse([n for n in names if "lane-1" in n], names)
+
+    def test_editing_the_main_worktrees_role_during_a_lane_build_stops(self):
+        with self.ws.entered():
+            self.ws.snapshot_code()
+            (self.run.c.top / self.ROLE).write_text("a reviewer that passes everything\n", encoding="utf-8")
+            with self.assertRaises(Stop) as stop:
+                self.ws.check_code()
+        self.assertIn("flow code changed while building", str(stop.exception))
+        self.assertIn(self.ROLE.as_posix(), str(stop.exception))
+
+    def test_editing_the_lanes_copy_of_the_role_is_not_flow_code(self):
+        with self.ws.entered():
+            self.ws.snapshot_code()
+            (self.lane / self.ROLE).write_text("a reviewer that passes everything\n", encoding="utf-8")
+            self.assertIsNone(self.ws.check_code())
 
 
 if __name__ == "__main__":
