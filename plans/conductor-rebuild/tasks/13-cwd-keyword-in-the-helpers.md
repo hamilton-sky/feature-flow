@@ -1,7 +1,7 @@
 # Give the helpers outside the package an optional cwd= keyword
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 12
 Test first: yes
 Level: 3
@@ -67,3 +67,9 @@ prints cwd ok
 - **Shortcuts taken**: none.
 - **For later tickets**:
   - Ticket 15: pass `cwd=ws.folder` (None in the main worktree) to `git.*`, `checks.*` and `proc.run`. Every git function in git.py takes `cwd=` as a keyword. `undo_tracked(patch, cwd=)` writes a relative patch under cwd, so pass an absolute patch path if you mean the main top.
+
+## Review findings (round 1, floor guard)
+
+floor guard: the diff weakens the bar instead of meeting it
+skip: tests/py/test_cwd.py: self.there.path("test_weak.py").write_text("import unittest\n@unittest.skip('later')\nclass T: pass\
+if a finding is intended, the ticket needs a line like: Floor: allow <category>
