@@ -1,7 +1,7 @@
 # Hand phases a Workspace in place of self.st, self.lane and prompts.REPO
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 11
 Test first: yes
 Level: 3
@@ -70,3 +70,20 @@ prints over 400: []
 - **For later tickets**:
   - Ticket 15: the only `os.chdir` left in the package is `Workspace.entered()` (workspace.py). `ws.folder` is the lane or integration folder (None in the main worktree), so it is the natural `cwd=`. `ticket_prompt`, `Ask.prompt`/`ask_user` and `scout_prompt` still read `Path.cwd()` for the lane folder.
   - Ticket 16: the facade is 486 lines. The per-ticket methods are in `workspace.py` already. A per-ticket method added later must go on `Workspace`, not `Conductor`, or lanes would see the main view (see Shortcuts).
+
+## Review findings (round 1, single review)
+
+SPEC
+- test_workspace.py OK: MET (conductor)
+- prompts has no REPO, package has no in_lane: MET (conductor)
+- no module but facade.py reaches 400 lines: MET (conductor)
+- bash tests/run.sh passes: MET (466 passed, 0 failed)
+- scope: OK
+- test first: OK
+
+QUALITY
+1. blocker feature_flow/conductor/workspace.py and facade.py (snapshot_code / check_code), via feature_flow/codehash.py: before this change in_lane set prompts.REPO to the main top, so codehash._files() (find_file with no top) hashed the main worktree's .feature-flow/agents and guides during a lane build. With REPO gone, codehash uses "." and inside ws.entered() that is the lane folder, so in a repo install the flow-code fingerprint covers the lane's copies while the prompts still read the main worktree's copies (ws.prompts_top). A lane builder can then edit <top>/.feature-flow/agents/ticket-reviewer.md or a review guide and check_code no longer notices. Fix: make the fingerprint read the main worktree's role and guide files again. codehash.py is NOT in this ticket's Touches, so do it inside feature_flow/conductor/: e.g. run codehash.flow_code / changed from the main top (the Conductor's own workspace entered(), or pass the main top through a conductor-side wrapper) in Workspace.snapshot_code and Conductor.check_code. Add a test_workspace case: a lane workspace's snapshot names the main worktree's role files, and editing the main worktree's role during a lane build makes check_code stop.
+2. minor feature_flow/conductor/workspace.py Workspace.__getattr__: forwards every missing name to the Conductor, so a Conductor method reading self.get/self.st silently uses the main view in a lane. Consider an allow-list of forwarded names.
+3. minor tests/py/test_schedulers.py:304 comment still says "as in_lane gives it" (not in this diff, leave for later).
+
+REVIEW: FAIL
