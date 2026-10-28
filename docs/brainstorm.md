@@ -27,7 +27,8 @@ The brainstorm is saved as `.feature-flow/state/brainstorm-<feature>.md` and com
 - **Read.** The sidebar jumps between sections and options. Switch between system, light and dark at its foot.
 - **Edit a diagram.** Drag boxes. **Add box** (its arrow picks one of seven kinds and a colour), double-click a box to rename it, **Connect** two boxes, **Delete**, **Undo** and **Redo** (Ctrl+Z and Ctrl+Shift+Z), **Reset**. Edits stay in your browser.
 - **Keep an edit.** **Copy as mermaid** copies the edited diagram. Paste it into the chat to change an option.
-- **Look.** `route` is the default style. Ask for `blueprint`, or put `Style: blueprint` in the brainstorm.
+- **Arrange.** **Arrange** lays a diagram out again: left to right, top to bottom, radial (the most joined box in the middle) or a grid. Undo puts the boxes back.
+- **Look.** The session picks a style that fits the subject: `route` (the default), `blueprint` (architecture), `sketch` (early ideas), `paper` (to share or print), `terminal` (infra and dev tools) or `bright` (UI and consumer features). Ask for another, or put `Style: <name>` in the brainstorm. Boxes are coloured by role: people orange, screens purple, services blue, data green, outside systems grey, and red for what an option puts at risk.
 
 ## The live page (Claude only)
 

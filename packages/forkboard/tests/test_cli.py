@@ -73,7 +73,7 @@ class Command(unittest.TestCase):
     def test_mistakes_say_what_to_do(self):
         code, _, err = self.run_cli("render", str(self.doc), "--theme", "neon")
         self.assertEqual(code, 1)
-        self.assertIn("no theme neon: pick one of blueprint, route", err)
+        self.assertIn("no theme neon: pick one of blueprint, bright, paper, route, sketch, terminal", err)
         bad = self.dir / "bad.json"
         bad.write_text(json.dumps({"schema": "bundle/2"}), encoding="utf-8")
         code, _, err = self.run_cli("render", str(bad))
@@ -93,7 +93,9 @@ class Command(unittest.TestCase):
         self.assertEqual(result.stdout, "forkboard %s\n" % __version__, result.stderr)
         result = subprocess.run([sys.executable, "-m", "forkboard", "themes"], env=env, stdout=subprocess.PIPE,
                                 universal_newlines=True)
-        self.assertEqual(result.stdout, "blueprint\nroute\n")
+        names = [line.split()[0] for line in result.stdout.splitlines()]
+        self.assertEqual(names, ["blueprint", "bright", "paper", "route", "sketch", "terminal"])
+        self.assertIn("sketch     early, fuzzy ideas", result.stdout)
 
 
 if __name__ == "__main__":

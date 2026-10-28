@@ -82,10 +82,12 @@ figure.dg{margin:0;background:var(--card);border:1px solid var(--line);border-ra
 .dg pre.mermaid{background:none;text-align:center}
 g.node{cursor:grab}
 g.node.dragging{cursor:grabbing}
-g.node .shape{fill:var(--box);stroke:var(--line-strong);stroke-width:1.3}
+g.node .shape{fill:var(--box);stroke:var(--line-strong);stroke-width:var(--node-stroke,1.3);filter:var(--node-filter,none)}
+g.node rect.plain{rx:var(--node-radius,8px)}
 .dg g.node:hover .shape,.dg g.node.dragging .shape{stroke:var(--acc);stroke-width:2}
-g.node text{fill:var(--fg);font-family:var(--f-display);font-size:13px;font-weight:500;pointer-events:none}
-g.edge path{fill:none;stroke:var(--line-strong);stroke-width:1.4}
+g.node text{fill:var(--fg);font-family:var(--node-font,var(--f-display));font-size:var(--node-size,13px);font-weight:var(--node-weight,500);pointer-events:none}
+g.edge path{fill:none;stroke:var(--line-strong);stroke-width:var(--edge-width,1.4);filter:var(--edge-filter,none)}
+svg.fx{position:absolute;width:0;height:0;overflow:hidden}
 g.edge.dotted path{stroke-dasharray:4 4}
 g.edge.thick path{stroke-width:2.6}
 g.edge text{fill:var(--muted);font-family:var(--f-mono);font-size:11px}

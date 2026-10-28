@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.28: arranging and styling the review page
+
+| Version | Added |
+|---|---|
+| 0.28.0 | **Forkboard 0.2.0.** An **Arrange** button on each diagram lays the boxes out left to right, top to bottom, radial (the most joined box in the middle) or as a grid; it is an edit like any other, so Undo puts the boxes back and a saved version keeps it. Four new styles beside `route` and `blueprint`: `sketch` (hand drawn, for early ideas), `paper` (editorial, prints cleanly), `terminal` (for infra and dev tools) and `bright` (for UI and consumer features). A style can now shape the boxes too: corners, line weight, shadow, font. `forkboard themes` says what each style suits, and the brainstorm guide has the agent pick the style from the subject unless you name one, and colour boxes by role (people, screens, services, data, outside systems, risk). |
+
 ## 0.27: codeintel for the agents
 
 | Version | Added |
