@@ -1,8 +1,9 @@
 """One ticket at a time: hand out the lowest ready ticket, and end through the shared end of run."""
 
-from feature_flow import checks, git, tickets
+from feature_flow import checks, floorguard, git, lanes, tickets
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases.build import Build
+from feature_flow.conductor.policy import levels
 from feature_flow.conductor.schedulers.end import EndOfRun
 
 
@@ -72,3 +73,11 @@ class SerialScheduler:
         c.st["level"] = c.base_level()
         c.snapshot_code()
         c.run_smoke()
+
+    def footprint(self, path):
+        """(Touches patterns or None, level) of the ticket at path, read at HEAD of the main worktree: what
+        decides whether it may run beside another (a lane) or with another (a batch). The level is raised to 3
+        as base_level raises it."""
+        text = self.c.show_head(path)
+        level, _ = levels.declared(text, "flow-edit" in floorguard.allow_line(text).split())
+        return lanes.touches(text), level

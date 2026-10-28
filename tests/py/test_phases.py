@@ -22,7 +22,7 @@ from feature_flow.conductor.store import RunState
 
 PYTHON = '"%s"' % sys.executable
 CHECK = "```check\n$ %s -c \"print('fine')\"\nprints fine\n```\n\n" % PYTHON
-WORDS = ("build", "review", "ask", "test", "final")
+WORDS = ("build", "review", "ask", "test", "final", "merge")
 SLOTS = ["phase"] + ["L%d.phase" % k for k in range(1, 5)]
 T1, T2 = "plans/f/tasks/01-a.md", "plans/f/tasks/02-b.md"
 ACCEPT = "plans/f/acceptance/check.py"

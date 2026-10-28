@@ -39,7 +39,7 @@ class BatchScheduler(SerialScheduler):
         alone = c.all.get("no_batch", "").split()
         for path in [first] + [p for p in checks.flow_status(c.scripts, c.feature, "--ready").out.split()
                                if p != first]:
-            touched, level = c.footprint(path)
+            touched, level = self.footprint(path)
             if (touched is None or level not in (1, 2) or not lanes.disjoint(touched, sensitive)
                     or tickets.number(path) in alone):
                 if path == first:

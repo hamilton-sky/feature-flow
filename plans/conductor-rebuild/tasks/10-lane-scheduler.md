@@ -1,7 +1,7 @@
 # Move lanes into a LaneScheduler with a merge phase
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 09
 Test first: yes
 Level: 3
@@ -50,6 +50,34 @@ prints over 400: []
 - `feature_flow/lanes.py`, `tests/py/test_lanes_drive.py`
 
 ## Answer
+
+- **Built**:
+  - New `feature_flow/conductor/schedulers/lane.py` (312 lines): `LaneScheduler(SerialScheduler)`, `lanes = True`. Protocol: `next(lane)` is `lane_next`, `on_passed(ws)` queues the merge (`Merge.queue`) and returns None, `resume()` is `dispatch`, `finish()` is `self.end.finish()` (ticket 09's `EndOfRun(lanes=True)`). Moved from the facade unchanged apart from `self` to `c`: `lane_dir`, `lane_number`, `lane_key`, `busy_lanes`, `lane_next`, `dispatch`, `lease`, `make_worktree`, `integrate`, `merge_in_place`, `refresh`, `rebuild`, `drop_lanes`. `scheduler().end` / `scheduler().start_ticket` became `self.end` / `self.start_ticket`.
+  - New `feature_flow/conductor/phases/merge.py` (28 lines): `Merge(Phase)`, `name = "merge"`, `lane_scoped` True (the default). `queue(ws)` sets the phase word and saves; `judge` returns `Outcome(None)` (dispatch merges); `hand_out` raises NotImplementedError (nothing is handed to an agent); `scout_questions` raises the same `NoPhase` text `scouts` gave before for a lane in merge. `prompt`, `record`, `key` are the Phase defaults, which is what a merge lane got before (no class: `Phase`).
+  - `phases/__init__.py`: `REGISTRY` gains `merge`, `__all__` gains `Merge`, the TRANSITIONS comment no longer says the class is to come. `phases/base.py`: docstring "(none, or merge)" -> "(none)".
+  - `schedulers/serial.py`: `footprint(path)` moved here from the facade, so both `BatchScheduler` (`batch.py`: `c.footprint` -> `self.footprint`) and `LaneScheduler` inherit it.
+  - `schedulers/facade_lanes.py` deleted; `schedulers/__init__.py` exports `LaneScheduler` in its place.
+  - `facade.py` (1123 -> 851 lines): `scheduler()` picks `LaneScheduler` when `num_all("lanes") > 1`, the only lane-count test left. `next`, `prompt`, `pending_phase` and `verdict` ask `self.scheduler().lanes`. New `lane_sched()` gives this call's scheduler in a lane run, else a fresh `LaneScheduler(self)`, for `busy_lanes` (start, replan_prompt), `drop_lanes` (reset) and `lane_number` (a lane named in a run without lanes, so the old STOP texts stay). `lane_word`, `in_lane` (with its `os.chdir`, now calling `lanes.lane_path` itself) and `show_head` stay. Unused imports `Review`, `Test`, `MAX_LANES` dropped. `start`'s `return "OK %s" % token` and `check_code` are untouched, so no trust test changed.
+  - `tests/py/test_schedulers.py`: new `LaneDispatch` class (5 tests): the facade picks `LaneScheduler` once per call; a 9-row table of what `dispatch` leases beside busy lanes (clear ticket to the first free lane, first free lane not the next, overlap skipped, no Touches runs alone, Shared path runs alone, nothing beside a busy Shared ticket -> `WAIT`, level 3 keeps clear of a busy top folder, level 3 in another folder goes, no busy lane -> lane 1); a full session with busy lanes -> `WAIT 1,3`; a full session with none -> `HANDOFF`; and the merge order (`on_passed` queues `merge` without counting the ticket, `pending()` is `REGISTRY["merge"]`, then `dispatch` integrates lane 1 before any lease).
+  - `tests/py/test_phases.py`: only `"merge"` added to `WORDS`.
+  - Test-only commit 1081934: the discover command failed with `ImportError: cannot import name 'LaneScheduler' from 'feature_flow.conductor.schedulers'`.
+- **Proof**:
+  - `python3 -m unittest discover -s tests/py -p "test_schedulers.py" -v`: `Ran 13 tests`, `OK`.
+  - REGISTRY check: `merge True` (exit 0).
+  - Lane-test check: `lane tests 1` (exit 0). Phase-word check: `phase tests in the facade: 0` (exit 0).
+  - 400-line check: `over 400: []` (exit 0); the largest is `schedulers/lane.py` at 312.
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0.
+  - Also ran test_phases, test_lanes_drive, test_lanes, test_golden, test_conductor_package, test_batch_drive, test_trust_drive, test_trust_runner, test_scouts_drive, test_conductor, test_reset together: `Ran 169 tests`, `OK`.
+  - Acceptance: 15 failures, the same list as at 5500af1 minus `test_serial_batch_and_lane_runs_are_scheduler_classes_with_one_end_of_run`, which now passes (diffed against a base worktree).
+- **Decisions**:
+  - `on_passed` calls `Merge.queue`, not `Merge.hand_out`: a merge is the conductor's own step and hands nothing to an agent, and `test_phases.Session` records every `hand_out` of a REGISTRY class, so `Walks.test_a_lane_ticket_waits_for_its_merge` (handed out: build, review) holds unchanged.
+  - The phase-word tests of the lane code (`busy_lanes`, `lane_next`, `dispatch`) moved with it into `schedulers/lane.py` as they were; the facade tests none.
+  - `lane_sched()` instead of module functions: the ticket names `busy_lanes`, `lane_number` and `drop_lanes` as `LaneScheduler` methods, and start/reset/a lane named in a lane-less run need them outside a lane run. Constructing a `LaneScheduler` has no side effect.
+  - `footprint` sits on `SerialScheduler` because the batch scheduler uses it too; `LaneScheduler` has it by inheritance.
+- **Shortcuts taken**: none.
+- **For later tickets**:
+  - Ticket 12: `in_lane` stays on the facade and every lane method of `LaneScheduler` enters it through `self.c.in_lane(k)`; `make_worktree` and `integrate` still `os.chdir` themselves (as before), now in `schedulers/lane.py`.
+  - Ticket 16: the facade is 851 lines; `lane_sched()`, `lane_word`, `in_lane` and `show_head` are what is left of the lane section there.
 
 ## Attempt note
 

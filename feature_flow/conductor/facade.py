@@ -16,15 +16,13 @@ from feature_flow import checks, codehash, floorguard, gate, git, lanes, prompts
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import REGISTRY, Phase
 from feature_flow.conductor.phases.build import Build
-from feature_flow.conductor.phases.review import Review
-from feature_flow.conductor.phases.test import Test
 from feature_flow.conductor.planning import BRAINSTORM, Planner
 from feature_flow.conductor.policy import levels, limits
 from feature_flow.conductor.policy.levels import CONVERT
 from feature_flow.conductor.policy.review import FINDING, FULL_ROUNDS, followups_only
 from feature_flow.conductor.replies import demote, section_after  # the package exports them
-from feature_flow.conductor.schedulers import BatchScheduler, FacadeLanes
-from feature_flow.conductor.settings import MAX_LANES, Settings, _env_int, mode_ok
+from feature_flow.conductor.schedulers import BatchScheduler, LaneScheduler
+from feature_flow.conductor.settings import Settings, _env_int, mode_ok
 from feature_flow.conductor.store import NOTE_SEP, RunState, TicketState
 
 
@@ -470,7 +468,7 @@ class Conductor:
         self.check_owner()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
-        if self.all.get("phase") or self.busy_lanes():
+        if self.all.get("phase") or self.lane_sched().busy_lanes():
             raise Stop("a ticket is in progress. run replan-prompt between tickets, when next would start a new one")
         folder = self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
         paths = tickets.ticket_files(str(folder))
@@ -517,7 +515,7 @@ class Conductor:
         mode_ok("lanes_range", lanes=wanted)
         mode_ok("lanes_relay", lanes=wanted, relay=self.relay)
         mode_ok("lanes_top", lanes=wanted, cwd=Path.cwd().resolve(), top=self.top)
-        busy = self.busy_lanes()
+        busy = self.lane_sched().busy_lanes()
         if busy and wanted != self.num("lanes"):
             raise Stop("lane(s) %s still hold tickets from the last session, which ran with FLOW_LANES=%d. start with "
                        "that, or reset to drop them" % (",".join(map(str, busy)), self.num("lanes")))
@@ -554,8 +552,8 @@ class Conductor:
             if self.get("relay_handoff") == "1":
                 return self.handoff()
             return wide.judge(self).line
-        if self.num("lanes") > 1:
-            return self.lane_next(lane)
+        if self.scheduler().lanes:
+            return self.scheduler().next(lane)
         if lane is not None:
             raise Stop("next %s: this run has no lanes (start it with FLOW_LANES=2 or more for lanes)" % lane)
         if self.get("restore"):
@@ -590,7 +588,7 @@ class Conductor:
     def scheduler(self):
         """The scheduler of this call, picked once: lanes, else one ticket at a time (a batch when it may be)."""
         if self.sched is None:
-            self.sched = FacadeLanes(self) if self.num_all("lanes") > 1 else BatchScheduler(self)
+            self.sched = LaneScheduler(self) if self.num_all("lanes") > 1 else BatchScheduler(self)
         return self.sched
 
     def pending(self):
@@ -633,7 +631,7 @@ class Conductor:
             if not git.commit_paths(reopened, "chore(%s): reset %s to open" % (self.feature, nums)):
                 raise Stop("reopened %s but could not commit it. this session must be allowed to run git commit"
                            % nums)
-        dropped = self.drop_lanes()
+        dropped = self.lane_sched().drop_lanes()
         had_run = self.state_file.is_file()
         keys = ("deferred", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if self.all.get("budget") else ())
         kept = {k: self.all[k] for k in keys if self.all.get(k)}  # a deferred ticket still owes its review,
@@ -696,8 +694,8 @@ class Conductor:
         wide = self.run_wide("prompt", lane)
         if wide is not None:
             return wide.prompt(self)
-        if self.num("lanes") > 1 or lane is not None:
-            with self.in_lane(self.lane_number(lane, "prompt")):
+        if self.scheduler().lanes or lane is not None:
+            with self.in_lane(self.lane_sched().lane_number(lane, "prompt")):
                 return self.prompt_text()
         return self.prompt_text()
 
@@ -733,8 +731,8 @@ class Conductor:
         """A context for the pending phase's state: the feature review's, the lane's, or the run's."""
         if self.run_wide(command, lane) is not None:
             return contextlib.nullcontext()
-        if self.num("lanes") > 1 or lane is not None:
-            return self.in_lane(self.lane_number(lane, command))
+        if self.scheduler().lanes or lane is not None:
+            return self.in_lane(self.lane_sched().lane_number(lane, command))
         return contextlib.nullcontext()
 
     def scouts(self, lane=None):
@@ -795,8 +793,8 @@ class Conductor:
                     raise Stop("verdict for lane %s: the %s has no lane. run verdict without one" % (lane, wide.who))
                 self.all["findings_for"] = ""
             return wide.record(self, reply)
-        if self.num("lanes") > 1 or lane is not None:
-            k = self.lane_number(lane, "verdict")
+        if self.scheduler().lanes or lane is not None:
+            k = self.lane_sched().lane_number(lane, "verdict")
             with self.in_lane(k):
                 line = self.pending().record(self, reply)
             self.all["findings_for"] = str(k)
@@ -809,28 +807,15 @@ class Conductor:
     def lane_word(self):
         return " %d" % self.lane if self.lane else ""
 
-    def lane_dir(self, lane):
-        return lanes.lane_path(self.top, self.feature, lane)
-
-    def lane_number(self, lane, command):
-        if lane is None:
-            raise Stop("%s needs the lane: this run has %d lanes. pass the lane from the BUILD or REVIEW line"
-                       % (command, self.num("lanes")))
-        if not lane.isdigit() or not 1 <= int(lane) <= self.num("lanes"):
-            raise Stop("no lane %s: this run has lanes 1 to %d" % (lane, self.num("lanes")))
-        return int(lane)
-
-    def lane_key(self, lane, key):
-        return self.all.get("L%d.%s" % (lane, key), "")
-
-    def busy_lanes(self):
-        """The lanes that hold a ticket: built, in review, or passed and waiting for their merge."""
-        return [k for k in range(1, MAX_LANES + 1) if self.lane_key(k, "phase") in ("build", "review", "ask", "merge")]
+    def lane_sched(self):
+        """The lane scheduler: this call's in a lane run, else one for the lane checks, start and reset."""
+        sched = self.scheduler()
+        return sched if sched.lanes else LaneScheduler(self)
 
     @contextlib.contextmanager
     def in_lane(self, lane):
         """Run the per-ticket code on lane's state, in its worktree, and come back to the top of the repo."""
-        path = self.lane_dir(lane)
+        path = lanes.lane_path(self.top, self.feature, lane)
         if not lanes.is_worktree(self.top, path):
             raise Stop("lane %d (%s) is gone. run reset to drop the lanes and start again" % (lane, path))
         saved = self.st, self.lane
@@ -844,269 +829,12 @@ class Conductor:
             prompts.REPO = "."
             self.st, self.lane = saved
 
-    def lane_next(self, lane):
-        """`next` with lanes. With a lane: judge the phase that lane just finished. Then, or without a lane,
-        merge what passed, lease ready tickets to free lanes, and hand out the next phase."""
-        mode_ok("lanes_relay", lanes=self.num("lanes"), relay=self.relay)
-        if not self.plan.is_dir():
-            raise Stop("no plan folder %s" % self.plan)
-        if "limit" not in self.all:
-            self.all["limit"] = self.run_limit()
-            self.all.setdefault("runs", 0)
-            self.all.setdefault("done", 0)
-        if lane is None:
-            return self.dispatch()
-        k = self.lane_number(lane, "next")
-        line = None
-        with self.in_lane(k):
-            if self.get("restore"):
-                try:
-                    git._git("checkout", "-q", self.get("restore"))
-                except RuntimeError as err:
-                    raise Stop("cannot put lane %d back after the test first check: %s. run `git checkout %s` in %s "
-                               "by hand" % (k, err, self.get("restore"), Path.cwd()))
-                self.st["restore"] = ""
-                self.save()
-            phase = self.get("phase")
-            if phase in ("build", "review", "ask"):
-                name = lanes.branch(self.feature, self.get("num"))
-                on = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False).stdout.strip()
-                if on != name:
-                    raise Stop("lane %d is on %s, not on its ticket's branch %s. a builder or reviewer must not switch "
-                               "it. run reset to drop the lanes" % (k, on or "a detached HEAD", name))
-            if phase in ("build", "review", "ask"):
-                line = REGISTRY[phase].judge(self).line
-        return line if line is not None else self.dispatch()
-
-    def dispatch(self):
-        """Merge a passed ticket, else lease the next ticket that may run beside the busy ones, else say what to
-        wait for, hand off, or finish."""
-        for k in self.busy_lanes():
-            if self.lane_key(k, "phase") == "merge":
-                return self.integrate(k)
-        dirty = git.changes()
-        if dirty:
-            raise Stop("the main worktree is not clean, and only merges may change it while lanes run: %s"
-                       % " ".join(dirty[:5]))
-        busy = self.busy_lanes()
-        if not busy and self.scheduler().end.tests_due():
-            return Test.hand_out(self)
-        check = checks.flow_status(self.scripts, self.feature, "--check")
-        if not check.ok:
-            raise Stop("ticket check failed, fix the tickets first")
-        ready = checks.flow_status(self.scripts, self.feature, "--ready")
-        if ready.code not in (0, 10, 11):
-            raise Stop("flow-status.py failed with exit code %d" % ready.code)
-        if self.per_session > 0 and self.num("session_done") + len(busy) >= self.per_session:
-            return self.emit("WAIT %s" % ",".join(map(str, busy))) if busy else self.handoff()
-        leased = {self.lane_key(k, "ticket") for k in busy}
-        running = [self.footprint(self.lane_key(k, "ticket")) for k in busy]
-        shared = lanes.touches("Touches: " + tickets.commands_text_value(self.show_head(self.commands), "Shared")) or []
-        free = [k for k in range(1, self.num("lanes") + 1) if k not in busy]
-        if ready.code == 0 and free:
-            if not busy:
-                self.check_replan()
-            self.check_budget(offer=not busy)  # a stop while lanes work would strand them
-            for path in ready.out.strip().splitlines():
-                if path in leased:
-                    continue
-                if lanes.side_by_side(self.footprint(path), running, shared):
-                    return self.lease(free[0], path)
-        if busy:
-            return self.emit("WAIT %s" % ",".join(map(str, busy)))
-        if ready.code == 10:
-            return self.scheduler().end.finish()
-        raise Stop("stuck: unfinished tickets remain but none is ready. run: python3 scripts/flow-status.py %s"
-                   % self.feature)
-
     def show_head(self, path):
         """path's text at HEAD of the main worktree, or "" when it is not there."""
         try:
             return git.show_text("HEAD:%s" % Path(path).as_posix())
         except RuntimeError:
             return ""
-
-    def footprint(self, path):
-        """(Touches patterns or None, level) of the ticket at path, read at HEAD of the main worktree: what
-        decides whether it may run beside another. The level is raised to 3 as base_level raises it."""
-        text = self.show_head(path)
-        level, _ = levels.declared(text, "flow-edit" in floorguard.allow_line(text).split())
-        return lanes.touches(text), level
-
-    def lease(self, k, path):
-        """Give the ticket at path to lane k on a fresh branch from the feature head, and hand out its build."""
-        head = git.head()
-        self.make_worktree(self.lane_dir(k), "lane-%d" % k)
-        with self.in_lane(k):
-            self.st.clear()
-            dirty = git.changes()
-            if dirty:
-                raise Stop("lane %d is not clean: %s. run reset to drop the lanes" % (k, " ".join(dirty[:5])))
-            try:
-                lanes.git_in(".", "checkout", "-q", "-B", lanes.branch(self.feature, tickets.number(path)), head)
-            except RuntimeError as err:
-                raise Stop("cannot put lane %d on a branch for %s: %s" % (k, tickets.name(path), err))
-            self.scheduler().start_ticket(path)
-            self.log("LEASE-%d" % k)
-            return Build.hand_out(self)
-
-    def make_worktree(self, path, name):
-        """Create the worktree at path when it is not there, and run commands.md's Setup in it once."""
-        try:
-            lanes.ensure(self.top, path)
-        except RuntimeError as err:
-            raise Stop("cannot create the %s worktree: %s" % (name, err))
-        marker = path.with_name(path.name + ".ready")
-        if marker.is_file():
-            return
-        cmd = tickets.commands_value(self.commands, "Setup")
-        if cmd:
-            os.chdir(str(path))
-            try:
-                result = checks.smoke(cmd, self.gate_timeout)
-            finally:
-                os.chdir(str(self.top))
-            if not result.ok:
-                raise Stop("Setup failed in the %s worktree (%s): %s. the last lines: %s"
-                           % (name, path, cmd, " ".join(gate.tail(result.out, 5).split())[:300]))
-        marker.write_text("set up\n", encoding="utf-8")
-
-    def integrate(self, k):
-        """Merge lane k's passed ticket into the feature head in the integration worktree, gate the merge, and
-        fast-forward the feature branch to it. A conflict or a red gate rebuilds the ticket on the new head."""
-        head = git.head()
-        num, path = self.lane_key(k, "num"), self.lane_key(k, "ticket")
-        name = lanes.branch(self.feature, num)
-        if str(self.lane_key(k, "level")) == "3" and self.lane_key(k, "base") != head:
-            return self.refresh(k, head)
-        where = lanes.integrate_path(self.top, self.feature)
-        self.make_worktree(where, "integration")
-        os.chdir(str(where))
-        try:
-            problem, report = self.merge_in_place(name, head, "merge(%s): %s %s" % (
-                self.feature, num, tickets.title(path) or tickets.name(path)))
-            merged = git.head()
-            if problem is None and self.gate_on:
-                quick = self.gate_quick()
-                result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=quick)
-                self.log("MERGE-GATE-%s-%s" % ("QUICK" if quick else "FULL", "PASS" if result.ok else "FAIL"))
-                if not result.ok:
-                    problem, report = "the gate on its merge failed", result.out
-        finally:
-            os.chdir(str(self.top))
-        if problem is not None:
-            return self.rebuild(k, problem, report)
-        try:
-            git._git("merge", "-q", "--ff-only", merged)
-            lanes.git_in(self.lane_dir(k), "checkout", "-q", "--detach")
-            git._git("branch", "-q", "-d", name)
-        except RuntimeError as err:
-            raise Stop("cannot move the feature branch to the merge of %s: %s" % (tickets.name(path), err))
-        for key in [key for key in self.all if key.startswith("L%d." % k)]:
-            del self.all[key]
-        self.all["done"] = self.num("done") + 1
-        self.all["session_done"] = self.num("session_done") + 1
-        self.save()
-        state.log(self.log_file, num, "MERGED-%d" % k)
-        return self.dispatch()
-
-    def merge_in_place(self, name, head, message):
-        """Merge branch name into head in the current worktree, resolving only appends to the plan's append-only
-        files. Returns (None, "") on success, else (what went wrong, a report), with the merge undone."""
-        git._git("merge", "--abort", check=False)
-        git._git("reset", "-q", "--hard", check=False)
-        try:
-            git._git("checkout", "-q", "--detach", head)
-        except RuntimeError as err:
-            raise Stop("cannot reset the %s worktree: %s" % (Path.cwd(), err))
-        dirty = git.changes()
-        if dirty:
-            raise Stop("the worktree %s is not clean after a reset: %s. something left files there; remove them or "
-                       "run reset" % (Path.cwd(), " ".join(dirty[:5])))
-        result = git._git("merge", "--no-ff", "--no-edit", "-m", message, name, check=False)
-        if result.returncode == 0:
-            return None, ""
-        left = lanes.resolve_appends(".", self.plan.as_posix()) if lanes.unmerged(".") else ["(git merge failed)"]
-        if not left and git._git("commit", "-q", "--no-edit", check=False).returncode == 0:
-            self.log("MERGE-APPENDS")
-            return None, ""
-        git._git("merge", "--abort", check=False)
-        return "it conflicted with the feature branch", (
-            "git merge reported conflicts in: %s\n%s" % (", ".join(left), (result.stdout + result.stderr).strip()))
-
-    def refresh(self, k, head):
-        """A level 3 ticket whose base is behind the feature head: merge the feature head into its branch, gate it
-        in the lane, and review it again on top of the code its reviewer never saw."""
-        with self.in_lane(k):
-            name = lanes.branch(self.feature, self.get("num"))
-            problem, report = self.merge_in_place(name, head, "merge(%s): %s onto the feature branch for its review"
-                                                  % (self.feature, self.get("num")))
-            if problem is None:
-                lanes.git_in(".", "checkout", "-q", "-B", name, "HEAD")
-                if self.gate_on:
-                    quick = self.gate_quick()
-                    result = checks.gate(self.scripts, self.feature, self.gate_timeout, quick=quick)
-                    self.log("REFRESH-GATE-%s-%s" % ("QUICK" if quick else "FULL", "PASS" if result.ok else "FAIL"))
-                    if not result.ok:
-                        problem, report = "the gate failed on top of the feature branch", result.out
-            if problem is None:
-                moved = self.get("base")
-                self.st["base"] = head
-                self.st["review_pass"] = "quality"
-                self.st["review_attempt"] = 0
-                self.st["review_notes"] = NOTE_SEP.join([n for n in (
-                    self.get("level_note"),
-                    "the feature branch moved since this level 3 ticket was built (from %s to %s), so it is reviewed "
-                    "again on top of it. the diff from the base below to HEAD is this ticket's change on the feature "
-                    "branch as it is now: probe it against what the other tickets added" % (moved[:12], head[:12]))
-                    if n])
-                self.log("REFRESH")
-                return Review.hand_out(self)
-        return self.rebuild(k, problem, report)
-
-    def rebuild(self, k, problem, report):
-        """Build lane k's ticket again from the feature head, with what went wrong in the ticket. Once only."""
-        head = git.head()
-        with self.in_lane(k):
-            path, num = self.ticket(), self.get("num")
-            if self.num("rebuilds") >= 1:
-                raise Stop("%s passed its review but %s, and it was rebuilt once already. its Touches line is likely "
-                           "wrong: fix the plan, then run reset %s" % (self.ticket_name(), problem, num))
-            name = lanes.branch(self.feature, num)
-            tip = lanes.git_in(".", "rev-parse", name).stdout.strip()
-            base = self.get("base")
-            git._git("merge", "--abort", check=False)
-            git._git("reset", "-q", "--hard", check=False)
-            try:
-                lanes.git_in(".", "checkout", "-q", "-B", name, head)
-            except RuntimeError as err:
-                raise Stop("cannot reset lane %d for the rebuild of %s: %s" % (k, self.ticket_name(), err))
-            self.st.clear()
-            self.scheduler().start_ticket(path)
-            self.st["rebuilds"] = 1
-            tickets.append_section(path, "Rebuild (%s)" % problem, (
-                "This ticket was built and passed its review in a lane, but %s. It is built again from the feature "
-                "branch as it is now. The earlier build is commit %s (its base was %s): reuse what still fits, "
-                "for example with `git diff %s %s`.\n\n%s" % (problem, tip, base, base, tip, gate.tail(report, 60))))
-            tickets.set_open(path)
-            if not git.commit_file(path, "chore(%s): %s rebuild after its merge" % (self.feature, num)):
-                raise Stop("cannot commit the rebuild note to %s. this session must be allowed to run git commit"
-                           % self.ticket_name())
-            self.log("REBUILD")
-            return Build.hand_out(self)
-
-    def drop_lanes(self):
-        """For reset: remove the feature's lane worktrees and delete its ticket branches. Returns what it did."""
-        done = []
-        gone = lanes.remove_all(self.top, self.feature)
-        if gone:
-            done.append("removed the worktrees %s" % ", ".join(gone))
-        names = lanes.branches(self.top, self.feature)
-        for name in names:
-            git._git("branch", "-q", "-D", name, check=False)
-        if names:
-            done.append("deleted the branches %s" % ", ".join(names))
-        return done
 
     # ---- planning: stateless, the brief and the draft are all there is --
 

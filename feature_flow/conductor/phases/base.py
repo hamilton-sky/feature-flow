@@ -25,7 +25,7 @@ class Outcome:
 
 class Phase:
     """The phase protocol, with the defaults of a phase that has nothing to do. The registry maps the phase word
-    to a subclass; a phase word missing from it (none, or merge) gets these defaults."""
+    to a subclass; a phase word missing from it (none) gets these defaults."""
     name = ""
     lane_scoped = True  # False for the run-wide phases, which have no lane
     who = ""  # what the "has no lane" STOPs call a run-wide phase
