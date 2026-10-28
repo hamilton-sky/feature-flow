@@ -31,6 +31,26 @@ class SerialScheduler:
     def resume(self):
         return self.next(None)
 
+    def put_back(self):
+        """Check out what the test first check or a batch's judging left to go back to, before next goes on."""
+        c = self.c
+        if c.get("restore"):
+            try:
+                git._git("checkout", "-q", c.get("restore"))
+            except RuntimeError as err:
+                raise Stop("cannot put the working copy back after the test first check: %s. run `git checkout %s` "
+                           "by hand" % (err, c.get("restore")))
+            c.all["restore"] = ""
+            c.save()
+        if c.get("batch_restore"):
+            try:
+                git._git("checkout", "-q", c.get("batch_restore"))
+            except RuntimeError as err:
+                raise Stop("cannot go back to %s after judging a batch: %s. run `git checkout %s` by hand"
+                           % (c.get("batch_restore"), err, c.get("batch_restore")))
+            c.all["batch_restore"] = ""
+            c.save()
+
     def pick_ticket(self):
         """Hand out the next ready ticket, or finish."""
         c = self.c

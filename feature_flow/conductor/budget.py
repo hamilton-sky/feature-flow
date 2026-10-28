@@ -67,6 +67,23 @@ def budget_cmd(c, value=None):
     return budget_report(c)
 
 
+def fast_switch(c, value):
+    """`fast on|off` between phases: from the next ticket on, level 1 and 2 tickets skip or get their own
+    review. Tickets already deferred keep the feature review at the end."""
+    c.check_owner()
+    if value not in ("on", "off"):
+        raise Stop("fast takes on or off, not %s" % value)
+    if value == "on" and c.fast():
+        return ("OK fast is already on. to go faster still, the open tickets can be re-planned into fewer with the "
+                "same bar: with the user's yes, run replan-prompt and give it to the feature-planner")
+    c.all["fast"] = "1" if value == "on" else ""
+    c.save()
+    c.log("FAST-%s" % value.upper())
+    return "OK fast %s%s" % (value, "" if value == "on" or not c.deferred() else
+                             ". %d ticket(s) already deferred still get the feature review at the end"
+                             % len(c.deferred()))
+
+
 def check_budget(c, offer=True):
     """Before a ticket starts: over the budget, switch to fast mode first. Still over once fast mode has had
     a ticket, stop once and offer a re-plan, which only the user can say yes to. Nothing is cut silently."""

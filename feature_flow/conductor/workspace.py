@@ -138,6 +138,27 @@ class Workspace:
         no level), a level 3 ticket's first review, and the first round of the feature review."""
         return self.pending().scout_questions(self)
 
+    def list_scouts(self):
+        """`SCOUT <k> <agent> <reply file>` lines for the phase handed out last, or NONE. Clears old replies."""
+        if self.get("phase") not in REGISTRY:
+            raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
+        found = self.scout_questions()  # the tester's raises NoPhase: it gets no scouts
+        folder = self.state_file.parent
+        scouts.clear(folder, self.feature, self.scout_slot())
+        self.st["scout_key"] = self.phase_key()
+        self.st["scout_n"] = len(found)
+        self.save()
+        if found:
+            self.log("SCOUTS-%d" % len(found))
+        return scouts.listing(folder, self.feature, self.scout_slot(), found)
+
+    def show_head(self, path):
+        """path's text at HEAD of the main worktree, or "" when it is not there."""
+        try:
+            return git.show_text("HEAD:%s" % Path(path).as_posix())
+        except RuntimeError:
+            return ""
+
     def scout_findings(self):
         """The scout replies saved for the phase handed out last, as a section for its prompt, or ""."""
         if self.get("scout_key") != self.phase_key():

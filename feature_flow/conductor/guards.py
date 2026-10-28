@@ -1,14 +1,88 @@
 """The checks around a ticket. BEFORE_TICKET: what both schedulers run before a ticket starts, in order, the first
 that stops or hands off winning (the session handoff, the re-plan check, the budget; then, once start_ticket has
 snapshotted the code, the smoke test). AFTER_PHASE: the relay, a handoff after each phase handed out, checked by
-next before it judges anything."""
+next before it judges anything. Also the owner check every command makes, the handoff, and the re-plan prompt."""
 
+import hashlib
 import os
 import re
+from pathlib import Path
 
-from feature_flow import checks, gate, git, tickets
-from feature_flow.conductor import budget
+from feature_flow import checks, gate, git, prompts, tickets
+from feature_flow.conductor import budget, planning
 from feature_flow.conductor.errors import Stop
+from feature_flow.conductor.settings import _env_int, mode_ok
+
+
+OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
+
+
+def owner_hash(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def check_owner(c):
+    """While a session owns the feature, every call must carry its token. Checked before any change."""
+    owner = c.get("owner")
+    token = os.environ.get("FLOW_SESSION", "")
+    if not owner or owner_hash(token) == owner:
+        return
+    if OLD_OWNER.match(owner) and token == owner:
+        c.all["owner"] = owner_hash(token)  # stored as the hash on the next save
+        return
+    raise Stop("%s is owned by another session (%s). pass its token as FLOW_SESSION, or start this session "
+               "with FLOW_TAKEOVER=1 once you are sure the other one is closed" % (c.feature, owner[:8]))
+
+
+def before_start(c):
+    """start's checks before it takes the feature: the owner (FLOW_TAKEOVER), the lanes, the driver. Returns
+    (takeover, the FLOW_LANES wanted, FLOW_DRIVER)."""
+    owner = c.get("owner")
+    takeover = bool(owner)
+    if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
+        raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
+                   % (c.feature, owner[:8]))
+    wanted = _env_int("FLOW_LANES", 1)
+    mode_ok("lanes_range", lanes=wanted)
+    mode_ok("lanes_relay", lanes=wanted, relay=c.relay)
+    mode_ok("lanes_top", lanes=wanted, cwd=Path.cwd().resolve(), top=c.top)
+    busy = c.lane_sched().busy_lanes()
+    if busy and wanted != c.num("lanes"):
+        raise Stop("lane(s) %s still hold tickets from the last session, which ran with FLOW_LANES=%d. start with "
+                   "that, or reset to drop them" % (",".join(map(str, busy)), c.num("lanes")))
+    driver = os.environ.get("FLOW_DRIVER", "")
+    mode_ok("driver", driver=driver)
+    return takeover, wanted, driver
+
+
+def handoff(c):
+    """Release the owner; the user continues in a new session with the printed line."""
+    c.all["owner"] = ""
+    c.all["relay_handoff"] = ""
+    c.save()
+    return c.emit("HANDOFF %s %s" % (c.invoke, c.feature))
+
+
+def replan_prompt(c):
+    """The feature-planner's prompt to fold the open tickets into fewer. Only between tickets."""
+    c.check_owner()
+    if not c.plan.is_dir():
+        raise Stop("no plan folder %s" % c.plan)
+    if c.all.get("phase") or c.lane_sched().busy_lanes():
+        raise Stop("a ticket is in progress. run replan-prompt between tickets, when next would start a new one")
+    folder = c.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
+    paths = tickets.ticket_files(str(folder))
+    open_ones = [p for p in paths if tickets.status(p) not in tickets.DONE + ("parked", "wontfix")]
+    if len(open_ones) < 2:
+        raise Stop("%d open ticket(s) left, nothing to fold together" % len(open_ones))
+    c.all["replan_sha"] = git.head()
+    c.save()
+    c.log("REPLAN-PROMPT")
+    try:
+        return prompts.replan(c.scripts, c.feature, c.plan.as_posix(),
+                              [Path(p).as_posix() for p in open_ones], (c.plan / planning.BRAINSTORM).is_file())
+    except FileNotFoundError as err:
+        raise Stop(str(err))
 
 
 def check_replan(c):

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from feature_flow import checks, prompts, scouts, state
 from feature_flow.conductor.errors import NoPhase, Stop
+from feature_flow.conductor.phases.base import lane_runner
 
 
 BRAINSTORM = "brainstorm.md"  # the user's chosen approach, copied from the state folder into the draft and the plan
@@ -19,9 +20,23 @@ HELPER_LIMITS = {"normal": {"scout": 2, "web": 1, "consult": 2, "skeptic": 1, "l
                  "careful": {"scout": 3, "web": 2, "consult": 3, "skeptic": 1, "lens": 3}}  # helpers per brainstorm
 
 
+def one_scout(c, found, k, workdir=None, top="."):
+    """The whole prompt of scout k of found: a phase's scouts (the facade's scout_prompt) or the plan's."""
+    if not k.isdigit() or not 1 <= int(k) <= len(found):
+        raise Stop("no scout %s: there are %d" % (k, len(found)))
+    agent, role, question = found[int(k) - 1]
+    try:
+        role_text = prompts.role(c.scripts, agent + ".md", top)
+    except FileNotFoundError as err:
+        raise Stop(str(err))
+    if workdir is not None:  # a lane's scout: its role text as prompts gave it from the lane's folder
+        role_text = lane_runner(role_text, c.scripts)
+    return scouts.prompt(role_text, role, question, workdir)
+
+
 class Planner:
     def __init__(self, conductor):
-        """The paths and settings the plan commands read, taken from the conductor; log and one_scout stay its own."""
+        """The paths and settings the plan commands read, taken from the conductor; log stays its own."""
         self.feature = conductor.feature
         self.scripts = conductor.scripts
         self.plan = conductor.plan
@@ -32,7 +47,6 @@ class Planner:
         self.state_file = conductor.state_file
         self.scouts_on = conductor.scouts_on
         self.log = conductor.log
-        self.one_scout = conductor.one_scout
 
     def consult_prompt(self, role, question_file):
         """A consultant's prompt for a question the planner raised. Stateless, like the other plan commands."""
@@ -130,7 +144,7 @@ class Planner:
         text = self.read_text(self.brief_file, "brief") if self.brief_file.is_file() else None
         if not self.scouts_on or text is None or key is None or key.strip() != scouts.brief_key(text):
             raise NoPhase("run plan-scouts first: no scouts are listed for the brief of %s" % self.feature)
-        return self.one_scout(scouts.plan(text), k)
+        return one_scout(self, scouts.plan(text), k)
 
     def no_plan_yet(self):
         if self.plan.is_dir():

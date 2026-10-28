@@ -5,33 +5,24 @@ caller, and prints exactly one line per command.
 """
 
 import contextlib
-import hashlib
 import os
-import re
 import secrets
 import time
 from pathlib import Path
 
-from feature_flow import codehash, git, prompts, scouts, state, suggest, tickets
+from feature_flow import codehash, git, state
 from feature_flow.conductor import budget as time_budget
-from feature_flow.conductor import guards
+from feature_flow.conductor import guards, reset as run_reset
 from feature_flow.conductor.errors import NoPhase, Stop
+from feature_flow.conductor.guards import owner_hash  # the package exports it
 from feature_flow.conductor.phases import REGISTRY
-from feature_flow.conductor.phases.base import lane_runner
-from feature_flow.conductor.planning import BRAINSTORM, Planner
+from feature_flow.conductor.planning import Planner, one_scout
 from feature_flow.conductor.policy.review import followups_only
 from feature_flow.conductor.replies import demote, section_after  # the package exports them
 from feature_flow.conductor.schedulers import BatchScheduler, LaneScheduler
-from feature_flow.conductor.settings import Settings, _env_int, mode_ok
+from feature_flow.conductor.settings import Settings, mode_ok
 from feature_flow.conductor.store import RunState
 from feature_flow.conductor.workspace import Workspace
-
-
-OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
-
-
-def owner_hash(token):
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class Conductor(Workspace):
@@ -98,18 +89,7 @@ class Conductor(Workspace):
     def fast_switch(self, value):
         """`fast on|off` between phases: from the next ticket on, level 1 and 2 tickets skip or get their own
         review. Tickets already deferred keep the feature review at the end."""
-        self.check_owner()
-        if value not in ("on", "off"):
-            raise Stop("fast takes on or off, not %s" % value)
-        if value == "on" and self.fast():
-            return ("OK fast is already on. to go faster still, the open tickets can be re-planned into fewer with the "
-                    "same bar: with the user's yes, run replan-prompt and give it to the feature-planner")
-        self.all["fast"] = "1" if value == "on" else ""
-        self.save()
-        self.log("FAST-%s" % value.upper())
-        return "OK fast %s%s" % (value, "" if value == "on" or not self.deferred() else
-                                 ". %d ticket(s) already deferred still get the feature review at the end"
-                                 % len(self.deferred()))
+        return time_budget.fast_switch(self, value)
 
     def check_code(self, allowed=False, final=False):
         """Stop when the files the conductor runs from changed since the ticket was picked."""
@@ -130,22 +110,11 @@ class Conductor(Workspace):
 
     def handoff(self):
         """Release the owner; the user continues in a new session with the printed line."""
-        self.all["owner"] = ""
-        self.all["relay_handoff"] = ""
-        self.save()
-        return self.emit("HANDOFF %s %s" % (self.invoke, self.feature))
+        return guards.handoff(self)
 
     def check_owner(self):
         """While a session owns the feature, every call must carry its token. Checked before any change."""
-        owner = self.get("owner")
-        token = os.environ.get("FLOW_SESSION", "")
-        if not owner or owner_hash(token) == owner:
-            return
-        if OLD_OWNER.match(owner) and token == owner:
-            self.all["owner"] = owner_hash(token)  # stored as the hash on the next save
-            return
-        raise Stop("%s is owned by another session (%s). pass its token as FLOW_SESSION, or start this session "
-                   "with FLOW_TAKEOVER=1 once you are sure the other one is closed" % (self.feature, owner[:8]))
+        guards.check_owner(self)
 
     # ---- the time budget: fast mode when over, then a re-plan the user says yes to --
 
@@ -158,43 +127,12 @@ class Conductor(Workspace):
 
     def replan_prompt(self):
         """The feature-planner's prompt to fold the open tickets into fewer. Only between tickets."""
-        self.check_owner()
-        if not self.plan.is_dir():
-            raise Stop("no plan folder %s" % self.plan)
-        if self.all.get("phase") or self.lane_sched().busy_lanes():
-            raise Stop("a ticket is in progress. run replan-prompt between tickets, when next would start a new one")
-        folder = self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
-        paths = tickets.ticket_files(str(folder))
-        open_ones = [p for p in paths if tickets.status(p) not in tickets.DONE + ("parked", "wontfix")]
-        if len(open_ones) < 2:
-            raise Stop("%d open ticket(s) left, nothing to fold together" % len(open_ones))
-        self.all["replan_sha"] = git.head()
-        self.save()
-        self.log("REPLAN-PROMPT")
-        try:
-            return prompts.replan(self.scripts, self.feature, self.plan.as_posix(),
-                                  [Path(p).as_posix() for p in open_ones], (self.plan / BRAINSTORM).is_file())
-        except FileNotFoundError as err:
-            raise Stop(str(err))
+        return guards.replan_prompt(self)
 
     def start(self):
         if not self.plan.is_dir():
             return self.emit("PLAN")
-        owner = self.get("owner")
-        takeover = bool(owner)
-        if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
-            raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
-                       % (self.feature, owner[:8]))
-        wanted = _env_int("FLOW_LANES", 1)
-        mode_ok("lanes_range", lanes=wanted)
-        mode_ok("lanes_relay", lanes=wanted, relay=self.relay)
-        mode_ok("lanes_top", lanes=wanted, cwd=Path.cwd().resolve(), top=self.top)
-        busy = self.lane_sched().busy_lanes()
-        if busy and wanted != self.num("lanes"):
-            raise Stop("lane(s) %s still hold tickets from the last session, which ran with FLOW_LANES=%d. start with "
-                       "that, or reset to drop them" % (",".join(map(str, busy)), self.num("lanes")))
-        driver = os.environ.get("FLOW_DRIVER", "")
-        mode_ok("driver", driver=driver)
+        takeover, wanted, driver = guards.before_start(self)
         token = secrets.token_hex(8)
         if driver:
             self.all["driver"] = driver
@@ -231,22 +169,7 @@ class Conductor(Workspace):
             return self.scheduler().next(lane)
         if lane is not None:
             raise Stop("next %s: this run has no lanes (start it with FLOW_LANES=2 or more for lanes)" % lane)
-        if self.get("restore"):
-            try:
-                git._git("checkout", "-q", self.get("restore"))
-            except RuntimeError as err:
-                raise Stop("cannot put the working copy back after the test first check: %s. run `git checkout %s` "
-                           "by hand" % (err, self.get("restore")))
-            self.all["restore"] = ""
-            self.save()
-        if self.get("batch_restore"):
-            try:
-                git._git("checkout", "-q", self.get("batch_restore"))
-            except RuntimeError as err:
-                raise Stop("cannot go back to %s after judging a batch: %s. run `git checkout %s` by hand"
-                           % (self.get("batch_restore"), err, self.get("batch_restore")))
-            self.all["batch_restore"] = ""
-            self.save()
+        self.scheduler().put_back()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
         line = guards.after_phase(self)
@@ -279,54 +202,7 @@ class Conductor(Workspace):
     def reset(self, num=None):
         """Put the feature back to a clean start: reopen a half-built ticket (or ticket num), commit that,
         and forget the run. The tickets stay the truth; only the conductor's note and counters go."""
-        if not self.plan.is_dir():
-            hint = suggest.hint(self.feature, suggest.features(self.root)).strip()
-            raise Stop("no plan folder %s%s" % (self.plan, ". " + hint if hint else ""))
-        owner = self.get("owner")
-        if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
-            raise Stop("%s is owned by session %s. if that session is closed or dead, run reset with FLOW_TAKEOVER=1"
-                       % (self.feature, owner[:8]))
-        paths = tickets.ticket_files(str(self.plan / (os.environ.get("FLOW_TICKETS") or "tasks")))
-        if num is not None:
-            chosen = [p for p in paths if tickets.number(p) == num.zfill(2)]
-            if not chosen:
-                raise Stop("no ticket %s in %s" % (num, self.plan))
-        else:
-            chosen = [p for p in paths if tickets.status(p) in tickets.RESET]
-        reopened = []
-        for path in chosen:
-            if tickets.status(path) != "open":
-                tickets.set_open(path)
-                reopened.append(path)
-        if reopened:
-            nums = ", ".join(tickets.number(p) for p in reopened)
-            if not git.commit_paths(reopened, "chore(%s): reset %s to open" % (self.feature, nums)):
-                raise Stop("reopened %s but could not commit it. this session must be allowed to run git commit"
-                           % nums)
-        dropped = self.lane_sched().drop_lanes()
-        had_run = self.state_file.is_file()
-        keys = ("deferred", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if self.all.get("budget") else ())
-        kept = {k: self.all[k] for k in keys if self.all.get(k)}  # a deferred ticket still owes its review,
-        # and a budget's time stays spent
-        for path, kind in ((self.state_file, "state"), (self.findings_file, "findings")):
-            state.remove(path, kind)
-        for pattern in ("ask-%s.*" % self.feature, "ask-%s-L*" % self.feature, "scout-%s-*" % self.feature,
-                        "edit-%s-*" % self.feature):
-            for path in self.state_file.parent.glob(pattern):
-                path.unlink()
-        if not reopened and not had_run and not dropped:
-            return "OK nothing to reset for %s. run %s %s" % (self.feature, self.invoke, self.feature)
-        self.all = RunState(self.state_file, kept)
-        Workspace.__init__(self, self)
-        if kept:
-            self.save()
-        self.log("RESET")
-        done = ["cleared the run state"] if had_run else []
-        if kept.get("deferred"):
-            done.append("kept %d ticket(s) built in fast mode for the feature review" % len(self.deferred()))
-        done += dropped
-        done += ["reopened %s" % tickets.name(p) for p in reopened]
-        return "OK %s. run %s %s" % (", ".join(done), self.invoke, self.feature)
+        return run_reset.reset(self, num)
 
     def prompt(self, lane=None):
         """The full prompt for the BUILD or REVIEW that `next` handed out. Exit 2 (NoPhase) when none is."""
@@ -360,17 +236,7 @@ class Conductor(Workspace):
         """`SCOUT <k> <agent> <reply file>` lines for the phase handed out last, or NONE. Clears old replies."""
         self.check_owner()
         with self.pending_phase("scouts", lane) as ws:
-            if ws.get("phase") not in REGISTRY:
-                raise NoPhase("no BUILD or REVIEW is pending for %s" % self.feature)
-            found = ws.scout_questions()  # the tester's raises NoPhase: it gets no scouts
-            folder = self.state_file.parent
-            scouts.clear(folder, self.feature, ws.scout_slot())
-            ws.st["scout_key"] = ws.phase_key()
-            ws.st["scout_n"] = len(found)
-            ws.save()
-            if found:
-                ws.log("SCOUTS-%d" % len(found))
-            return scouts.listing(folder, self.feature, ws.scout_slot(), found)
+            return ws.list_scouts()
 
     def scout_prompt(self, k, lane=None):
         """The whole prompt of scout k for the phase handed out last."""
@@ -378,19 +244,7 @@ class Conductor(Workspace):
         with self.pending_phase("scout-prompt", lane) as ws:
             if ws.get("scout_key") != ws.phase_key():
                 raise NoPhase("run scouts first: no scouts are listed for the phase pending for %s" % self.feature)
-            return self.one_scout(ws.scout_questions(), k, str(ws.folder.resolve()) if ws.lane else None, ws.prompts_top)
-
-    def one_scout(self, found, k, workdir=None, top="."):
-        if not k.isdigit() or not 1 <= int(k) <= len(found):
-            raise Stop("no scout %s: there are %d" % (k, len(found)))
-        agent, role, question = found[int(k) - 1]
-        try:
-            role_text = prompts.role(self.scripts, agent + ".md", top)
-        except FileNotFoundError as err:
-            raise Stop(str(err))
-        if workdir is not None:  # a lane's scout: its role text as prompts gave it from the lane's folder
-            role_text = lane_runner(role_text, self.scripts)
-        return scouts.prompt(role_text, role, question, workdir)
+            return one_scout(self, ws.scout_questions(), k, str(ws.folder.resolve()) if ws.lane else None, ws.prompts_top)
 
     def plan_scouts(self, brief):
         """The scouts before planning: saves the brief and lists `SCOUT` lines as `scouts` does."""
@@ -426,13 +280,6 @@ class Conductor(Workspace):
         """The lane scheduler: this call's in a lane run, else one for the lane checks, start and reset."""
         sched = self.scheduler()
         return sched if sched.lanes else LaneScheduler(self)
-
-    def show_head(self, path):
-        """path's text at HEAD of the main worktree, or "" when it is not there."""
-        try:
-            return git.show_text("HEAD:%s" % Path(path).as_posix())
-        except RuntimeError:
-            return ""
 
     # ---- planning: stateless, the brief and the draft are all there is --
 
