@@ -7,6 +7,8 @@ import re
 import shlex
 from pathlib import Path
 
+from feature_flow import codeintel
+
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
          "review-single": "ticket-reviewer.md",
          "review-feature": "ticket-reviewer.md", "plan": "feature-planner.md", "plan-review": "plan-reviewer.md",
@@ -106,6 +108,7 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
                    fresh))
         for note in notes:
             task += "\nThe conductor notes: %s" % note
+        task += codeintel.note("reviewer", REPO, sha)
         intro = "The review guide follows. Follow it exactly."
     if workdir is not None:
         folder, branch = workdir
@@ -135,6 +138,7 @@ def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
             "`REVIEW: PASS` or `REVIEW: FAIL`." % (feature, base, plan, ", ".join(nums) or "none"))
     for note in notes:
         task += "\nThe conductor notes: %s" % note
+    task += codeintel.note("reviewer", REPO, base)
     parts = [role_text, "---", "The feature review guide follows. Follow it exactly.", guide, "---", task]
     return "\n\n".join(parts) + "\n"
 

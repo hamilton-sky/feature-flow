@@ -21,6 +21,10 @@ classifiers = [
     "Topic :: Software Development",
 ]
 
+[project.optional-dependencies]
+# a separate tool the scouts and reviewers ask when it is installed (feature_flow/codeintel.py); never imported
+codeintel = ["codecortex>=0.29"]
+
 [project.urls]
 Homepage = "https://github.com/hamilton-sky/feature-flow"
 Source = "https://github.com/hamilton-sky/feature-flow"

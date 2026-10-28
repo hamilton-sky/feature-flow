@@ -23,7 +23,7 @@ One skill, 12 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-t
 [docs/releases.md](docs/releases.md) lists what each release added.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets) · [See the graph](#see-the-graph)
-- [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
+- [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [codeintel](#codeintel-optional) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
 - [Long features and handoff](#long-features-and-handoff) · [Commands and settings](#commands-and-settings) · [What is tested](#what-is-tested) · [Limits](#limits) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
@@ -313,6 +313,17 @@ Before a planner, builder or reviewer starts, the session can spawn cheap helper
 
 `scouts [lane]` lists `SCOUT <k> <agent> <reply file>` lines (or `NONE`) and clears the last ones' replies; `scout-prompt <k> [lane]` prints one scout's prompt. The session saves each reply into its file, and the phase's `prompt` adds them under `## Scout findings (unverified)`, cut to 60 lines each. A reply saved for one phase never reaches another. Retries and later rounds get no scouts. `FLOW_SCOUTS=off` turns them off.
 
+## codeintel (optional)
+
+[codeintel](https://github.com/hamilton-sky/codeintel) is a separate code-intelligence tool: one command answers who calls a function, what a change would break, or where the code that does something lives, from a call graph, a language server and semantic search. feature-flow never needs it. When it is installed and has the repository indexed, two roles get a short `## codeintel` section in their prompt:
+
+- **Scouts** (`flow-scout`, not `flow-web`) are told to ask it `callers`, `impact` or `search` where grep would take several tries.
+- **Reviewers** (every ticket review and the feature review) are told to run `codeintel query --op changed --target <base>`, which lists each function the change removed, re-signed or rewrote with the callers it did not update.
+
+Each of them ends its reply with one line per question, `codeintel: <op> <target>: helped | no answer | wrong: <why>`, and is told to check an answer before relying on it and to fall back to grep. `eval` counts the queries and those lines, and the verdict form asks whether codeintel helped, made no difference or misled the run, with a line for an answer it got wrong: material for a codeintel issue.
+
+To set it up: `pip install "feature-flow-cli[codeintel]"` (or `pip install codecortex`), then `codeintel setup --all .` in the repository. feature-flow asks `codeintel doctor --json` which engines are ready and keeps the answer for an hour in `.feature-flow/state/codeintel.json`; with nothing ready, or no `codeintel` on PATH, the prompts are as before. `FLOW_CODEINTEL=off` leaves it out. In a lane, the agents run it in the lane's worktree, where codeintel may not have an index, and then fall back to grep. The two tools are released on their own and neither imports the other.
+
 ## Questions for the architect, designer or product owner
 
 A builder, reviewer or planner that hits a question it should not decide alone asks it instead of guessing, and the flow pauses that job until the right role answers.
@@ -358,6 +369,7 @@ Every finished run can leave a record of what it cost and what it caught, so a t
 - **`plans/<feature>/eval.json`**: tickets, builds, reviews and rework; tickets settled when the plan was approved and never built; every catch by the check that made it (gate, floor guard, Done when, test first, footprint, reviewer, feature review); the follow-ups in `followups.md` and the deferred checks; who drove the run (`driver`: `person` or `agent`); where the run needed its driver (stops, questions, handoffs, resets); active minutes; and tokens.
 - **`plans/<feature>/followups.md`**: what the run left for later, committed as it goes: the `minor` findings of every passing review, the findings a level 2 ticket passed with after its full rounds, and each `needs` check (below) that could not pass on this host.
 - **Tokens** come from Claude Code's own session transcripts (`~/.claude/projects/`, or `CLAUDE_CONFIG_DIR`), never from the agent: every message of the sessions and subagents that worked in this repo during the run, each counted once, by model and, without lanes, split per ticket by time. Codex sessions are not read yet.
+- **codeintel**: when an agent asked [codeintel](#codeintel-optional), `codeintel` in `eval.json` counts the queries by op and what the agents said of the answers (helped, no answer, wrong, and why), and the form below asks whether it helped.
 - **`plans/<feature>/eval-verdict.md`**: a form for you. Was the plan right, how many fixes you made by hand, would you use it again, and for each catch whether it was real or a false alarm. Run `--eval` again and your answers land in `eval.json`. The false-alarm count is the only way to tell whether the checks are worth their cost.
 - **Later:** `feature-flow eval <feature> --later`, a week or two on, lists the commits since the run whose subject says fix, revert, bug or regression on the paths each ticket's `Touches:` names: the defects the run let through.
 
@@ -474,6 +486,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_BUDGET` | unset | read by `start`: minutes of active work before fast mode turns on, then a re-plan offer; `off` drops it |
 | `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off |
 | `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase |
+| `FLOW_CODEINTEL` | `auto` | `off` keeps codeintel out of the scout's and reviewer's prompts; `auto` adds it when `codeintel doctor` reports an engine ready |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |
