@@ -15,3 +15,4 @@ ticket number. Never edit or delete another line. Keep it short; a human prunes 
 - (10) `Merge` must never go through `hand_out`: tests/py/test_phases.py Session records every REGISTRY hand_out, and the lane walk expects only build and review. To test dispatch without worktrees, patch LaneScheduler.lease/integrate with autospec recorders (test_schedulers.LaneDispatch).
 - (11) test_guards.py imports Run from test_schedulers; never import a TestCase class (e.g. LaneDispatch) into another test module's namespace: discovery would run its tests twice.
 - (12) The Conductor is the main Workspace (subclass); a lane Workspace forwards missing names to it, so a per-ticket method put on Conductor instead of workspace.py silently reads the main view in a lane.
+- (12) codehash.flow_code reads roles/guides relative to the working folder; in a lane call ws.flow_code() (hashes from the main top), never codehash.flow_code directly.

@@ -152,7 +152,7 @@ class Conductor(Workspace):
 
     def check_code(self, allowed=False, final=False):
         """Stop when the files the conductor runs from changed since the ticket was picked."""
-        whole, each = codehash.flow_code(self.scripts)
+        whole, each = self.flow_code()
         if whole == self.get("code_sha"):
             return
         if allowed:

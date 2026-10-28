@@ -25,6 +25,17 @@ from feature_flow.conductor.store import NOTE_SEP, TicketState
 MAIN, LANE, INTEGRATION = "main", "lane", "integration"
 
 
+@contextlib.contextmanager
+def _working_in(folder, back):
+    """Until the helpers take cwd=, the one place the conductor changes the working folder: into folder, then
+    back."""
+    os.chdir(str(folder))
+    try:
+        yield
+    finally:
+        os.chdir(str(back))
+
+
 class Workspace:
     def __init__(self, c, kind=MAIN, lane=0, folder=None):
         self.c = c
@@ -51,11 +62,8 @@ class Workspace:
         if self.folder is None:
             yield self
             return
-        os.chdir(str(self.folder))
-        try:
+        with _working_in(self.folder, self.top):
             yield self
-        finally:
-            os.chdir(str(self.top))
 
     # ---- the state view ------------------------------------------------
 
@@ -187,8 +195,16 @@ class Workspace:
 
     # ---- the code snapshot, the level and the ticket at base -------------
 
+    def flow_code(self):
+        """codehash's fingerprint of the flow code, read from the main worktree's top in a lane or the integration
+        worktree: the roles and guides it covers are the ones the prompts read (prompts_top), never a lane's copies."""
+        if self.folder is None:
+            return codehash.flow_code(self.scripts)
+        with _working_in(self.top, os.getcwd()):
+            return codehash.flow_code(self.scripts)
+
     def snapshot_code(self):
-        whole, each = codehash.flow_code(self.scripts)
+        whole, each = self.flow_code()
         self.st["code_sha"] = whole
         self.st["code_files"] = codehash.dump(each)
 
