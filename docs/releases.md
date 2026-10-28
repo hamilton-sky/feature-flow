@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.25: reviewing the brainstorm together
+
+| Version | Added |
+|---|---|
+| 0.25.0 | **Live brainstorm page** (Claude only; `brainstorm-page <feature> --live <folder>`, published as an artifact that saves itself). Everyone it is shared with can save their own version of each diagram, switch between the original and anyone's version, and **compare with original** (added, removed and renamed boxes and arrows marked). **Ask Claude** in the page redraws a diagram with that person's own Claude. **Talk to Claude** sends the session questions; the session answers on the page (`--asks`, `--answer`) and can put a version into the brainstorm (`--apply`). **Sketch first** (`/feature-flow <feature> brainstorm sketch`): you draw the idea, and the options build on it. |
+
 ## 0.24: seeing the brainstorm
 
 | Version | Added |
