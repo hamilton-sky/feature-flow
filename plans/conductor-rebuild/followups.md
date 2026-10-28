@@ -65,3 +65,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - 1. minor feature_flow/proof.py _repo_of: an absolute plan_dir that is not a folder silently falls back to the working folder; raise GitError instead. (single review)
 - 2. minor feature_flow/conductor/phases/base.py ticket_prompt: builds the prompt twice and slices at len(head), relying on an exact prefix of prompts.build; lane_runner also rewrites the task text. Move the rewrite into prompts.build (runner_base=) or pin the prefix with a test. (single review)
+
+## 16-facade-under-300-lines (left for later)
+
+- 1. minor feature_flow/conductor/schedulers/serial.py: put_back is main-worktree only but LaneScheduler inherits it; note that in its docstring. (single review)
+- 2. minor feature_flow/conductor/guards.py: becoming a catch-all (owner check, handoff, start checks, replan_prompt); a later split must keep the module-style planning import. (single review)
