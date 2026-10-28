@@ -50,3 +50,15 @@ prints over 400: []
 - `feature_flow/lanes.py`, `tests/py/test_lanes_drive.py`
 
 ## Answer
+
+## Attempt note
+
+Attempt from commit 5097b00eefaa7c166a6089744b64dcc7dbc40f73, stopped before any code changed, because the ticket cannot be done inside its `Touches:`.
+
+- **What fails**: Done when needs `merge` in `REGISTRY`, and `bash tests/run.sh` must pass. But `tests/py/test_phases.py` (ticket 08's test, not in this ticket's `Touches:`) pins the registry to five words: `WORDS = ("build", "review", "ask", "test", "final")` (line 25), and `Registry.test_every_registry_word_has_a_class_and_a_row_in_the_table` asserts `sorted(REGISTRY) == sorted(WORDS)` (line 51). I proved this by adding a `Merge(Phase)` with `name = "merge"` to `REGISTRY` in process and running `test_phases.Registry`. It failed with `AssertionError: Lists differ: ['ask', 'build', 'final', 'merge', 'review', 'test'] != ['ask', 'build', 'final', 'review', 'test']` (`Ran 5 tests`, `FAILED (failures=1)`). So the two Done when bullets "REGISTRY holds merge" and "`bash tests/run.sh` passes" cannot both hold unless `tests/py/test_phases.py` changes, and the footprint check sends back a change to it.
+- **A second, smaller trap in the same file**: `Session.call` wraps the `hand_out` of every `REGISTRY` class, and `Walks.test_a_lane_ticket_waits_for_its_merge` ends with `s.check(["build", "review"])`. If the merge phase is ever handed out through `Merge.hand_out`, that test would also see `merge` in its hand-out set. A Merge class that `on_passed` queues by setting the phase word, without calling `hand_out`, avoids this one. Only line 25/51 really blocks.
+- **What is needed**, one of:
+  1. Widen this ticket's `Touches:` with `tests/py/test_phases.py`, and allow one change there: add `"merge"` to `WORDS` at line 25. Then line 60 (`only test and final are run-wide`) still holds, because Merge is `lane_scoped`. This is the smallest change, and it matches spec.md § Interfaces (`phases/`: "... and merge (ticket 10)").
+  2. Add a small ticket before this one, blocked on nothing and touching only `tests/py/test_phases.py`, that adds `"merge"` to `WORDS`. Block 10 on it. (On its own it would fail until 10 lands, so option 1 is cleaner.)
+  3. Drop "`REGISTRY` holds `merge`" from Done when, and keep the merge step in `LaneScheduler` only. This goes against spec.md § Interfaces and the acceptance intent.
+- Nothing else was changed. The rest of the plan reads as doable inside `Touches:`. The leads for the next attempt: `("lanes") > 1` appears 5 times in facade.py (lines 557, 593, 699, 736, 798). The phase-word regex matches facade.py lines 828, 871, 877 and 885, all in the lane section that moves. Ticket 09's `FacadeLanes` is to be replaced outright.
