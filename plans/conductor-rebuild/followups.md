@@ -15,3 +15,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - 1. minor feature_flow/conductor/facade.py: Conductor.__init__ overwrites self.per_session with session_limit(driver), so self.settings.per_session (4) and self.per_session (0) disagree for an agent driver; a later ticket reading self.settings.per_session gets the wrong value. Document settings.per_session as the raw value, or have callers use session_limit. (single review)
 - 2. minor feature_flow/conductor/settings.py: mode_ok rebuilds the name->rule dict on every call; build it once at module level. (single review)
+
+## 05-typed-state-views (left for later)
+
+- 1. minor feature_flow/conductor/store.py: TicketState for lane 0 has prefix "", so clear() deletes every key including RUN_KEYS and other lanes' keys. It matches the old dict.clear() and clear() is only called inside in_lane today, but once ticket 12 hands views to phases this is a data-loss trap. Make lane-0 clear() drop only non-RUN_KEYS, non-L<k>. keys, or refuse it. (single review)
+- 2. minor feature_flow/conductor/facade.py: Conductor.num now calls self.st.num(key), so with a plain dict in self.st (as test_proof sets it) num() raises AttributeError where it used to work. Use store.number(self.st.get(key, "0"), key, self.state_file) so any mapping works. (single review)
