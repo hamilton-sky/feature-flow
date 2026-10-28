@@ -197,7 +197,7 @@ class Ask(Phase):
             task = ("Work in the folder `%s` (`cd %s` first): the worktree of this ticket. Every path here is relative "
                     "to it.\n\n%s" % (Path.cwd(), shlex.quote(str(Path.cwd())), task))
         try:
-            role_text = prompts.role(ws.scripts, prompts.ROLES["ask-" + role])
+            role_text = prompts.role(ws.scripts, prompts.ROLES["ask-" + role], ws.prompts_top)
         except FileNotFoundError as err:
             raise Stop(str(err))
         return "%s\n\n---\n\n%s\n" % (role_text, task) + ws.scout_findings()

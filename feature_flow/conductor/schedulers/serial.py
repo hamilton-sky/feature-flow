@@ -62,9 +62,10 @@ class SerialScheduler:
         self.start_ticket(first)
         return Build.hand_out(self.c)
 
-    def start_ticket(self, path):
-        """Fresh per-ticket state for the ticket at path, based at HEAD, then the smoke test."""
-        c = self.c
+    def start_ticket(self, path, ws=None):
+        """Fresh per-ticket state for the ticket at path, based at HEAD, in ws (the main worktree when None), then
+        the smoke test."""
+        c = ws if ws is not None else self.c
         c.st["limit"] = c.run_limit()
         c.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
                      "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",

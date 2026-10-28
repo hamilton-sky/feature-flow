@@ -1,6 +1,7 @@
 """What every phase shares: the Outcome of judging it, and the defaults of the phase protocol.
 
-Until ticket 12 the `ws` a phase gets is the Conductor itself; phases call back into it for check_code,
+The `ws` a phase gets is a Workspace (workspace.py): the Conductor itself in the main worktree, or a lane's
+Workspace. Phases read the state, the lane and the lane word from it, and call back into it for check_code,
 count_run, save, log and emit.
 """
 
@@ -72,8 +73,8 @@ def ticket_prompt(ws, word, notes=()):
         return prompts.build(word, ws.scripts, ws.feature, ws.ticket(), ws.get("num"), ws.get("base"),
                              notes,
                              retry=ws.num("round") > 0,
-                             workdir=(str(Path.cwd()), lanes.branch(ws.feature, ws.get("num"))) if ws.lane else None
-                             ) + ws.scout_findings()
+                             workdir=(str(Path.cwd()), lanes.branch(ws.feature, ws.get("num"))) if ws.lane else None,
+                             top=ws.prompts_top) + ws.scout_findings()
     except FileNotFoundError as err:
         raise Stop(str(err))
 

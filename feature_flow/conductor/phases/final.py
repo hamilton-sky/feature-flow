@@ -99,7 +99,8 @@ class Final(Phase):
         try:
             return prompts.feature_review(ws.scripts, ws.feature, ws.plan.as_posix(), ws.all["final_base"], nums,
                                           [n for n in [cls.final_note(ws), ws.all.get("edit_note", "")] if n],
-                                          os.environ.get("FLOW_TICKETS") or "tasks") + ws.scout_findings()
+                                          os.environ.get("FLOW_TICKETS") or "tasks", ws.prompts_top
+                                          ) + ws.scout_findings()
         except FileNotFoundError as err:
             raise Stop(str(err))
 

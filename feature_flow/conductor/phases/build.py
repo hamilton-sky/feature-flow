@@ -61,6 +61,7 @@ class Build(Phase):
         if ws.get("batch"):
             try:
                 return prompts.build("build", ws.scripts, ws.feature, ws.ticket(), ws.get("num"), ws.get("base"),
+                                     top=ws.prompts_top
                                      ) + "\n" + ws.scheduler().batch_note() + "\n" + ws.scout_findings()
             except FileNotFoundError as err:
                 raise Stop(str(err))

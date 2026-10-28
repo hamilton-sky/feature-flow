@@ -79,7 +79,7 @@ class Test(Phase):
             return prompts.tester(ws.scripts, ws.feature, ws.plan.as_posix(), ws.all.get("test_base", ""),
                                   end.acceptance_command(), end.acceptance_folder(),
                                   rulings if ws.all.get("test_mode") == "fix" else (),
-                                  [n for n in (ws.all.get("test_note", ""),) if n])
+                                  [n for n in (ws.all.get("test_note", ""),) if n], ws.prompts_top)
         except FileNotFoundError as err:
             raise Stop(str(err))
 
