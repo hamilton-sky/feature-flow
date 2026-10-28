@@ -1,7 +1,7 @@
 # Brainstorm: <feature>
 
 Picked by: <person|agent>
-Style: route
+Style: <route|blueprint|sketch|paper|terminal|bright>
 
 ## Idea
 
@@ -19,6 +19,12 @@ Style: route
 flowchart LR
   User[User] --> Api[New endpoint]
   Api --> Store[(Existing store)]
+  classDef orange fill:#fbe8da,stroke:#d0661a
+  classDef blue fill:#e0eafb,stroke:#2f6fdb
+  classDef green fill:#e1f1e3,stroke:#2f8a3e
+  class User orange
+  class Api blue
+  class Store green
 ```
 
 - Pros: <...>

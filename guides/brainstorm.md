@@ -49,7 +49,20 @@ If the choice turns on module boundaries, a screen or scope, ask the `architect`
 
 ## Step 4: The user picks
 
-Write the brainstorm file (below) with the options and no Chosen yet, then make it a review page: `python3 scripts/flow-status.py <feature> --brainstorm-page` writes `.feature-flow/state/brainstorm-<feature>.html` beside it, with a sidebar for the sections, a light, dark or system switch, diagrams whose boxes the user can drag, and an arrow animation they can turn on. The look is the brainstorm's `Style:` line (`route`, or `blueprint` if the user asks for it). If you can publish an artifact, add `--fragment` and publish that file; otherwise give the user the file's path to open. Then show the options and your pick, and ask: which one? They may pick, edit, mix, or drop the brainstorm. On a drop, delete the file and write the brief as before.
+Write the brainstorm file (below) with the options and no Chosen yet, then make it a review page: `python3 scripts/flow-status.py <feature> --brainstorm-page` writes `.feature-flow/state/brainstorm-<feature>.html` beside it, with a sidebar for the sections, a light, dark or system switch, diagrams whose boxes the user can drag, and an arrow animation they can turn on. The look is the brainstorm's `Style:` line: the style the user names, else the one that fits the subject (below). If you can publish an artifact, add `--fragment` and publish that file; otherwise give the user the file's path to open. Then show the options and your pick, and ask: which one? They may pick, edit, mix, or drop the brainstorm. On a drop, delete the file and write the brief as before.
+
+Styles, and what each suits:
+
+| Style | Suits |
+|---|---|
+| `route` | the default: most features |
+| `blueprint` | architecture, backends, system design |
+| `sketch` | early, fuzzy ideas, a first sketch |
+| `paper` | a decision to share, print or send outside the team |
+| `terminal` | infrastructure, CLIs, dev tools, pipelines, data jobs |
+| `bright` | consumer apps, screens, onboarding, UI and UX |
+
+Colour boxes by role, the same way on every diagram, so a colour means one thing: people `orange`, screens `purple`, services and jobs `blue`, stored data `green`, outside systems `grey`, and `red` for the part an option puts at risk. Leave other boxes plain. In mermaid that is a `classDef <colour> ...` and a `class <ids> <colour>` line per colour; the page reads the colour name. The page's Arrange button re-lays a diagram (left to right, top to bottom, radial, grid), so draw for meaning, not for layout.
 
 Write the file with the shell, not a file tool, from [templates/brainstorm.md](templates/brainstorm.md), and again with Chosen and Rejected filled in once the user picks (make the page again if they want to see it):
 

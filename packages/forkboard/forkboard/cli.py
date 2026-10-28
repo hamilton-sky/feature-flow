@@ -10,7 +10,8 @@ usage: forkboard render DOC [--theme NAME] [--fragment] [--out FILE]
 DOC is a review document (doc.py), or - to read it from stdin. render writes the page beside DOC (same name, .html),
 to --out, or to stdout when DOC is -. live writes DIR/index.html and DIR/state.json, to publish together as an
 artifact that saves itself; it keeps what people saved in a state.json already there. STATE is that state.json, or
-its folder. asks lists the open questions, answer answers one, version prints a version of a figure as mermaid.
+its folder. asks lists the open questions, answer answers one, version prints a version of a figure as mermaid. themes lists
+the themes and what each one suits.
 """
 
 import json
@@ -71,7 +72,9 @@ def main(argv, out=None, err=None):
         err.write(USAGE + "\n")
         return 2
     if command == "themes":
-        out.write("\n".join(page.themes()) + "\n")
+        names = page.themes()
+        width = max(map(len, names)) if names else 0
+        out.write("".join("%s  %s\n" % (n.ljust(width), page.suits(n)) for n in names))
         return 0
     if command in ("render", "live"):
         name = (flags["--theme"] or page.DEFAULT_THEME).strip().lower()

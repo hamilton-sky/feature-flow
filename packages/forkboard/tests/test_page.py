@@ -38,12 +38,14 @@ class Rendering(unittest.TestCase):
     def test_each_flowchart_can_be_edited_and_undone(self):
         tools = re.search(r'<div class="tools">(.*?)</div>', self.html).group(1)
         self.assertEqual(re.findall(r'data-act="(\w+)"', tools),
-                         ["add", "shapes", "colour", "rename", "connect", "delete", "undo", "redo", "reset", "copy"])
+                         ["add", "shapes", "colour", "arrange", "rename", "connect", "delete", "undo", "redo", "reset",
+                          "copy"])
+        self.assertEqual(re.findall(r'data-arrange="(\w+)"', tools), ["LR", "TD", "radial", "grid"])
         self.assertIn('<input class="rename"', tools)
         self.assertEqual(re.findall(r'data-shape="(\w+)"', tools),
                          ["rect", "round", "stadium", "diamond", "cylinder", "hexagon", "circle"])
         editor = page.asset("editor.js")
-        for name in ("function mermaid(g)", "function change(fn, how)", "function restore(from, to)", "'Delete'", "key === 'z'"):
+        for name in ("function mermaid(g)", "function change(fn, how)", "function radial(g)", "function grid(g)", "function restore(from, to)", "'Delete'", "key === 'z'"):
             self.assertIn(name, editor)
         self.assertIn(editor, self.html)
 
@@ -92,10 +94,23 @@ class Rendering(unittest.TestCase):
         self.assertLess(out.index("I --&gt; J"), out.index("A --&gt; B"))
 
     def test_every_theme_is_a_css_file_with_its_fonts(self):
-        self.assertEqual(page.themes(), ["blueprint", "route"])
+        self.assertEqual(page.themes(), ["blueprint", "bright", "paper", "route", "sketch", "terminal"])
         for name in page.themes():
-            self.assertTrue(page.FONT_LINE.search(page.theme_css(name)), name)
+            css = page.theme_css(name)
+            self.assertTrue(page.FONT_LINE.search(css), name)
+            self.assertTrue(page.suits(name), name)  # what the agent picks a theme by
+            self.assertIn(':root[data-theme="dark"]', css, name)  # the page's light, dark and system switch
+            self.assertIn('@media (prefers-color-scheme: dark)', css, name)
         self.assertIsNone(page.theme_css("neon"))
+        self.assertEqual(page.suits("neon"), "")
+
+    def test_a_theme_can_shape_the_boxes(self):
+        base = page.asset("base.css")
+        for token in ("--node-radius", "--node-stroke", "--node-filter", "--node-font", "--edge-width", "--edge-filter"):
+            self.assertIn("var(%s" % token, base)
+        self.assertIn("url(#fb-rough)", page.theme_css("sketch"))
+        self.assertIn('<filter id="fb-rough" ', self.html)  # what the sketch theme points at
+        self.assertEqual(self.html.count('id="fb-rough"'), 1)
 
 
 if __name__ == "__main__":

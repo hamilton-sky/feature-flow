@@ -88,6 +88,55 @@ test('the editor adds, connects, renames, deletes, undoes and resets', async () 
   await context.close();
 });
 
+const boxes = (fig) => fig.evaluate((f) => [...f.querySelectorAll('g.node')].map((n) => n.getBoundingClientRect())
+  .map((r) => ({ x: r.x, y: r.y, w: r.width, h: r.height })));
+const overlap = (a, b) => a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.h - 1 && b.y < a.y + a.h - 1;
+
+test('Arrange lays the boxes out four ways, without overlaps, and undo puts them back', async () => {
+  const { page, errors, context } = await open('file://' + path.join(dir, 'page.html'));
+  const fig = page.locator('figure.graph').first();
+  await fig.locator('[data-act=add]').click();  // five boxes, so radial and grid have something to arrange
+  await page.keyboard.type('Audit log'); await page.keyboard.press('Enter');
+  await fig.locator('[data-act=add]').click();
+  await page.keyboard.type('Mailer'); await page.keyboard.press('Enter');
+  const where = () => fig.evaluate((f) => f.editor.get());
+  for (const how of ['radial', 'grid', 'TD', 'LR']) {
+    const before = await where();
+    await fig.locator('[data-act=arrange]').click();
+    await fig.locator('[data-arrange=' + how + ']').click();
+    const after = await where();
+    assert.notDeepEqual(after.pos, before.pos, how);
+    assert.deepEqual(await counts(fig), [5, 3], how);
+    const b = await boxes(fig);
+    for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) assert.ok(!overlap(b[i], b[j]), how + ': boxes ' + i + ' and ' + j + ' overlap');
+    if (how === 'TD' || how === 'LR') assert.equal(after.graph.dir, how);
+    await page.keyboard.press('Control+z');
+    assert.deepEqual((await where()).pos, before.pos, how + ' undone');
+    await page.keyboard.press('Control+Shift+z');
+  }
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('every theme draws the page, and a theme shapes the boxes', async () => {
+  const names = forkboard('themes').trim().split('\n').map((l) => l.split(/\s+/)[0]);
+  assert.ok(names.length >= 6);
+  for (const name of names) {
+    const file = path.join(dir, name + '.html');
+    forkboard('render', path.join(FIXTURES, 'csv.json'), '--theme', name, '--out', file);
+    const { page, errors, context } = await open('file://' + file, { viewport: { width: 390, height: 844 } });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390, name);
+    const look = await page.locator('figure.graph g.node rect.plain').first().evaluate((r) => {
+      const s = getComputedStyle(r); return { rx: s.rx, filter: s.filter, stroke: s.strokeWidth };
+    });
+    if (name === 'sketch') assert.match(look.filter, /url\(.*fb-rough/, name);
+    if (name === 'terminal') assert.equal(look.rx, '0px', name);
+    if (name === 'route') assert.deepEqual([look.rx, look.filter], ['8px', 'none'], name);
+    assert.deepEqual(errors, [], name);
+    await context.close();
+  }
+});
+
 test('at phone width nothing scrolls sideways', async () => {
   const { page, errors, context } = await open('file://' + path.join(dir, 'page.html'), { viewport: { width: 390, height: 844 } });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);

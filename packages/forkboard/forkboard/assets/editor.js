@@ -112,6 +112,57 @@
     });
     return pos;
   }
+  function radial(g) {  // the most joined box in the middle, the rest in rings by how many arrows away they are
+    var pos = {}, near = {}, ids = g.nodes.map(function (n) { return n.id; }), byId = {};
+    g.nodes.forEach(function (n) { measure(n); byId[n.id] = n; near[n.id] = []; });
+    g.edges.forEach(function (e) { if (e.from !== e.to && near[e.from] && near[e.to]) { near[e.from].push(e.to); near[e.to].push(e.from); } });
+    if (!ids.length) return pos;
+    var hub = ids.reduce(function (a, b) { return near[b].length > near[a].length ? b : a; }), ring = {}, rings = [[hub]];
+    ring[hub] = 0;
+    for (var k = 0; rings[k].length; k++) {
+      rings.push([]);
+      rings[k].forEach(function (id) { near[id].forEach(function (to) { if (ring[to] === undefined) { ring[to] = k + 1; rings[k + 1].push(to); } }); });
+    }
+    rings.pop();
+    var loose = ids.filter(function (id) { return ring[id] === undefined; });  // boxes with no path to the middle go outside
+    if (loose.length) rings.push(loose);
+    var widest = g.nodes.reduce(function (m, n) { return Math.max(m, n.w, n.h); }, 0), radius = 0;
+    pos[hub] = { x: 0, y: 0 };
+    var angle = {};
+    rings.slice(1).forEach(function (row, i) {
+      var around = row.reduce(function (s, id) { return s + byId[id].w + 36; }, 0), n = row.length;
+      radius = Math.max(radius + widest * 0.55 + 60, around / (2 * Math.PI), i ? 0 : 150);
+      var want = {};  // beside the boxes it joins in the ring inside, so arrows cross less
+      row.forEach(function (id, j) {
+        var x = 0, y = 0;
+        near[id].forEach(function (to) { if (angle[to] !== undefined) { x += Math.cos(angle[to]); y += Math.sin(angle[to]); } });
+        want[id] = x || y ? Math.atan2(y, x) : -Math.PI / 2 + (2 * Math.PI * j) / n;
+      });
+      row = row.slice().sort(function (a, b) { return want[a] - want[b]; });
+      var turn = Math.atan2(row.reduce(function (s, id, j) { return s + Math.sin(want[id] - (2 * Math.PI * j) / n); }, 0),
+        row.reduce(function (s, id, j) { return s + Math.cos(want[id] - (2 * Math.PI * j) / n); }, 0));
+      row.forEach(function (id, j) {
+        var a = angle[id] = turn + (2 * Math.PI * j) / n;
+        pos[id] = { x: Math.round(radius * Math.cos(a) * 1.25), y: Math.round(radius * Math.sin(a)) };
+      });
+    });
+    return pos;
+  }
+  function grid(g) {  // rows of equal cells, in the order the arrows run
+    var flow = layout(g), pos = {}, order = g.nodes.slice().sort(function (a, b) {
+      var pa = flow[a.id], pb = flow[b.id];
+      return g.dir === 'LR' ? pa.x - pb.x || pa.y - pb.y : pa.y - pb.y || pa.x - pb.x;
+    });
+    var cols = Math.max(1, Math.ceil(Math.sqrt(order.length * 1.6)));
+    var w = order.reduce(function (m, n) { return Math.max(m, n.w); }, 0) + 44, h = order.reduce(function (m, n) { return Math.max(m, n.h); }, 0) + 48;
+    order.forEach(function (n, i) { pos[n.id] = { x: (i % cols) * w, y: Math.floor(i / cols) * h }; });
+    return pos;
+  }
+  var ARRANGE = {
+    LR: function (g) { g.dir = 'LR'; return layout(g); },
+    TD: function (g) { g.dir = 'TD'; return layout(g); },
+    radial: radial, grid: grid
+  };
   function border(n, p, toward) {
     var dx = toward.x - p.x, dy = toward.y - p.y;
     if (!dx && !dy) return { x: p.x, y: p.y };
@@ -129,7 +180,7 @@
       el('rect', { x: x, y: y + 6, width: w, height: h - 6, class: 'shape' }, g);
       return el('ellipse', { cx: 0, cy: y + 6, rx: w / 2, ry: 6, class: 'shape' }, g);
     }
-    return el('rect', { x: x, y: y, width: w, height: h, rx: n.shape === 'stadium' ? h / 2 : n.shape === 'round' ? 14 : 8, class: 'shape' }, g);
+    return el('rect', { x: x, y: y, width: w, height: h, rx: n.shape === 'stadium' ? h / 2 : n.shape === 'round' ? 14 : 8, class: n.shape === 'stadium' || n.shape === 'round' ? 'shape' : 'shape plain' }, g);
   }
   var BRACKETS = { rect: ['[', ']'], round: ['(', ')'], stadium: ['([', '])'], diamond: ['{', '}'], hexagon: ['{{', '}}'], circle: ['((', '))'], cylinder: ['[(', ')]'] };
   var OPS = { arrow: '-->', open: '---', dotted: '-.->', thick: '==>' };
@@ -434,6 +485,12 @@
       if (!item) { paints.forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.colour === now)); }); return; }
       if (id && item.dataset.colour !== now) change(function () { g.nodes.forEach(function (n) { if (n.id === id) n.colour = item.dataset.colour; }); });
       if (id && nodes[id]) nodes[id].focus({ preventScroll: true });
+    });
+    dropdown(tool('arrange'), function (item) {
+      if (!item || !ARRANGE[item.dataset.arrange]) return;
+      change(function () { pos = ARRANGE[item.dataset.arrange](g); });
+      toast(item.querySelector('b').textContent + '. Undo puts the boxes back.');
+      svg.focus({ preventScroll: true });
     });
     tool('rename').addEventListener('click', rename);
     tool('delete').addEventListener('click', remove);

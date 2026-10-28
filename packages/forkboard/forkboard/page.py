@@ -15,6 +15,7 @@ from pathlib import Path
 from .graph import BOXES, COLOURS, flowchart
 
 MERMAID = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"
+SUITS_LINE = re.compile(r"/\*\s*suits:\s*(.*?)\s*\*/")
 FONT_LINE = re.compile(r"/\*\s*fonts:\s*(https://fonts\.googleapis\.com/\S+)\s*\*/")
 HERE = Path(__file__).resolve().parent
 THEMES = HERE / "themes"
@@ -32,6 +33,12 @@ def themes():
     return sorted(p.stem for p in THEMES.glob("*.css"))
 
 
+def suits(name):
+    """What a theme suits, from its `/* suits: ... */` line, or ""."""
+    m = SUITS_LINE.search(theme_css(name) or "")
+    return m.group(1).strip() if m else ""
+
+
 def theme_css(name):
     """The CSS of a theme, or None when there is no such theme."""
     path = THEMES / (name + ".css")
@@ -47,6 +54,19 @@ def dots(attr, checked):
         for name, hue, _ in COLOURS + (("", "", ""),)).replace('title=""', 'title="None"').replace('aria-label=""', 'aria-label="None"')
 
 
+ARRANGE = (  # what the Arrange menu offers: layout, icon, name, what it suits
+    ("LR", '<path d="M3 9h5M13 9h5"/><rect x="1" y="6" width="4" height="6"/><rect x="9" y="6" width="4" height="6"/>'
+           '<rect x="18" y="6" width="5" height="6"/>', "Left to right", "steps that run in order"),
+    ("TD", '<path d="M12 5v2M12 11v2"/><rect x="8" y="1" width="8" height="4"/><rect x="8" y="7" width="8" height="4"/>'
+           '<rect x="8" y="13" width="8" height="4"/>', "Top to bottom", "layers, or a tall chain"),
+    ("radial", '<circle cx="12" cy="9" r="3"/><path d="M12 6V3M12 12v3M9 9H5M15 9h4"/><circle cx="12" cy="2" r="1.5"/>'
+               '<circle cx="12" cy="16" r="1.5"/><circle cx="3.5" cy="9" r="1.5"/><circle cx="20.5" cy="9" r="1.5"/>',
+     "Radial", "one part many others call"),
+    ("grid", '<rect x="2" y="2" width="8" height="6"/><rect x="14" y="2" width="8" height="6"/>'
+             '<rect x="2" y="10" width="8" height="6"/><rect x="14" y="10" width="8" height="6"/>',
+     "Grid", "a list of parts, compact"),
+)
+
 TOOLS = ('<span class="split"><button type="button" data-act="add">Add box</button>'
          '<button type="button" data-act="shapes" aria-haspopup="menu" aria-expanded="false" '
          'aria-label="Pick the kind and colour of box">&#9662;</button><span class="menu" role="menu" hidden>%s'
@@ -57,6 +77,11 @@ TOOLS = ('<span class="split"><button type="button" data-act="add">Add box</butt
          + '<span class="split"><button type="button" data-act="colour" aria-haspopup="menu" aria-expanded="false">'
            'Colour &#9662;</button><span class="menu" role="menu" hidden><span class="menu-head">Colour of the selected '
            'box</span>%s</span></span>' % dots("colour", "")
+         + '<span class="split"><button type="button" data-act="arrange" aria-haspopup="menu" aria-expanded="false">'
+           'Arrange &#9662;</button><span class="menu" role="menu" hidden><span class="menu-head">Lay the boxes out'
+           '</span>%s</span></span>' % "".join(
+               '<button type="button" role="menuitem" data-arrange="%s"><svg viewBox="0 0 24 18" aria-hidden="true">%s'
+               '</svg><span><b>%s</b><small>%s</small></span></button>' % row for row in ARRANGE)
          + "".join('<button type="button" data-act="%s">%s</button>' % pair for pair in (
              ("rename", "Rename"), ("connect", "Connect"), ("delete", "Delete"), ("undo", "Undo"), ("redo", "Redo"),
              ("reset", "Reset"), ("copy", "Copy as mermaid"))))
@@ -206,6 +231,11 @@ def palette_js():
     return "\nvar PALETTE = %s;" % json.dumps({name: [hue, fill] for name, hue, fill in COLOURS})
 
 
+# shared SVG effects a theme can point at: url(#fb-rough) makes lines look drawn by hand
+FX = ('<svg class="fx" aria-hidden="true" focusable="false"><filter id="fb-rough" filterUnits="userSpaceOnUse" '
+      'x="-4000" y="-4000" width="8000" height="8000"><feTurbulence type="fractalNoise" baseFrequency="0.03" '
+      'numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="3.2"/></filter></svg>\n')
+
 KINDS = {"chosen": "callout good", "rejected": "muted", "open": "callout", "callout": "callout"}
 
 
@@ -260,9 +290,9 @@ def render(doc, css, theme_name, fragment=False, live=False):
         '<div class="seg" role="group" aria-label="Theme"><button type="button" data-theme-set="system">System</button>'
         '<button type="button" data-theme-set="light">Light</button><button type="button" data-theme-set="dark">Dark'
         '</button></div><label class="motion"><input type="checkbox" id="motion"> Animate the arrows</label></div>'
-        '</nav>\n<main>\n<header class="hero"><div class="eyebrow">%s review &middot; style %s</div>'
+        '</nav>\n%s<main>\n<header class="hero"><div class="eyebrow">%s review &middot; style %s</div>'
         '<h1>%s</h1>%s<div class="meta">%s</div></header>\n%s\n</main>\n</div>\n%s<script>\n%s\n</script>\n'
-        % (html.escape(ident), ' data-live="1"' if live else "", len(nav), html.escape(kind_name), "".join(nav),
+        % (html.escape(ident), ' data-live="1"' if live else "", len(nav), html.escape(kind_name), "".join(nav), FX,
            html.escape(kind_name), html.escape(theme_name), inline(doc.get("title") or page_title),
            intro, meta_html, "\n".join(body),
            '<script src="%s"></script>\n' % MERMAID if needs_mermaid else "",

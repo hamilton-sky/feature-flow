@@ -201,7 +201,7 @@ class Command(unittest.TestCase):
 
     def test_mistakes_say_what_to_do(self):
         self.assertEqual(self.run_page("csv", "--style", "neon")[0], 1)
-        self.assertIn("no style neon: pick one of blueprint, route", self.run_page("csv", "--style", "neon")[2])
+        self.assertIn("no style neon: pick one of blueprint, bright, paper, route, sketch, terminal", self.run_page("csv", "--style", "neon")[2])
         code, _, err = self.run_page("other")
         self.assertEqual(code, 1)
         self.assertIn("no brainstorm for other", err)
