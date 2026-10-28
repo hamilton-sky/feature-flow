@@ -1,7 +1,7 @@
 # Add the size ratchet and prove the bar end to end
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 13, 16
 Test first: no
 Level: 3
@@ -43,6 +43,24 @@ prints , 0 failed
 - `tests/py/test_conductor_package.py` and `tests/py/test_golden.py` (new in tickets 03 and 01)
 
 ## Answer
+
+**Built**: `tests/py/test_conductor_package.py` `test_ratchet` (one `subTest` per `.py` under `feature_flow/conductor/`, skipping `__pycache__`; `facade.py` under 300, every other file under 400; the message is `<path> has N lines, the limit is under L`). It was written and committed in 6c14287 by the last attempt. This build made no code change. It reran every check at e7cb19c, after the plan owner changed the acceptance bullet, and recorded the results.
+
+**Proof** (all run fresh in this build):
+- `python3 -m unittest discover -s tests/py -p "test_conductor_package.py" -v`: `test_ratchet ... ok`, `Ran 6 tests`, `OK`, exit 0. facade.py has 296 lines.
+- `python3 -c "import feature_flow.conductor as c; print(c.Conductor, c.Stop, c.NoPhase)"`: `<class 'feature_flow.conductor.facade.Conductor'> <class 'feature_flow.conductor.errors.Stop'> <class 'feature_flow.conductor.errors.NoPhase'>`, exit 0. The check block's gone command prints `conductor.py gone: True`, exit 0.
+- `python3 -m unittest discover -s plans/conductor-rebuild/acceptance -v`: last line `FAILED (failures=13)` (`Ran 48 tests`), exit 1. A3 `test_a3_a_run_paused_at_a_handoff_on_the_old_code_goes_on_with_the_new_code ... ok` and A4 `test_a4_a_run_paused_mid_ticket_meets_the_flow_code_changed_stop ... ok`. All 13 failures are `support.twins` `Lists differ`. Every differing line is in the state's `code_files`. They match the failures the Attempt note below lists:
+  - Package file names in `code_files` (`feature_flow/conductor/__init__.py`, ... where the old code had `feature_flow/conductor.py`). This is the file move itself, so the flow code cannot remove it. 11 tests have it: test_rebuild_lanes `test_a_lane_run_leases_merges_and_finishes_as_today`; test_rebuild_modes `test_other_commands_ignore_a_bad_flow_lanes`, `test_patching_check_code_on_the_class_turns_the_code_check_off`, `test_batch_preconditions`; test_rebuild_user `test_state_log_findings_ticket_sections_and_followups_are_the_same`, `test_the_17_commands_print_the_same_lines_with_the_same_exit_codes`, `test_a_batch_is_judged_as_today`, `test_a_fast_run_defers_reviews_to_one_feature_review_then_done`, `test_a_serial_run_with_acceptance_tests_ends_with_the_same_done_line`, `test_relay_hands_off_after_each_phase`, `test_serial_run_hands_out_the_tests_before_the_first_ticket`.
+  - Lane `L<n>.code_files` keys are repo-relative (`agents/flow-architect.md`) where the old code had absolute ones (`<TMP-REPO>/agents/flow-architect.md`). The likely cause is ticket 15's removal of `os.chdir`: `Workspace.flow_code` now hashes from the main top. 2 tests have it: test_rebuild_lanes `test_a_lane_worktree_that_is_gone_stops_as_today`, `test_guides_and_roles_come_from_the_main_worktree`.
+  These go to the conductor's end-of-run acceptance as fix tickets, as the ticket says. This ticket does not fix them.
+- `bash tests/run.sh`: `466 passed, 0 failed`, exit 0.
+- `git log --oneline -- tests/py/golden`: one line, ticket 01's commit: `065b00c test(conductor-rebuild): 01 Record golden runs of the conductor before anything moves`.
+
+**Decisions**: kept the test from 6c14287 unchanged. It already does what the ticket asks.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the acceptance fix tickets need a ruling on `code_files`. Cause 1 can only pass if the twins comparison normalises the file list, which is a tester or product-owner call on a frozen acceptance test. Cause 2 is a real state-value change that a codehash naming fix in the lane workspace could undo.
 
 ## Attempt note
 
