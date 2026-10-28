@@ -3,13 +3,12 @@ stops the run): handed out, its answer recorded, then judged, and the build or r
 
 import re
 import shlex
-from pathlib import Path
 
 from feature_flow import git, proof, prompts, scouts, state, tickets
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import build as build_phase
 from feature_flow.conductor.phases import review as review_phase
-from feature_flow.conductor.phases.base import Outcome, Phase, read_reply
+from feature_flow.conductor.phases.base import Outcome, Phase, lane_runner, read_reply
 from feature_flow.conductor.replies import ANSWER, demote, section_after
 from feature_flow.conductor.store import NOTE_SEP
 
@@ -31,7 +30,7 @@ class Ask(Phase):
         """(role, question) of a `## Ask: <role>` section the builder appended to the ticket and nobody answered
         yet (no `## Consulted` section after it), else (None, "")."""
         try:
-            text = Path(ws.ticket()).read_text(encoding="utf-8", errors="replace")
+            text = ws.at(ws.ticket()).read_text(encoding="utf-8", errors="replace")
         except OSError:
             return None, ""
         asks = list(ASK_HEADING.finditer(text))
@@ -60,7 +59,7 @@ class Ask(Phase):
         state.write_text(cls.ask_file(ws, "question"), question.strip("\n") + "\n")
         state.remove(cls.ask_file(ws, "answer"))
         ws.st.update({"phase": "ask", "asks": ws.num("asks") + 1, "ask_role": role, "ask_from": source,
-                      "ask_attempt": 1, "verdict": "", "ask_sha": git.head()})
+                      "ask_attempt": 1, "verdict": "", "ask_sha": git.head(cwd=ws.folder)})
         ws.save()
         return cls.emit_ask(ws)
 
@@ -81,17 +80,18 @@ class Ask(Phase):
         stopped until the user answers under `## Consulted (user)`; the ticket is then built again."""
         role, _ = cls.open_ask(ws)
         if role != "user":
-            tickets.append_section(ws.ticket(), "Ask: user", demote(question))
+            tickets.append_section(ws.at(ws.ticket()), "Ask: user", demote(question))
             if source == "review":
-                tickets.set_open(ws.ticket())
-            if not git.commit_file(ws.ticket(), "chore(%s): %s question for the user" % (ws.feature, ws.get("num"))):
+                tickets.set_open(ws.at(ws.ticket()))
+            if not git.commit_file(ws.ticket(), "chore(%s): %s question for the user" % (ws.feature, ws.get("num")),
+                                   cwd=ws.folder):
                 raise Stop("cannot commit the question to %s. this session must be allowed to run git commit"
                            % ws.ticket_name())
         ws.st.update({"phase": "build", "attempt": min(ws.num("attempt"), ws.max_retries - 1)})
         ws.save()
-        where = " (in the lane folder %s)" % Path.cwd() if ws.lane else ""
+        where = " (in the lane folder %s)" % ws.folder.resolve() if ws.lane else ""
         raise Stop("%s asks you: %s. answer it at the end of %s%s under `## Consulted (user)`, commit, and run next%s"
-                   % (ws.ticket_name(), " ".join(question.split())[:600], proof.repo_relative(ws.ticket()), where,
+                   % (ws.ticket_name(), " ".join(question.split())[:600], proof.repo_relative(ws.ticket(), cwd=ws.folder), where,
                       " %d" % ws.lane if ws.lane else ""))
 
     @classmethod
@@ -165,9 +165,10 @@ class Ask(Phase):
                     + [" ".join(("%s THE PRODUCT OWNER: %s" % (question, answer)).split())[:2000]])
                 answer += ("\n\nThe product owner ruled the test wrong: leave it failing and finish the rest. The tester "
                            "changes it once this ticket is resolved.")
-        tickets.append_section(ws.ticket(), "Consulted (%s)" % role,
+        tickets.append_section(ws.at(ws.ticket()), "Consulted (%s)" % role,
                                "**Question:**\n\n%s\n\n**Answer:**\n\n%s" % (demote(question), answer))
-        if not git.commit_file(ws.ticket(), "chore(%s): %s answer from the %s" % (ws.feature, ws.get("num"), role)):
+        if not git.commit_file(ws.ticket(), "chore(%s): %s answer from the %s" % (ws.feature, ws.get("num"), role),
+                               cwd=ws.folder):
             raise Stop("cannot commit the %s's answer to %s. this session must be allowed to run git commit"
                        % (role, ws.ticket_name()))
         ws.st["phase"] = "build"
@@ -177,7 +178,7 @@ class Ask(Phase):
     def prompt(cls, ws):
         role = ws.get("ask_role")
         question = (state.read_text(cls.ask_file(ws, "question")) or "").strip("\n")
-        rel = proof.repo_relative(ws.ticket())
+        rel = proof.repo_relative(ws.ticket(), cwd=ws.folder)
         asker = {"build": "builder", "review": "reviewer"}.get(ws.get("ask_from"), "builder")
         task = ("Your question comes from the %s of ticket %s of the feature `%s`. Read the plan in `%s` (`spec.md`, "
                 "`map.md`, and the mock-ups if there are any) and the ticket as it was planned, with `git show %s:%s`. "
@@ -195,11 +196,13 @@ class Ask(Phase):
             task += "\n\nThe conductor notes: %s" % ws.get("edit_note")
         if ws.lane:
             task = ("Work in the folder `%s` (`cd %s` first): the worktree of this ticket. Every path here is relative "
-                    "to it.\n\n%s" % (Path.cwd(), shlex.quote(str(Path.cwd())), task))
+                    "to it.\n\n%s" % (ws.folder.resolve(), shlex.quote(str(ws.folder.resolve())), task))
         try:
             role_text = prompts.role(ws.scripts, prompts.ROLES["ask-" + role], ws.prompts_top)
         except FileNotFoundError as err:
             raise Stop(str(err))
+        if ws.lane:
+            role_text = lane_runner(role_text, ws.scripts)
         return "%s\n\n---\n\n%s\n" % (role_text, task) + ws.scout_findings()
 
     @classmethod

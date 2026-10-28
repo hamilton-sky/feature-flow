@@ -12,10 +12,20 @@ from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.store import NOTE_SEP
 
 
+def _folder(c):
+    """The folder c's checks run in (a Workspace's folder); None: the working folder."""
+    return getattr(c, "folder", None)
+
+
+def _at(c, path):
+    """path under c's folder, for a file read; unchanged without a folder."""
+    return path if _folder(c) is None or path.is_absolute() else _folder(c) / path
+
+
 class Gate:
     def run(self, c):
         quick = c.gate_quick()
-        result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick)
+        result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=_folder(c))
         c.log("GATE-QUICK" if quick else "GATE-FULL")
         c.log("GATE-PASS" if result.ok else "GATE-FAIL")
         if not result.ok:
@@ -25,7 +35,7 @@ class Gate:
 
 class FloorGuard:
     def run(self, c):
-        result = checks.floor_guard(c.scripts, c.feature, c.get("num"), c.get("base"))
+        result = checks.floor_guard(c.scripts, c.feature, c.get("num"), c.get("base"), cwd=_folder(c))
         c.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
         if not result.ok:
             return "floor guard", result.out, []
@@ -41,7 +51,7 @@ class Footprint:
         patterns = lanes.touches(c.ticket_at_base())
         if patterns is None:
             return None, "", []
-        changed = git.diff_names(c.get("base"), "HEAD", c.plan.as_posix())
+        changed = git.diff_names(c.get("base"), "HEAD", c.plan.as_posix(), cwd=_folder(c))
         outside = [p for p in changed if not tickets.matches_sensitive(p, patterns)]
         c.log("FOOTPRINT-FAIL" if outside else "FOOTPRINT-PASS")
         if not outside:
@@ -66,8 +76,8 @@ class DoneWhen:
             c.log("DONEWHEN-SKIP")
             return None, "", ["the conductor ran no Done when checks: the ticket has no check block"]
         deferred = []
-        ok, report = proof.run_checks(found, c.gate_timeout, deferred)
-        dirty = git.changes()
+        ok, report = proof.run_checks(found, c.gate_timeout, deferred, cwd=_folder(c))
+        dirty = git.changes(cwd=_folder(c))
         if dirty:
             raise Stop("a Done when check of %s changed the working tree: %s. a check command must not change it"
                        % (c.ticket_name(), " ".join(dirty[:5])))
@@ -94,7 +104,7 @@ class TestFirst:
     def run(self, c):
         if not proof.wants_test_first(c.ticket_at_base()):
             return None, "", []
-        test = tickets.commands_value(c.commands, "Test")
+        test = tickets.commands_value(_at(c, c.commands), "Test")
         if not test:
             c.log("TESTFIRST-SKIP")
             return None, "", ["the conductor did not check test first: commands.md has no Test command"]
@@ -103,7 +113,7 @@ class TestFirst:
             c.st["restore"] = value
             c.save()
         try:
-            ok, text = proof.test_first(c.get("base"), test, c.plan, c.gate_timeout, remember)
+            ok, text = proof.test_first(c.get("base"), test, _at(c, c.plan), c.gate_timeout, remember)
         except proof.GitError as err:
             raise Stop("test first check of %s: %s" % (c.ticket_name(), err))
         c.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")

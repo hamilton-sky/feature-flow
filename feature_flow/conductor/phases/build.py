@@ -27,17 +27,17 @@ class Build(Phase):
         ws.check_code(ws.flow_edit_allowed())
         if ws.get("batch"):
             return Outcome(ws.scheduler().judge_batch())
-        status = tickets.status(ws.ticket())
+        status = tickets.status(ws.at(ws.ticket()))
         if status not in tickets.DONE:
             if status in tickets.RESET:
-                tickets.set_open(ws.ticket())
+                tickets.set_open(ws.at(ws.ticket()))
             role, question = ask_phase.Ask.open_ask(ws)
             if role:
                 return Outcome(ask_phase.Ask.hand_out(ws, "build", role, question))
             if ws.num("attempt") >= ws.max_retries:
                 raise Stop("%s is still unresolved after %d attempt(s)" % (ws.ticket_name(), ws.max_retries))
             return Outcome(cls.hand_out(ws))
-        if not git.is_clean():
+        if not git.is_clean(cwd=ws.folder):
             raise Stop("working tree is dirty after %s, it should have been committed" % ws.ticket_name())
         source, report, notes = buildchecks.run(ws, buildchecks.pipeline(ws))
         if source:
@@ -72,5 +72,5 @@ class Build(Phase):
         """A build's first attempt above level 1 (or with no level), never in a later round or after a question."""
         if not ws.scouts_on or ws.num("round") or ws.num("asks") or ws.num("attempt") != 1:
             return []
-        return scouts.build(proof.repo_relative(ws.ticket()), ws.get("base"), lanes.touches(ws.ticket_at_base()) or [],
+        return scouts.build(proof.repo_relative(ws.ticket(), cwd=ws.folder), ws.get("base"), lanes.touches(ws.ticket_at_base()) or [],
                             ws.num("level"))

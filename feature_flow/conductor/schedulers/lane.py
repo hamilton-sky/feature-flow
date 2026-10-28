@@ -1,8 +1,6 @@
 """Lanes: tickets side by side in their own worktrees. A passed ticket waits in the merge phase and is merged into
 the feature branch, in the integration worktree, before a new ticket is leased."""
 
-from pathlib import Path
-
 from feature_flow import checks, gate, git, lanes, state, tickets
 from feature_flow.conductor import guards
 from feature_flow.conductor.errors import Stop
@@ -78,16 +76,16 @@ class LaneScheduler(SerialScheduler):
         with self.workspace(k).entered() as ws:
             if ws.get("restore"):
                 try:
-                    git._git("checkout", "-q", ws.get("restore"))
+                    git._git("checkout", "-q", ws.get("restore"), cwd=ws.folder)
                 except RuntimeError as err:
                     raise Stop("cannot put lane %d back after the test first check: %s. run `git checkout %s` in %s "
-                               "by hand" % (k, err, ws.get("restore"), Path.cwd()))
+                               "by hand" % (k, err, ws.get("restore"), ws.folder.resolve()))
                 ws.st["restore"] = ""
                 ws.save()
             phase = ws.get("phase")
             if phase in ("build", "review", "ask"):
                 name = lanes.branch(c.feature, ws.get("num"))
-                on = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False).stdout.strip()
+                on = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False, cwd=ws.folder).stdout.strip()
                 if on != name:
                     raise Stop("lane %d is on %s, not on its ticket's branch %s. a builder or reviewer must not switch "
                                "it. run reset to drop the lanes" % (k, on or "a detached HEAD", name))
@@ -143,11 +141,11 @@ class LaneScheduler(SerialScheduler):
         self.make_worktree(Workspace(c, LANE, k, self.lane_dir(k)), "lane-%d" % k)
         with self.workspace(k).entered() as ws:
             ws.st.clear()
-            dirty = git.changes()
+            dirty = git.changes(cwd=ws.folder)
             if dirty:
                 raise Stop("lane %d is not clean: %s. run reset to drop the lanes" % (k, " ".join(dirty[:5])))
             try:
-                lanes.git_in(".", "checkout", "-q", "-B", lanes.branch(c.feature, tickets.number(path)), head)
+                lanes.git_in(ws.folder, "checkout", "-q", "-B", lanes.branch(c.feature, tickets.number(path)), head)
             except RuntimeError as err:
                 raise Stop("cannot put lane %d on a branch for %s: %s" % (k, tickets.name(path), err))
             self.start_ticket(path, ws)
@@ -167,8 +165,7 @@ class LaneScheduler(SerialScheduler):
             return
         cmd = tickets.commands_value(c.commands, "Setup")
         if cmd:
-            with ws.entered():
-                result = checks.smoke(cmd, c.gate_timeout)
+            result = checks.smoke(cmd, c.gate_timeout, cwd=path)
             if not result.ok:
                 raise Stop("Setup failed in the %s worktree (%s): %s. the last lines: %s"
                            % (name, path, cmd, " ".join(gate.tail(result.out, 5).split())[:300]))
@@ -187,11 +184,11 @@ class LaneScheduler(SerialScheduler):
         self.make_worktree(ws, "integration")
         with ws.entered():
             problem, report = self.merge_in_place(ws, name, head, "merge(%s): %s %s" % (
-                c.feature, num, tickets.title(path) or tickets.name(path)))
-            merged = git.head()
+                c.feature, num, tickets.title(ws.at(path)) or tickets.name(path)))
+            merged = git.head(cwd=ws.folder)
             if problem is None and c.gate_on:
-                quick = c.gate_quick()
-                result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick)
+                quick = ws.gate_quick()
+                result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=ws.folder)
                 ws.log("MERGE-GATE-%s-%s" % ("QUICK" if quick else "FULL", "PASS" if result.ok else "FAIL"))
                 if not result.ok:
                     problem, report = "the gate on its merge failed", result.out
@@ -212,26 +209,28 @@ class LaneScheduler(SerialScheduler):
         return self.dispatch()
 
     def merge_in_place(self, ws, name, head, message):
-        """Merge branch name into head in ws, the current worktree, resolving only appends to the plan's
-        append-only files. Returns (None, "") on success, else (what went wrong, a report), with the merge undone."""
-        git._git("merge", "--abort", check=False)
-        git._git("reset", "-q", "--hard", check=False)
+        """Merge branch name into head in ws's worktree (a lane or the integration worktree), resolving only appends
+        to the plan's append-only files. Returns (None, "") on success, else (what went wrong, a report), with the
+        merge undone."""
+        where = ws.folder
+        git._git("merge", "--abort", check=False, cwd=where)
+        git._git("reset", "-q", "--hard", check=False, cwd=where)
         try:
-            git._git("checkout", "-q", "--detach", head)
+            git._git("checkout", "-q", "--detach", head, cwd=where)
         except RuntimeError as err:
-            raise Stop("cannot reset the %s worktree: %s" % (Path.cwd(), err))
-        dirty = git.changes()
+            raise Stop("cannot reset the %s worktree: %s" % (where.resolve(), err))
+        dirty = git.changes(cwd=where)
         if dirty:
             raise Stop("the worktree %s is not clean after a reset: %s. something left files there; remove them or "
-                       "run reset" % (Path.cwd(), " ".join(dirty[:5])))
-        result = git._git("merge", "--no-ff", "--no-edit", "-m", message, name, check=False)
+                       "run reset" % (where.resolve(), " ".join(dirty[:5])))
+        result = git._git("merge", "--no-ff", "--no-edit", "-m", message, name, check=False, cwd=where)
         if result.returncode == 0:
             return None, ""
-        left = lanes.resolve_appends(".", ws.plan.as_posix()) if lanes.unmerged(".") else ["(git merge failed)"]
-        if not left and git._git("commit", "-q", "--no-edit", check=False).returncode == 0:
+        left = lanes.resolve_appends(where, ws.plan.as_posix()) if lanes.unmerged(where) else ["(git merge failed)"]
+        if not left and git._git("commit", "-q", "--no-edit", check=False, cwd=where).returncode == 0:
             ws.log("MERGE-APPENDS")
             return None, ""
-        git._git("merge", "--abort", check=False)
+        git._git("merge", "--abort", check=False, cwd=where)
         return "it conflicted with the feature branch", (
             "git merge reported conflicts in: %s\n%s" % (", ".join(left), (result.stdout + result.stderr).strip()))
 
@@ -244,10 +243,10 @@ class LaneScheduler(SerialScheduler):
             problem, report = self.merge_in_place(ws, name, head, "merge(%s): %s onto the feature branch for its "
                                                   "review" % (c.feature, ws.get("num")))
             if problem is None:
-                lanes.git_in(".", "checkout", "-q", "-B", name, "HEAD")
+                lanes.git_in(ws.folder, "checkout", "-q", "-B", name, "HEAD")
                 if c.gate_on:
-                    quick = c.gate_quick()
-                    result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick)
+                    quick = ws.gate_quick()
+                    result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=ws.folder)
                     ws.log("REFRESH-GATE-%s-%s" % ("QUICK" if quick else "FULL", "PASS" if result.ok else "FAIL"))
                     if not result.ok:
                         problem, report = "the gate failed on top of the feature branch", result.out
@@ -276,23 +275,23 @@ class LaneScheduler(SerialScheduler):
                 raise Stop("%s passed its review but %s, and it was rebuilt once already. its Touches line is likely "
                            "wrong: fix the plan, then run reset %s" % (ws.ticket_name(), problem, num))
             name = lanes.branch(c.feature, num)
-            tip = lanes.git_in(".", "rev-parse", name).stdout.strip()
+            tip = lanes.git_in(ws.folder, "rev-parse", name).stdout.strip()
             base = ws.get("base")
-            git._git("merge", "--abort", check=False)
-            git._git("reset", "-q", "--hard", check=False)
+            git._git("merge", "--abort", check=False, cwd=ws.folder)
+            git._git("reset", "-q", "--hard", check=False, cwd=ws.folder)
             try:
-                lanes.git_in(".", "checkout", "-q", "-B", name, head)
+                lanes.git_in(ws.folder, "checkout", "-q", "-B", name, head)
             except RuntimeError as err:
                 raise Stop("cannot reset lane %d for the rebuild of %s: %s" % (k, ws.ticket_name(), err))
             ws.st.clear()
             self.start_ticket(path, ws)
             ws.st["rebuilds"] = 1
-            tickets.append_section(path, "Rebuild (%s)" % problem, (
+            tickets.append_section(ws.at(path), "Rebuild (%s)" % problem, (
                 "This ticket was built and passed its review in a lane, but %s. It is built again from the feature "
                 "branch as it is now. The earlier build is commit %s (its base was %s): reuse what still fits, "
                 "for example with `git diff %s %s`.\n\n%s" % (problem, tip, base, base, tip, gate.tail(report, 60))))
-            tickets.set_open(path)
-            if not git.commit_file(path, "chore(%s): %s rebuild after its merge" % (c.feature, num)):
+            tickets.set_open(ws.at(path))
+            if not git.commit_file(path, "chore(%s): %s rebuild after its merge" % (c.feature, num), cwd=ws.folder):
                 raise Stop("cannot commit the rebuild note to %s. this session must be allowed to run git commit"
                            % ws.ticket_name())
             ws.log("REBUILD")

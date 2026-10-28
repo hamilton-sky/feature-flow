@@ -83,7 +83,7 @@ class Review(Phase):
         ws.st["phase"] = "review"
         ws.st["review_pass"] = ws.get("review_pass") or "spec"
         ws.st["review_attempt"] = ws.num("review_attempt") + 1
-        ws.st["review_sha"] = git.head()
+        ws.st["review_sha"] = git.head(cwd=ws.folder)
         guards.mark_relay(ws, ws.st)
         ws.save()
         return ws.emit("REVIEW %s %s %s%s" % (ws.ticket(), ws.get("num"), ws.get("base"), ws.lane_word()))

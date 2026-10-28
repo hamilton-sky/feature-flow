@@ -34,7 +34,7 @@ def check_replan(c):
 def smoke_command(c):
     cmd = os.environ.get("FLOW_SMOKE", "")
     if not cmd:
-        cmd = tickets.commands_value(c.commands, "Smoke")
+        cmd = tickets.commands_value(c.at(c.commands), "Smoke")
     return "" if cmd.startswith("<") else cmd
 
 
@@ -42,7 +42,7 @@ def run_smoke(c):
     cmd = smoke_command(c)
     if not cmd:
         return
-    result = checks.smoke(cmd, c.gate_timeout)
+    result = checks.smoke(cmd, c.gate_timeout, cwd=c.folder)
     if not result.ok:
         log = c.state_file.with_name("%s.smoke.log" % c.feature)
         text = result.out

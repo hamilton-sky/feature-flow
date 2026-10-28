@@ -12,13 +12,14 @@ import secrets
 import time
 from pathlib import Path
 
-from feature_flow import checks, codehash, git, prompts, scouts, state, suggest, tickets
+from feature_flow import codehash, git, prompts, scouts, state, suggest, tickets
 from feature_flow.conductor import budget as time_budget
 from feature_flow.conductor import guards
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import REGISTRY
+from feature_flow.conductor.phases.base import lane_runner
 from feature_flow.conductor.planning import BRAINSTORM, Planner
-from feature_flow.conductor.policy.review import FULL_ROUNDS, followups_only
+from feature_flow.conductor.policy.review import followups_only
 from feature_flow.conductor.replies import demote, section_after  # the package exports them
 from feature_flow.conductor.schedulers import BatchScheduler, LaneScheduler
 from feature_flow.conductor.settings import Settings, _env_int, mode_ok
@@ -84,46 +85,6 @@ class Conductor(Workspace):
     def driver(self):
         """Who drives the run: "agent" (an orchestrating agent, FLOW_DRIVER=agent on start) or "person"."""
         return os.environ.get("FLOW_DRIVER") or self.all.get("driver") or "person"
-
-    # ---- the checks ----------------------------------------------------
-
-    def gate_quick(self):
-        """True when this ticket's gate may run Quick in place of Test."""
-        if os.environ.get("FLOW_GATE_FULL") == "1":
-            return False
-        if not tickets.commands_value(self.commands, "Quick"):
-            return False
-        if self.per_session > 0 and self.num("session_done") + 1 >= self.per_session:
-            return False
-        counts = {}
-        for word in checks.flow_status(self.scripts, self.feature, "--counts").out.split():
-            key, _, value = word.partition("=")
-            if value.isdigit():
-                counts[key] = int(value)
-        return sum(counts.get(k, 0) for k in ("open", "claimed", "waiting", "unknown")) > 0
-
-    def run_limit(self):
-        result = checks.flow_status(self.scripts, self.feature, "--counts")
-        total = 0
-        for word in result.out.split():
-            if word.startswith("total="):
-                total = int(word[len("total="):])
-        return total * 3 * self.max_retries * (self.max_rounds + 1) + 1
-
-    # ---- phases --------------------------------------------------------
-
-    def write_followups(self, title, items, message):
-        """Append items under a heading of the plan's followups.md and commit it."""
-        path = self.plan / "followups.md"
-        text = "" if path.is_file() else (
-            "# Follow-ups: %s\n\nWhat the run left for later: minor findings of passing reviews, the findings a "
-            "level 2 ticket passed with after %d review rounds, and Done when checks this host could not pass. "
-            "Each is a candidate for a cleanup ticket.\n" % (self.feature, FULL_ROUNDS))
-        text += "\n## %s\n\n%s\n" % (title, "\n".join("- " + item for item in items))
-        with open(str(path), "a", encoding="utf-8") as handle:
-            handle.write(text)
-        if not git.commit_file(path, message):
-            raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
 
     # ---- the fast path: reviews deferred to one review of the whole feature --
 
@@ -417,7 +378,7 @@ class Conductor(Workspace):
         with self.pending_phase("scout-prompt", lane) as ws:
             if ws.get("scout_key") != ws.phase_key():
                 raise NoPhase("run scouts first: no scouts are listed for the phase pending for %s" % self.feature)
-            return self.one_scout(ws.scout_questions(), k, str(Path.cwd()) if ws.lane else None, ws.prompts_top)
+            return self.one_scout(ws.scout_questions(), k, str(ws.folder.resolve()) if ws.lane else None, ws.prompts_top)
 
     def one_scout(self, found, k, workdir=None, top="."):
         if not k.isdigit() or not 1 <= int(k) <= len(found):
@@ -427,6 +388,8 @@ class Conductor(Workspace):
             role_text = prompts.role(self.scripts, agent + ".md", top)
         except FileNotFoundError as err:
             raise Stop(str(err))
+        if workdir is not None:  # a lane's scout: its role text as prompts gave it from the lane's folder
+            role_text = lane_runner(role_text, self.scripts)
         return scouts.prompt(role_text, role, question, workdir)
 
     def plan_scouts(self, brief):

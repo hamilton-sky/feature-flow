@@ -18,3 +18,4 @@ ticket number. Never edit or delete another line. Keep it short; a human prunes 
 - (12) codehash.flow_code reads roles/guides relative to the working folder; in a lane call ws.flow_code() (hashes from the main top), never codehash.flow_code directly.
 - (13) A cwd= test needs no chdir per call: chdir once into one helpers.Repo and pass cwd= the other (tests/py/test_cwd.py); status.run maps g.path back to relative paths when cwd is given.
 - (13) A test that needs a floor-guard finding must not write a skip/noqa line itself (the guard flags the test file); edit another ticket in the throwaway repo and expect ticket-edit, as test_buildchecks.py does.
+- (15) prompts._runner and codehash.flow_code read Path.cwd(): with no chdir a lane run sees the main top, so lane prompt text needs phases/base.lane_runner to match the golden recordings; run tests/py/test_golden.py after any lane prompt change.

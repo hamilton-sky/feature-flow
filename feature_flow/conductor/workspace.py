@@ -12,31 +12,22 @@ import contextlib
 import os
 from pathlib import Path
 
-from feature_flow import codehash, floorguard, git, proof, scouts, state, tickets
+from feature_flow import checks, codehash, floorguard, git, proof, scouts, state, tickets
 from feature_flow.conductor import budget as time_budget
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import REGISTRY, Phase
 from feature_flow.conductor.phases.build import Build
 from feature_flow.conductor.policy import levels, limits
 from feature_flow.conductor.policy.levels import CONVERT
-from feature_flow.conductor.policy.review import FINDING
+from feature_flow.conductor.policy.review import FINDING, FULL_ROUNDS
 from feature_flow.conductor.store import NOTE_SEP, TicketState
 
 MAIN, LANE, INTEGRATION = "main", "lane", "integration"
 
 
-@contextlib.contextmanager
-def _working_in(folder, back):
-    """Until the helpers take cwd=, the one place the conductor changes the working folder: into folder, then
-    back."""
-    os.chdir(str(folder))
-    try:
-        yield
-    finally:
-        os.chdir(str(back))
-
-
 class Workspace:
+    folder = None  # the folder git, the checks and relative paths work in; None: the working folder
+
     def __init__(self, c, kind=MAIN, lane=0, folder=None):
         self.c = c
         self.kind = kind
@@ -57,13 +48,14 @@ class Workspace:
 
     @contextlib.contextmanager
     def entered(self):
-        """Work in this Workspace's folder, and come back to the top of the repo. Until the helpers take cwd=,
-        this is the one place the conductor changes the working folder."""
-        if self.folder is None:
-            yield self
-            return
-        with _working_in(self.folder, self.top):
-            yield self
+        """Work in this Workspace. The working folder never changes: every helper gets cwd=self.folder, and a
+        relative ticket or plan path is read and written through at()."""
+        yield self
+
+    def at(self, path):
+        """path, relative to this Workspace's folder, for a file read or write; unchanged without a folder."""
+        path = Path(path)
+        return path if self.folder is None or path.is_absolute() else self.folder / path
 
     # ---- the state view ------------------------------------------------
 
@@ -101,6 +93,29 @@ class Workspace:
         if runs > limit:
             raise Stop("run limit of %d phases reached, stopping" % limit)
         self.st["runs"] = runs
+
+    def run_limit(self):
+        result = checks.flow_status(self.scripts, self.feature, "--counts", cwd=self.folder)
+        total = 0
+        for word in result.out.split():
+            if word.startswith("total="):
+                total = int(word[len("total="):])
+        return total * 3 * self.max_retries * (self.max_rounds + 1) + 1
+
+    def gate_quick(self):
+        """True when this ticket's gate may run Quick in place of Test."""
+        if os.environ.get("FLOW_GATE_FULL") == "1":
+            return False
+        if not tickets.commands_value(self.at(self.commands), "Quick"):
+            return False
+        if self.per_session > 0 and self.all.num("session_done") + 1 >= self.per_session:  # the run's count
+            return False
+        counts = {}
+        for word in checks.flow_status(self.scripts, self.feature, "--counts", cwd=self.folder).out.split():
+            key, _, value = word.partition("=")
+            if value.isdigit():
+                counts[key] = int(value)
+        return sum(counts.get(k, 0) for k in ("open", "claimed", "waiting", "unknown")) > 0
 
     # ---- the pending phase ---------------------------------------------
 
@@ -146,10 +161,10 @@ class Workspace:
                 " at level %d. the user decides what happens next" % level if level else ""))
         self.st["round"] = round_no
         self.st["due_minors"] = ""  # the next round's reviews list them again if they are still there
-        tickets.append_findings(self.ticket(), round_no, source, findings)
-        tickets.set_open(self.ticket())
+        tickets.append_findings(self.at(self.ticket()), round_no, source, findings)
+        tickets.set_open(self.at(self.ticket()))
         if not git.commit_file(self.ticket(), "chore(%s): %s review findings, round %d"
-                               % (self.feature, self.get("num"), round_no)):
+                               % (self.feature, self.get("num"), round_no), cwd=self.folder):
             raise Stop("cannot commit the %s findings to %s. this session must be allowed to run git commit"
                        % (source, self.ticket_name()))
         self.st["attempt"] = 0
@@ -169,6 +184,19 @@ class Workspace:
         if items:
             self.write_followups(title, items, "chore(%s): %s follow-ups" % (self.feature, self.get("num")))
             self.log("FOLLOWUPS %d" % len(items))
+
+    def write_followups(self, title, items, message):
+        """Append items under a heading of the plan's followups.md and commit it."""
+        path = self.plan / "followups.md"
+        text = "" if self.at(path).is_file() else (
+            "# Follow-ups: %s\n\nWhat the run left for later: minor findings of passing reviews, the findings a "
+            "level 2 ticket passed with after %d review rounds, and Done when checks this host could not pass. "
+            "Each is a candidate for a cleanup ticket.\n" % (self.feature, FULL_ROUNDS))
+        text += "\n## %s\n\n%s\n" % (title, "\n".join("- " + item for item in items))
+        with open(str(self.at(path)), "a", encoding="utf-8") as handle:
+            handle.write(text)
+        if not git.commit_file(path, message, cwd=self.folder):
+            raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
 
     def pass_ticket(self):
         self.write_due("%s (left for later)" % self.ticket_name())
@@ -196,12 +224,10 @@ class Workspace:
     # ---- the code snapshot, the level and the ticket at base -------------
 
     def flow_code(self):
-        """codehash's fingerprint of the flow code, read from the main worktree's top in a lane or the integration
-        worktree: the roles and guides it covers are the ones the prompts read (prompts_top), never a lane's copies."""
-        if self.folder is None:
-            return codehash.flow_code(self.scripts)
-        with _working_in(self.top, os.getcwd()):
-            return codehash.flow_code(self.scripts)
+        """codehash's fingerprint of the flow code, read from the working folder: in a lane or the integration
+        worktree that is the main worktree's top (lanes start there and never change it), so the roles and guides
+        it covers are the ones the prompts read (prompts_top), never a lane's copies."""
+        return codehash.flow_code(self.scripts)
 
     def snapshot_code(self):
         whole, each = self.flow_code()
@@ -214,7 +240,8 @@ class Workspace:
 
     def flow_edit_allowed(self):
         try:
-            source = git._git("show", "%s:%s" % (self.get("base"), Path(self.ticket()).as_posix()), check=False)
+            source = git._git("show", "%s:%s" % (self.get("base"), Path(self.ticket()).as_posix()), check=False,
+                              cwd=self.folder)
         except OSError:
             return False
         if source.returncode != 0:
@@ -230,9 +257,9 @@ class Workspace:
 
     def commands_at_base(self):
         """commands.md as it was at the base commit, or "" when it was not there."""
-        rel = proof.repo_relative(self.commands)
+        rel = proof.repo_relative(self.commands, cwd=self.folder)
         try:
-            return git.show_text("%s:%s" % (self.get("base"), rel))
+            return git.show_text("%s:%s" % (self.get("base"), rel), cwd=self.folder)
         except RuntimeError:
             return ""
 
@@ -243,11 +270,11 @@ class Workspace:
         hit = []
         patterns = tickets.sensitive_patterns(self.commands_at_base())
         if patterns and level < 3:
-            hit = [p for p in git.diff_names(self.get("base"), "HEAD", self.plan.as_posix())
+            hit = [p for p in git.diff_names(self.get("base"), "HEAD", self.plan.as_posix(), cwd=self.folder)
                    if tickets.matches_sensitive(p, patterns)]
         files, lines, binary = 0, 0, False
         if level == 1 and not hit:  # the size only matters to a level 1 diff that no Sensitive path raised
-            files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix())
+            files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix(), cwd=self.folder)
         level, why = levels.measured(level, hit, files, lines, binary, self.small_files, self.small_lines)
         if why:
             self.st["level_note"] = levels.describe(level, why)
@@ -263,7 +290,7 @@ class Workspace:
             return ""
         if CONVERT.search(base.split("\n## ", 1)[0]):
             return ""
-        files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix())
+        files, lines, binary = git.diff_size(self.get("base"), "HEAD", self.plan.as_posix(), cwd=self.folder)
         if binary or files > self.small_files or lines > self.small_lines:
             return ""
         return ("the conductor judged this ticket small (%d files, %d lines): one review covers the spec and "
@@ -271,13 +298,13 @@ class Workspace:
 
     def ticket_at_base(self):
         """The ticket text as it was at the base commit, so a builder cannot change what is checked."""
-        rel = proof.repo_relative(self.ticket())
-        listed = git._git("ls-tree", "--name-only", self.get("base"), "--", rel, check=False)
+        rel = proof.repo_relative(self.ticket(), cwd=self.folder)
+        listed = git._git("ls-tree", "--name-only", self.get("base"), "--", rel, check=False, cwd=self.folder)
         if listed.returncode != 0:
             raise Stop("cannot read %s at the base commit: %s" % (rel, listed.stderr.strip()))
         if listed.stdout.strip():
-            return git.show_text("%s:%s" % (self.get("base"), rel))
-        text = Path(self.ticket()).read_text(encoding="utf-8")
+            return git.show_text("%s:%s" % (self.get("base"), rel), cwd=self.folder)
+        text = self.at(self.ticket()).read_text(encoding="utf-8")
         return text.split("\n## Answer", 1)[0]
 
     # ---- a read only agent that changed files ----------------------------
@@ -285,18 +312,18 @@ class Workspace:
     def undo_edit(self, sha, who, rule):
         """A read only agent changed tracked files. A commit stops the run; an edit is saved as a patch in the
         state folder and put back, and the note for the next attempt comes back ("" when nothing changed)."""
-        if git.head() != sha:
+        if git.head(cwd=self.folder) != sha:
             raise Stop("the %s changed tracked files, which %s must never do. a commit landed after it was handed "
                        "out (`git log --oneline %s..HEAD`), so the conductor cannot undo it. if the session made that "
                        "commit (never commit between a %s and its next), take it out with `git reset --soft %s` and "
                        "`git stash`, run next, and commit it again once the run is done"
                        % (who, rule, sha[:12], "question" if rule == "a consultant" else "review", sha[:12]))
-        if git.tracked_clean():
+        if git.tracked_clean(cwd=self.folder):
             return ""
         patch = self.state_file.parent / ("edit-%s-%s%s.patch" % (self.feature, self.get("num") or "plan",
                                                                     "-L%d" % self.lane if self.lane else ""))
         try:
-            names = git.undo_tracked(patch)
+            names = git.undo_tracked(patch, cwd=self.folder)
         except (OSError, RuntimeError) as err:
             raise Stop("the %s changed tracked files, which %s must never do, and the conductor could not put them "
                        "back: %s" % (who, rule, err))

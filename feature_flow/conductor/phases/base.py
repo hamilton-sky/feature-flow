@@ -7,6 +7,8 @@ count_run, save, log and emit.
 
 from __future__ import annotations
 
+import re
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -67,14 +69,28 @@ def read_reply(reply):
         raise Stop("cannot read the review reply %s: %s" % (reply, err.strerror))
 
 
+def lane_runner(text, scripts):
+    """prompts points `python3 scripts/` at the running scripts folder unless it is the working folder's own. A lane
+    agent works in the lane's folder, which the conductor never changes to, so a lane's prompt text gets the same
+    rewrite here that prompts gave it while the conductor worked in that folder."""
+    base = Path(scripts).absolute().as_posix()
+    return re.sub(r"python3 scripts/([\w.-]+)", lambda m: "python3 " + shlex.quote(base + "/" + m.group(1)), text)
+
+
 def ticket_prompt(ws, word, notes=()):
     """The build or review prompt of the ticket: word is build, review, review-quality or review-single."""
-    try:
+    def build(notes, retry):
         return prompts.build(word, ws.scripts, ws.feature, ws.ticket(), ws.get("num"), ws.get("base"),
                              notes,
-                             retry=ws.num("round") > 0,
-                             workdir=(str(Path.cwd()), lanes.branch(ws.feature, ws.get("num"))) if ws.lane else None,
-                             top=ws.prompts_top) + ws.scout_findings()
+                             retry=retry,
+                             workdir=(str(ws.folder.resolve()), lanes.branch(ws.feature, ws.get("num"))) if ws.lane else None,
+                             top=ws.prompts_top)
+    try:
+        text = build(notes, ws.num("round") > 0)
+        if ws.lane:  # the role, the guide and the task get the rewrite; the notes and the debugging guide never did
+            head = build((), False)[:-1]
+            text = lane_runner(head, ws.scripts) + text[len(head):]
+        return text + ws.scout_findings()
     except FileNotFoundError as err:
         raise Stop(str(err))
 

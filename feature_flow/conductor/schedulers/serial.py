@@ -67,7 +67,7 @@ class SerialScheduler:
         the smoke test."""
         c = ws if ws is not None else self.c
         c.st["limit"] = c.run_limit()
-        c.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(), "phase": "",
+        c.st.update({"ticket": path, "num": tickets.number(path), "base": git.head(cwd=c.folder), "phase": "",
                      "attempt": 0, "review_attempt": 0, "round": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
                      "spec_ok": "", "level_note": "", "level_raised": "", "edit_note": "", "due_checks": "", "due_minors": "", "asks": 0, "ask_role": "", "ask_from": "",
                      "ticket_clock": c.all.get("spent", 0)})
