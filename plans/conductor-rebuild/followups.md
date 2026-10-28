@@ -60,3 +60,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 - 1. minor feature_flow/gate.py: a cwd with no plan makes the gate print "nothing to run" and exit 0; ticket 15 passes lane folders, so fail when cwd is given and is not a folder. (single review)
 - 2. minor feature_flow/proc.py, feature_flow/checks.py: a missing cwd makes Popen raise FileNotFoundError out of checks.smoke/gate instead of a failing Result. (single review)
 - 3. minor feature_flow/floorguard.py, feature_flow/status.py: _under defined twice with the same body. (single review)
+
+## 15-no-chdir-left (left for later)
+
+- 1. minor feature_flow/proof.py _repo_of: an absolute plan_dir that is not a folder silently falls back to the working folder; raise GitError instead. (single review)
+- 2. minor feature_flow/conductor/phases/base.py ticket_prompt: builds the prompt twice and slices at len(head), relying on an exact prefix of prompts.build; lane_runner also rewrites the task text. Move the rewrite into prompts.build (runner_base=) or pin the prefix with a test. (single review)
