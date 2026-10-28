@@ -245,7 +245,7 @@ class PlantedBytecode(Drive):
     HONEST, FORGED = b'"BUILD %s %s %s%s"', b'"BXILD %s %s %s%s"'
 
     def plant(self):
-        source = self.repo.path("feature_flow/conductor/facade.py")
+        source = self.repo.path("feature_flow/conductor/phases/build.py")
         original = source.read_bytes()
         stat = source.stat()
         self.assertIn(self.HONEST, original)

@@ -1,7 +1,7 @@
 # Move each phase into a class found through one registry
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 07
 Test first: yes
 Level: 3
@@ -54,3 +54,37 @@ prints over 400: []
 - the facade: `next`, `prompt`, `prompt_text`, `verdict`, `record_verdict`, `scouts`, `scout_prompt`, `scout_questions`, `pending_phase`, `phase_key`, and the methods listed above
 
 ## Answer
+
+- **Built**:
+  - New `feature_flow/conductor/phases/base.py` (82 lines). It holds `Outcome(line, passed)`, a frozen dataclass, and `Phase`, the protocol with its defaults. The defaults are: `name`, `lane_scoped = True`, `who` (what the "has no lane" STOPs call a run-wide phase), `takes_verdict`, `prompt` (raises NoPhase `no BUILD or REVIEW is pending`), `record` (raises NoPhase `no review is pending`), `scout_questions` (returns `[]`) and `key` (the generic scout key). It also holds the shared helpers `read_reply`, `ticket_prompt` and `review_notes`.
+  - New `phases/build.py` (87 lines): `Build`, with `hand_out` (it holds the `"BUILD %s %s %s%s"` line), `judge`, `prompt`, `batch_note` and `scout_questions`.
+  - New `phases/review.py` (144 lines): `Review`, plus the module functions `take_verdict(ws, what)` and `record_verdict(ws, reply, final=False)`, which the feature review shares. `LEVEL_LINE` moved here.
+  - New `phases/ask.py` (211 lines): `Ask`, with `ask_file`, `open_ask`, `hand_out(ws, source, role, question)`, `disputes_tests`, `emit_ask`, `ask_user`, `record`, `record_answer`, `judge`, `prompt` and `scout_questions`. `ASK_HEADING`, `MAX_ASKS` and `RULING` moved here.
+  - New `phases/test.py` (90 lines): `Test` (`lane_scoped = False`, `who = "tester"`, `takes_verdict = False`). `record` raises the old "the tester has no verdict" NoPhase. `scout_questions` raises the old "no BUILD or REVIEW is pending" NoPhase, so the tester still gets no scouts.
+  - New `phases/final.py` (128 lines): `Final` (`lane_scoped = False`, `who = "feature review"`), with `feature_base`, `hand_out(ws, retry=False)`, `judge`, `fix_ticket`, `prompt`, `final_note`, `record`, `scout_questions` and `key`.
+  - `phases/__init__.py`: `REGISTRY` (word to class) and `TRANSITIONS`. The table has the rows `""`, build, review, ask, test, final and merge, and each phase may follow itself where a retry hands it out again.
+  - New `feature_flow/conductor/replies.py` (25 lines): `VERDICT`, `ANSWER`, `section_after` and `demote`. They moved here because both the facade's exports and the phases need them, and the phases must not import the facade. The facade imports `demote` and `section_after` back, so `feature_flow.conductor` exports the same objects.
+  - `facade.py` went from 1961 to 1408 lines. The moved methods are gone. New `pending()` returns the registry class for this view's phase, or `Phase` when there is none. New `run_wide(command, lane)` returns the run-wide phase and raises the "has no lane" STOP from one place, with today's texts. `next`, `prompt`/`prompt_text`, `verdict`, `scouts`, `scout_prompt`/`scout_questions`, `pending_phase` and `phase_key` now route through these. The internal callers (`send_back`, `pick_ticket`, `check_acceptance`, `dispatch`, `lease`, `refresh`, `rebuild`, `finish`) call `Build`/`Review`/`Test`/`Final.hand_out(self)`. `lane_next` keeps its phase-word test (ticket 10) but judges through `REGISTRY[phase]`.
+  - `tests/py/test_trust_drive.py`: only `PlantedBytecode.plant`'s path changed, to `feature_flow/conductor/phases/build.py`. `start`'s `return "OK %s" % token` and `check_code` (same docstring, same indent) are still in facade.py, so `test_trust_runner.py` is unchanged.
+  - New `tests/py/test_phases.py` (8 tests). Five static tests: the registry words, each with a `Phase` subclass, a matching `name` and a row in the table; only test and final are run-wide; the table names only its own rows; a walk reaches every phase from `""` and gets back to `""` from each; and the default `record` raises NoPhase, plus `Outcome`'s fields. Three in-process drives on throwaway repos: serial with a builder's ask, a send-back, a reviewer's ask and two tickets; fast mode with the tester and the feature review; and a lane ticket through its merge. The drives patch `RunState.save` to record every saved phase change, per slot (`phase` and `L1..L4.phase`), and wrap each registry class's `hand_out`. They assert that every change, and every hand-out, sets a phase the table allows after the one before, and that the hand-out sets its own word.
+  - Test-only commit 07f701b: the discover command failed with `ImportError: cannot import name 'REGISTRY' from 'feature_flow.conductor.phases'`. After that commit I corrected two expectations in my own new test. They were wrong about today's review policy: a level 2 ticket gets one single review unless it has `Review: full`. The serial tickets now carry `Review: full`, and the lane drive expects one review. No assertion was dropped.
+- **Proof**:
+  - `python3 -m unittest discover -s tests/py -p "test_phases.py" -v`: `Ran 8 tests`, `OK`.
+  - The registry check printed `['ask', 'build', 'final', 'review', 'test']`.
+  - The BUILD check printed `BUILD line True`. facade.py has 0 copies of the line and phases/build.py has 1.
+  - The 400-line check printed `over 400: []` and exited 0. The largest module besides the facade is planning.py (215), then phases/ask.py (211).
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0. The run includes `python3 -m unittest discover -s tests/py passes`, the import-list check and the 3.9 parse. I also ran these together: test_golden, test_ask_drive, test_tester_drive, test_scouts_drive, test_proof, test_trust_drive, test_trust_runner, test_conductor_package, test_lanes_drive, test_fast_drive, test_batch_drive, test_review_pass, test_levels_drive, test_conductor and test_phases. Result: `Ran 243 tests`, `OK`. Of those, only test_trust_drive.py changed, and only its one path.
+  - Acceptance `test_rebuild_maintainer ... test_each_phase_is_a_class_in_phases_found_through_one_registry` now passes.
+- **Decisions**:
+  - Phase methods are classmethods, so `REGISTRY[word]` is the class itself, as the acceptance test wants (`inspect.isclass`). They are called as `Build.hand_out(ws)`, with no instances. Phases reach each other through module imports (`from feature_flow.conductor.phases import ask as ask_phase`). That is safe in a cycle on Python 3.7+ because the attribute is read at call time.
+  - The hand-outs keep their extra arguments: `Ask.hand_out(ws, source, role, question)`, and `Test`/`Final.hand_out(ws, retry=False)`.
+  - `Outcome.passed` is True only where the old code called `pass_ticket`, through `defer_review`, a review pass, or `pass_with_followups`. It is False for a batch (`judge_batch` counts its own tickets), the tester and the feature review, since those are no ticket. Nothing reads it yet. Ticket 09's schedulers may.
+  - `verdict` on a run-wide phase does this: if `takes_verdict` (final), it checks the lane and clears `findings_for`. Then it calls `record`. So the tester's NoPhase still comes before any lane STOP, as before.
+  - `scouts` keeps its NoPhase for phases outside the registry (`""`, merge). The tester's NoPhase comes from `Test.scout_questions`, which runs before anything is cleared or saved, so the order of effects is the same.
+  - `edit_retry`, `undo_edit`, `scout_findings`, `pass_ticket`, `send_back`, `judge_batch` and the acceptance helpers stay on the facade. The ticket did not list them, and they are shared or belong to tickets 09 and 10.
+- **Shortcuts taken**: until ticket 12, `ws` is the Conductor, so phases read `ws.st`, `ws.all` and `ws.lane` directly. Ticket 12 replaces that with the Workspace.
+- **For later tickets**:
+  - Ticket 09: `Test.judge` and `Final.judge` still end with `ws.dispatch() if ws.num("lanes") > 1 else ws.pick_ticket()`, in phases/test.py and phases/final.py, not in the facade.
+  - Ticket 10: the merge phase class goes into `REGISTRY`, and `TRANSITIONS` already has its row. The `lane_next` phase-word test is the one place left.
+  - Ticket 12: phases use `ws.st`, `ws.all`, `ws.lane`, `Path.cwd()` (the lane workdir in `ticket_prompt` and `Ask.prompt`), and these Conductor methods: `count_run`, `save`, `log`, `emit`, `check_code`, `undo_edit`, `edit_retry`, `scout_findings`, `pass_ticket`, `send_back`, `defer_review`, `judge_batch`, `measure_level`, `small_note`, `ticket_at_base`, `flow_edit_allowed`, `snapshot_code`, `deferred`, `write_due`, `add_due`, `acceptance_folder`, `acceptance_command`, `run_acceptance`, `dispatch` and `pick_ticket`.
+  - The `"BUILD %s %s %s%s"` line now lives in phases/build.py.

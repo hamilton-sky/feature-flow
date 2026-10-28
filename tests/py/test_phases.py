@@ -161,7 +161,8 @@ class Session:
 
 class Walks(unittest.TestCase):
     def test_a_serial_run_with_questions_and_a_send_back(self):
-        s = Session(self, [(T1, ticket("A", "—", ["Level: 2"])), (T2, ticket("B", "01", ["Level: 2"]))],
+        full = ["Level: 2", "Review: full"]  # a spec pass, then a quality pass
+        s = Session(self, [(T1, ticket("A", "—", full)), (T2, ticket("B", "01", full))],
                     "Smoke: `%s -c \"pass\"`\nTest: `%s -c \"pass\"`\n" % (PYTHON, PYTHON))
         repo = s.repo
         self.assertTrue(s.next().startswith("BUILD %s 01 " % T1))
@@ -223,9 +224,7 @@ class Walks(unittest.TestCase):
         for args in (("add", "-A"), ("commit", "-qm", "feat: work")):
             subprocess.run(["git"] + list(args), cwd=str(lane), check=True, stdout=subprocess.PIPE)
         self.assertTrue(s.next("1").startswith("REVIEW %s 01 " % T1))
-        s.verdict("fine\n\nREVIEW: PASS\n", "1")
-        self.assertTrue(s.next("1").startswith("REVIEW %s 01 " % T1))
-        s.verdict("fine\n\nREVIEW: PASS\n", "1")
+        s.verdict("fine\n\nREVIEW: PASS\n", "1")  # level 2: one review covers both passes
         self.assertTrue(s.next("1").startswith("DONE f is complete"))
         self.assertIn(("L1.phase", "review", "merge"), s.moves)
         self.assertIn(("L1.phase", "merge", ""), s.moves)
