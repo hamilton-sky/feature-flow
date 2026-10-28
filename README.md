@@ -6,10 +6,25 @@
 
 Plan a feature as a graph of small tickets, then build them in the session you are already in. One command, `/feature-flow`, does both. Every ticket is built by one fresh subagent and checked by another that never saw the builder's reasoning. A script, not the agent, decides the order of the steps, runs the build and tests, and watches for work that weakens the checks, and the whole run has limits.
 
-One skill, 4 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-trust`, `flow-status`, `flow-view`, `gate`, `floor-guard`), an installer for both agents, a demo and a test suite. All of it is Python (standard library only), so it runs on Linux, macOS and Windows. MIT licensed.
+One skill, 12 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-trust`, `flow-status`, `flow-view`, `gate`, `floor-guard`), an installer for both agents, a Claude Code plugin, a PyPI package, a demo and a test suite. All of it is Python (standard library only), so it runs on Linux, macOS and Windows. MIT licensed.
 
-- [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets)
-- [See the graph](#see-the-graph) · [Long features and handoff](#long-features-and-handoff) · [What is tested](#what-is-tested) · [Limits](#limits) · [Upgrading](#upgrading) · [Caution](#caution)
+### At a glance
+
+| | What you get |
+|---|---|
+| **Plan** | A brief you approve, a fresh planner and a fresh plan reviewer, a second yes before anything is written. An optional [brainstorm](#brainstorm-before-planning) first, shown as a review page with diagrams you can edit, or an [import](#starting-from-spec-kit-or-openspec) from Spec Kit or OpenSpec. |
+| **Build** | One fresh builder per ticket, then the [gate, floor guard, footprint, Done when and test-first checks](#how-a-ticket-flows), all run by the script. |
+| **Review** | A fresh reviewer that never saw the builder's reasoning, as much as the ticket's [level](#how-a-ticket-flows) asks for, and [read only](#the-skill-and-the-roles) by hook and by the conductor. |
+| **Prove** | [Acceptance tests](#acceptance-tests-the-tester) written from the spec by a tester before any code, which builders cannot touch. |
+| **Go faster** | [Lanes](#tickets-side-by-side-lanes) build disjoint tickets side by side, the [fast path](#the-fast-path) batches small tickets and reviews the feature once, a [time budget](#a-time-budget) switches to fast mode by itself, and [profiles](#profiles) set all of it with one word. |
+| **Ask, don't guess** | [Scouts](#scouts) read ahead for every role, and [questions](#questions-for-the-architect-designer-or-product-owner) go to an architect, designer or product owner agent before they come to you. |
+| **Measure** | [`feature-flow eval`](#recording-a-run-eval) records what a run cost and what each check caught, and `feature-flow report` shows the log. |
+
+[docs/releases.md](docs/releases.md) lists what each release added.
+
+- [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets) · [See the graph](#see-the-graph)
+- [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
+- [Long features and handoff](#long-features-and-handoff) · [Commands and settings](#commands-and-settings) · [What is tested](#what-is-tested) · [Limits](#limits) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
 
@@ -41,7 +56,7 @@ Without a clone, the same installer runs from [PyPI](https://pypi.org/project/fe
 uvx feature-flow-cli install /path/to/your/repo --agent all   # or: pipx run feature-flow-cli install ...
 ```
 
-The package puts a `feature-flow` command on your PATH with `install`, `uninstall`, `status <feature>`, `view <feature>`, `reset <feature>`, `report <feature>` and `eval <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
+The package puts a `feature-flow` command on your PATH with `install`, `uninstall`, `status <feature>`, `view <feature>`, `reset <feature>`, `report <feature>`, `eval <feature>`, `import <folder> <feature>` and `brainstorm-page <feature>`. It installs the same files, byte for byte, as `install.py` from a clone.
 
 The installer lists what it wrote in `.feature-flow/installed.txt`, with each file's hash in `.feature-flow/installed.sha256`. Commit those files (`git add --pathspec-from-file=.feature-flow/installed.txt`); until you do, the flow does not count them as uncommitted changes. Installing a newer version over an older one updates every file nobody edited since it was installed, and keeps (and names) the ones you changed; `--force` replaces those too.
 
@@ -58,6 +73,10 @@ Then, in your repo, in the agent:
 | Build its tickets (a plan exists) | `/feature-flow csv-export` | `$feature-flow csv-export` |
 | The same, asking nothing | `/feature-flow csv-export auto` | `$feature-flow csv-export auto` |
 | Watch the graph, animated | `/feature-flow csv-export show` | `$feature-flow csv-export show` |
+| Weigh ways to build it first | `/feature-flow csv-export brainstorm` | `$feature-flow csv-export brainstorm` |
+| Small, low-risk feature: one review at the end | `/feature-flow csv-export fast` | `$feature-flow csv-export fast` |
+| Costly to get wrong: full gate, own review per ticket | `/feature-flow csv-export careful` | `$feature-flow csv-export careful` |
+| Another agent drives the session, no handoffs | `/feature-flow csv-export agent` | `$feature-flow csv-export agent` |
 
 The same command plans when `plans/csv-export/` does not exist yet and builds when it does. After your second yes it commits the new plan folder, and only that folder, then goes straight on to building it; say so if you want it to stop after planning.
 
@@ -104,6 +123,9 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
    thresholds lowered? lint/test/CI config edited?             fail ─┤
    plan touched beyond own Status + Answer + appended lines?        │
                                               │ clean               │
+                                              ▼                     │
+ footprint (script): only the paths on the ticket's Touches:  fail ─┤
+                                              │ pass                │
                                               ▼                     │
  Done when checks (script): runs every ```check block          fail ─┤
  test-first check (script): Test first: yes needs a test-only        │
@@ -153,13 +175,18 @@ The gate does not depend on the level: it still runs Quick mid-plan and the full
 
 | Role | Tools | Job |
 |---|---|---|
-| `ticket-builder` | Read, Glob, Grep, Edit, Write, Bash | Builds one ticket by the build guide in its prompt. |
-| `ticket-reviewer` | Read, Glob, Grep, Bash (no Edit, no Write) | Reviews one ticket by the review guide in its prompt and ends with `REVIEW: PASS` or `REVIEW: FAIL`. |
-| `feature-planner` | Read, Glob, Grep, Bash, Write, Edit, WebSearch, WebFetch | Plans one feature from the approved brief by the plan guide, writes only the draft, cites outside sources, and ends with `PLAN: READY` or `PLAN: QUESTIONS`. |
+| `ticket-builder` | Read, Glob, Grep, Edit, Write, Bash | Builds one ticket (or, in fast mode, a batch of small ones) by the build guide in its prompt. |
+| `ticket-reviewer` | Read, Glob, Grep, Bash (no Edit, no Write) | Reviews one ticket, or the whole feature on the fast path, by the review guide in its prompt and ends with `REVIEW: PASS`, `REVIEW: FAIL` or `REVIEW: ASK <role>`. |
+| `feature-planner` | Read, Glob, Grep, Bash, Write, WebSearch, WebFetch | Plans one feature from the approved brief by the plan guide, writes only the draft, cites outside sources, and ends with `PLAN: READY` or `PLAN: QUESTIONS`. Also folds open tickets on a re-plan. |
 | `plan-reviewer` | Read, Glob, Grep, Bash (no Edit, no Write) | Checks the draft against the brief by the plan review guide and ends with `PLAN-REVIEW: PASS` or `PLAN-REVIEW: FAIL`. |
 | `flow-tester` | Read, Glob, Grep, Edit, Write, Bash | Writes the feature's acceptance tests from `spec.md` alone, before the build, by the test guide. Never reads the tickets. |
+| `flow-scout` | Read, Glob, Grep, Bash (no Edit, no Write), Haiku | Reads the code ahead of a planner, builder, reviewer or consultant and reports what it found. Decides nothing. |
+| `flow-web` | WebSearch, WebFetch, Haiku | Looks up outside facts for the planner or a brainstorm, with sources. |
+| `flow-architect`, `flow-designer`, `flow-po` | Read, Glob, Grep, Bash (no Edit, no Write) | Answer one technical, UI or product question a builder, reviewer or planner asked, or (`flow-po`) rule on a disputed acceptance test. |
+| `flow-skeptic` | Read, Glob, Grep, Bash (no Edit, no Write) | Attacks each option a brainstorm drafted: one objection and one hidden cost each. |
+| `flow-lens` | Read, Glob, Grep, Bash (no Edit, no Write) | Looks at a brainstorm's options through one lens (`positive`, `researcher`, `open-minded`, `artistic`, `ux`, `security`) and reports what it sees. |
 
-**Read only roles.** The reviewers, the consultants (`flow-architect`, `flow-designer`, `flow-po`) and `flow-scout` have no Edit or Write tool, and in Claude Code a `PreToolUse` hook in their role file blocks shell commands that change files or the repository: git commands that write (`commit`, `add`, `stash`, `checkout`, `reset` and the like), `sed -i`, `rm`, `mv`, `cp`, `touch`, `tee` and output redirected into a file other than `/dev/null` or `/tmp/`. The hook reads the command's text, so a program that writes files itself (a test runner updating snapshots, a script) still gets through, and Claude Code ignores hooks in a plugin's agents. A Codex subagent cannot be limited at all: Codex gives every child its parent's sandbox. So the conductor is the backstop everywhere: when a reviewer or consultant leaves a tracked file changed, it saves the change as `.feature-flow/state/edit-<feature>-<NN>.patch`, puts the files back, throws that answer away and hands the same review to a fresh reviewer, with a note saying why (`EDIT-UNDONE` in the log). A second edit in a row stops the run, and so does a commit, which it cannot undo safely. A planner's draft reaches `plans/` only through `plan-accept`. On Codex the planner can research the web only if web search is on; otherwise it plans from the code and says so. The Codex planning path has not been run by hand.
+**Read only roles.** The reviewers, the consultants (`flow-architect`, `flow-designer`, `flow-po`), the brainstorm helpers (`flow-skeptic`, `flow-lens`) and `flow-scout` have no Edit or Write tool, and in Claude Code a `PreToolUse` hook in their role file blocks shell commands that change files or the repository: git commands that write (`commit`, `add`, `stash`, `checkout`, `reset` and the like), `sed -i`, `rm`, `mv`, `cp`, `touch`, `tee` and output redirected into a file other than `/dev/null` or `/tmp/`. The hook reads the command's text, so a program that writes files itself (a test runner updating snapshots, a script) still gets through, and Claude Code ignores hooks in a plugin's agents. A Codex subagent cannot be limited at all: Codex gives every child its parent's sandbox. So the conductor is the backstop everywhere: when a reviewer or consultant leaves a tracked file changed, it saves the change as `.feature-flow/state/edit-<feature>-<NN>.patch`, puts the files back, throws that answer away and hands the same review to a fresh reviewer, with a note saying why (`EDIT-UNDONE` in the log). A second edit in a row stops the run, and so does a commit, which it cannot undo safely. A planner's draft reaches `plans/` only through `plan-accept`. On Codex the planner can research the web only if web search is on; otherwise it plans from the code and says so. The Codex planning path has not been run by hand.
 
 The guides in `guides/` (installed to `.feature-flow/guides/`) hold the protocol: how to build, review, write the brief, plan, review a plan and show. The skill holds only what differs per agent.
 
@@ -180,6 +207,19 @@ plans/
 ```
 
 `commands.md` and `learnings.md` are separate from the map because they follow different rules. Commands are approved by a human and read by the scripts, so they are frozen. Learnings grow with every ticket, so they are append only and a human prunes them (`--check` warns past 40 lines). The map stays short.
+
+The lines `commands.md` can hold ([template](guides/templates/commands.md)); delete the ones you do not need:
+
+| Line | Needed | What reads it |
+|---|---|---|
+| `Build:`, `Test:`, `Lint:` | yes (`Test:` at least) | the gate, after every ticket |
+| `Smoke:` | yes | run before every ticket; the run stops if it fails |
+| `Quick:` | no | a fast subset of Test for the tickets in the middle of a plan |
+| `Run:` | no | how to start what the feature builds |
+| `Acceptance:` | no | turns on the [tester](#acceptance-tests-the-tester); runs only `plans/<feature>/acceptance/` |
+| `Sensitive:` | no | paths that make any ticket touching them level 3 |
+| `Shared:`, `Setup:` | no | for [lanes](#tickets-side-by-side-lanes): paths that keep a ticket alone, and what a fresh worktree needs |
+| `Profile:` | no | `careful`, `normal` or `fast` for this plan ([profiles](#profiles)) |
 
 One markdown file per ticket in `plans/<feature>/tasks/NN-slug.md`:
 
@@ -436,7 +476,8 @@ The run also stops on its own after a number of phases (`BUILD` and `REVIEW` han
 
 | Path | Tested |
 |---|---|
-| Claude Code | The offline suite, and **one real run of the bar**: the two-ticket demo in two `/feature-flow hello auto` sessions with one `HANDOFF` between them, each ticket built by a builder subagent and passed by a reviewer subagent, with all 16 acceptance checks ok. It used about 23k output tokens and 2M cached input tokens on Sonnet. |
+| Real repos | Used by its author on several repos besides its own. In a field run on a separate application repo (two features), all 7 issues the reviews caught were confirmed real. That run shaped 0.19.0 to 0.23.0: read only reviewers, agent-driven runs, follow-ups, batches, and the single level 3 review (the 19 separate spec reviews it ran caught nothing the quality review missed). |
+| Claude Code | The offline suite, and **one real run of the bar** on the demo project: the two-ticket demo in two `/feature-flow hello auto` sessions with one `HANDOFF` between them, each ticket built by a builder subagent and passed by a reviewer subagent, with all 16 acceptance checks ok. It used about 23k output tokens and 2M cached input tokens on Sonnet. |
 | Codex | The install, offline, in CI on Linux and macOS. A probe in the Codex app showed that subagents with separate contexts work and that a reviewer's verdict reaches the session. The full flow is **not yet tested with a real run**. |
 | Claude Code on the web | Documented, untested: commit `.claude/`, `scripts/` and `.feature-flow/` into the repo, because cloud sessions read only the repo's `.claude/`. |
 | Copilot, Gemini CLI, Cursor | Not tested. Some read `.agents/skills`, so `--agent codex` may already work. |
@@ -471,7 +512,7 @@ feature-flow's layers are tripwires, not a security boundary. They catch acciden
 - **The floor guard reads diffs with patterns.** It does not see a test made trivially true by other means (a mock that returns the expected answer, an `assert` on something that is always set, a test that no longer exercises the code), or an assertion weakened without being deleted. It does catch assertions that cannot fail (`trivial-assert`) and warns the reviewer when a test file loses assertions. A new test with no assertion at all is not caught. The red-first proof only covers tickets with `Test first: yes`.
 - **A plan can be wrong and still pass.** The plan lint checks that every ticket has a way to be proven and that `commands.md` has a Test command. It cannot tell whether the plan builds the right thing; the second yes is yours.
 - **The trust runner stops accidents, not the session.** It catches a builder editing the conductor mid-run. The session that runs it is the thing it cannot check; a hand-run `flow-trust.py` is unprotected (see above).
-- **Little real-world use so far.** Almost everything has been built by feature-flow on its own repo. The Codex skill and the Codex planner have not been run by hand, and the Quick gate has only been run by tests. See [docs/field-run.md](docs/field-run.md) for how to try it on your own repo and what to send back.
+- **Some paths are newer than the field runs.** The Codex skill and the Codex planner have not been run by hand, the plugin install and the brainstorm have not had a real run, and the Quick gate has only been run by tests. See [docs/field-run.md](docs/field-run.md) for how to try it on your own repo and what to send back.
 - **One ticket at a time**, with a handoff to a new session every few tickets, unless you turn on lanes.
 - **Lanes share one disk.** A builder in one lane can still write into another lane's folder or the main worktree. The conductor sees that as a dirty tree and stops, but only afterwards. Overlap of `Touches:` is judged from the patterns, so two tickets that could never meet may still run one after the other.
 
@@ -485,6 +526,8 @@ Earlier versions had seven skills and an unattended loop. The five flow skills a
 - `/run-flow` and `scripts/auto-flow.sh` → `/feature-flow <feature> auto`, with a `HANDOFF` every few tickets. There is no cost log any more.
 
 The installer never deletes the old skill folders, but it names any it finds. Delete them from `.claude/skills/` or `.agents/skills/` yourself.
+
+**Between versions, upgrade between features, not in the middle of a run.** The skill pins the sha256 of `scripts/flow-trust.py`, so a session started with the old skill stops with `flow-trust.py does not match this skill` once the new runner is installed. Finish the feature (or reach a `HANDOFF`), install the new version, commit it, and start the next session. Plans keep working across versions: a ticket with no `Level:` line keeps the pre-0.9.0 review rules, a plan with no `Touches:` lines runs one ticket at a time, and a plan with no `Acceptance:` line runs without a tester. [docs/releases.md](docs/releases.md) lists what changed in each version.
 
 ## Releasing to PyPI
 
