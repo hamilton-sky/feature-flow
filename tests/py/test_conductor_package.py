@@ -46,6 +46,17 @@ class ConductorPackage(unittest.TestCase):
             with self.subTest(path=path.relative_to(ROOT).as_posix()):
                 ast.parse(path.read_text(encoding="utf-8"), str(path), feature_version=(3, 9))
 
+    def test_ratchet(self):
+        facade = PACKAGE / "facade.py"
+        self.assertTrue(facade.is_file(), "no %s" % facade.relative_to(ROOT).as_posix())
+        files = sorted(p for p in PACKAGE.rglob("*.py") if "__pycache__" not in p.parts)
+        for path in files:
+            name = path.relative_to(ROOT).as_posix()
+            limit = 300 if path == facade else 400
+            with self.subTest(path=name):
+                lines = len(path.read_text(encoding="utf-8").splitlines())
+                self.assertLess(lines, limit, "%s has %d lines, the limit is under %d" % (name, lines, limit))
+
     def test_the_names_callers_use_import_from_the_package(self):
         import feature_flow.conductor as conductor
         import feature_flow.conductor.errors as errors
