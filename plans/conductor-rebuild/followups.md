@@ -38,3 +38,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 ## 09-serial-batch-schedulers-and-end-of-run (left for later)
 
 - 1. minor feature_flow/conductor/schedulers/facade_lanes.py: temporary class reaches back into the facade and relies on inheriting SerialScheduler for start_ticket; ticket 10 should replace it outright. (single review)
+
+## 10-lane-scheduler (left for later)
+
+- 1. minor feature_flow/conductor/facade.py: in a run without lanes, a root state phase=merge makes next find Merge, whose judge returns Outcome(None), so next returns None instead of falling to scheduler().next. Only a damaged state file reaches it. Fix: skip merge in that lookup or Stop in Merge.judge without a lane. (single review)
+- 2. minor feature_flow/conductor/schedulers/lane.py: LaneScheduler.finish only forwards to self.end.finish(); drop it. (single review)
