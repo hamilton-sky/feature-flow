@@ -6,6 +6,8 @@ A coding agent proposes two or three ways to build something, each with a mermai
 
 Version 0.1.0 is the extraction: the same page feature-flow 0.25 made, now behind a stable document format, with its script and CSS as real files and tests in a real browser. See [Where it is going](#where-it-is-going) for what comes next.
 
+![A Forkboard review page for a rate-limits brainstorm: the sidebar, option A's editable diagram and its pros, cons, size and risky areas](../../docs/forkboard.png)
+
 ## What the page does
 
 - A sidebar that routes between the sections and options, and a system, light or dark switch.
