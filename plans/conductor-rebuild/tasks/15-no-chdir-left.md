@@ -6,7 +6,7 @@ Blocked by: 12, 13
 Test first: yes
 Level: 3
 Floor: allow flow-edit
-Touches: feature_flow/conductor/, feature_flow/proof.py, tests/py/test_no_chdir.py, tests/py/test_trust_drive.py, tests/py/test_trust_runner.py
+Touches: feature_flow/conductor/, feature_flow/proof.py, tests/py/test_no_chdir.py, tests/py/test_trust_drive.py, tests/py/test_trust_runner.py, tests/py/test_workspace.py (only to flip the two entered() cwd assertions)
 
 Step 9 of the design, the last part. The Workspace (ticket 12) passes its folder as `cwd=` to every helper ticket 13 gave the keyword (git calls, `checks.gate`, `checks.floor_guard`, `checks.flow_status`, `checks.smoke`, `proc.run`), resolves relative ticket and plan paths against its folder for file reads and writes, and no longer changes the working folder. The same holds for `make_worktree`'s Setup run and `integrate`'s merge and gate in the integration worktree. Lines printed keep the relative paths they print now.
 
