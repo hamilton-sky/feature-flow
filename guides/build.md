@@ -141,7 +141,7 @@ In **Manual** mode add a third line, `Continue in a fresh session with the featu
 
 ## Failure handling
 
-- **Build or test fails inside the ticket**: fix it and re-run. After two failed fixes of the same error, stop.
+- **Build or test fails inside the ticket**: find the cause before you change code. Run the failing command again and read the whole output, look at your own diff first, and test one hypothesis at a time. Then fix the cause and re-run. Never make it pass by weakening the check. After two failed fixes of the same error, stop, and say in the Attempt note what you tried and what you saw.
 - **The fix needs files outside the ticket**: stop. Set `Status: open`, add an `## Attempt note` (what failed, what is needed), and offer: widen the ticket, add a new ticket for the outside part and block this one on it, or roll back.
 - **A question you should not decide alone**: a design choice the spec does not settle (the architect's), how something should look or behave for its user (the designer's), or what the feature must do where the spec is silent (the product owner's). Do not guess. Commit what you have, leave `Status: open`, and append to the end of the ticket a section `## Ask: architect`, `## Ask: designer` or `## Ask: po` with the question, what you checked, and the options you see. Commit the ticket and stop. The flow asks that role and builds the ticket again with the answer under `## Consulted`. A question only the user can answer is `## Ask: user`.
 - **A test that was already failing**: report it and leave it alone.
