@@ -77,12 +77,11 @@ class Cwd(unittest.TestCase):
     def test_floor_guard(self):
         there = str(self.there.dir)
         base = self.there.head()
-        self.there.path("test_weak.py").write_text("import unittest\n@unittest.skip('later')\nclass T: pass\n",
-                                                  encoding="utf-8")
-        self.there.commit("weak")
+        self.there.path("plans/f/tasks/02-b.md").write_text("changed\n", encoding="utf-8")
+        self.there.commit("edit another ticket")
         result = checks.floor_guard("scripts", "f", "03", base, cwd=there)
         self.assertEqual(result.code, 1, result.out)
-        self.assertIn("skip: test_weak.py", result.out)
+        self.assertIn("ticket-edit: plans/f/tasks/02-b.md", result.out)
         self.same_folder()
         result = checks.floor_guard("scripts", "f", "03", base)
         self.assertEqual(result.code, 2, result.out)

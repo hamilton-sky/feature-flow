@@ -17,3 +17,4 @@ ticket number. Never edit or delete another line. Keep it short; a human prunes 
 - (12) The Conductor is the main Workspace (subclass); a lane Workspace forwards missing names to it, so a per-ticket method put on Conductor instead of workspace.py silently reads the main view in a lane.
 - (12) codehash.flow_code reads roles/guides relative to the working folder; in a lane call ws.flow_code() (hashes from the main top), never codehash.flow_code directly.
 - (13) A cwd= test needs no chdir per call: chdir once into one helpers.Repo and pass cwd= the other (tests/py/test_cwd.py); status.run maps g.path back to relative paths when cwd is given.
+- (13) A test that needs a floor-guard finding must not write a skip/noqa line itself (the guard flags the test file); edit another ticket in the throwaway repo and expect ticket-edit, as test_buildchecks.py does.

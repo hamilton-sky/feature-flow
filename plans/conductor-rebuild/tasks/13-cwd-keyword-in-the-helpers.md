@@ -1,7 +1,7 @@
 # Give the helpers outside the package an optional cwd= keyword
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 12
 Test first: yes
 Level: 3
@@ -54,7 +54,7 @@ prints cwd ok
   - `feature_flow/floorguard.py`: `run(argv, out, err, environ=None, cwd=None)`. A new module helper `_under(cwd, path)` joins a path to cwd; `_find_ticket(dir_, num, cwd=None)` lists the folder under cwd and still returns the relative path; the `os.path.exists` and `open` of the ticket and the commands.md handed to `_content_config` go through `_under`; `_Guard(err, cwd)` runs every git call in cwd. Git paths (`base:./plans/...`, the `:(exclude)` root) stay relative, which git resolves from its cwd.
   - `feature_flow/status.py`: `run(argv, out, err, cwd=None)`. It uses its own `_under` for the folder check, `suggest.features`, `ticket_files`, learnings.md, and (through `_report(..., cwd)` and `lint(g, plan_dir, cwd=None)`) the ticket reads, the `os.path.exists` of the named paths and commands.md. When cwd is given, `g.path` is mapped back to `<folder>/<name>`, so `--next`, `--ready` and `--json` print the same relative paths as before.
   - `feature_flow/checks.py`: `flow_status(..., root=None, cwd=None)`, `gate(..., quick=False, cwd=None)`, `floor_guard(..., base, cwd=None)` and `smoke(command, timeout=None, cwd=None)` pass it on as a keyword.
-  - New `tests/py/test_cwd.py` (5 tests). It uses two `helpers.Repo`s, chdirs into the first and points `cwd=` at the second, which has 3 tickets, its own commit and its own commands.md. Git helpers: head, toplevel, show_text, changes/is_clean, diff_names. `checks.gate` writes ran.txt in the right repo. `checks.floor_guard` finds a `unittest.skip` in the second repo, and without cwd says `no ticket 03 in plans/f/tasks`. `checks.flow_status` covers --counts, a relative --next path and --check. `checks.smoke` covers the working folder of the child. Every test checks that `os.getcwd()` is unchanged and that a call without cwd acts on the working folder.
+  - New `tests/py/test_cwd.py` (5 tests). It uses two `helpers.Repo`s, chdirs into the first and points `cwd=` at the second, which has 3 tickets, its own commit and its own commands.md. Git helpers: head, toplevel, show_text, changes/is_clean, diff_names. `checks.gate` writes ran.txt in the right repo. `checks.floor_guard` finds an edit to another ticket (`ticket-edit: plans/f/tasks/02-b.md`) in the second repo, and without cwd says `no ticket 03 in plans/f/tasks`. `checks.flow_status` covers --counts, a relative --next path and --check. `checks.smoke` covers the working folder of the child. Every test checks that `os.getcwd()` is unchanged and that a call without cwd acts on the working folder.
   - Test-only commit 9a9fbf4: the discover command failed with `TypeError: ... got an unexpected keyword argument 'cwd'` in all 5 tests. After that I fixed one wrong expectation in the test itself: the third ticket's text holds `# C`, not `02-b`.
 - **Proof**:
   - `python3 -m unittest discover -s tests/py -p "test_cwd.py" -v`: `Ran 5 tests`, `OK`.
@@ -65,6 +65,8 @@ prints cwd ok
   - status.run builds its Graph from joined paths and then puts the relative paths back on `g.path`, because `tickets.py` and `suggest.py` are outside Touches. `tickets.Graph` and `ticket_files` are unchanged.
   - `checks.flow_status` keeps its FLOW_DIR environment swap for `root`. That is existing behaviour and not this ticket's.
 - **Shortcuts taken**: none.
+- **Review fixes**:
+  - Round 1, floor guard (`skip: tests/py/test_cwd.py`): the fixture wrote a `@unittest.skip` file into the throwaway repo so the guard had something to find, and the guard rightly reads that added line as a skip. I replaced the fixture with the one `tests/py/test_buildchecks.py` uses: edit another ticket (`plans/f/tasks/02-b.md`) in the second repo and commit it, and the test now expects `ticket-edit: plans/f/tasks/02-b.md` with exit 1. It still proves the guard ran in the second repo (the first has no ticket 03). No `Floor: allow` line; `grep skip tests/py/test_cwd.py` finds nothing.
 - **For later tickets**:
   - Ticket 15: pass `cwd=ws.folder` (None in the main worktree) to `git.*`, `checks.*` and `proc.run`. Every git function in git.py takes `cwd=` as a keyword. `undo_tracked(patch, cwd=)` writes a relative patch under cwd, so pass an absolute patch path if you mean the main top.
 
