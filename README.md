@@ -389,6 +389,8 @@ The page itself is **Forkboard** ([packages/forkboard/](packages/forkboard/)), a
 
 **The live page (Claude only).** When the session can publish artifacts, it publishes the page live instead (`--live <folder>` writes `index.html` and a `state.json` beside it). Everyone you share it with (a claude.ai sign-in and edit access, no Claude Code needed) can save their own version of each diagram, pick between the original and anyone's version, turn on **Compare with original** to see added, removed and renamed boxes and arrows marked, ask Claude in the page to change a diagram (it uses that person's own Claude), and send the session questions from **Talk to Claude**. A save wakes the session: it reads the page's `state.json`, lists the open asks (`--asks`), answers each one (`--answer`), puts a version into the brainstorm when asked (`--apply <folder> <figure> <version>`), and publishes the next round to the same link. `/feature-flow <feature> brainstorm sketch` starts from your own drawing: the page opens with a small sketch of the idea, you draw yours and send it, and the options build on it. Without an Artifact tool (or on Codex) you get the plain page.
 
+[docs/brainstorm.md](docs/brainstorm.md) walks through a brainstorm step by step, how to use the page, and Forkboard's own commands.
+
 The result is `brainstorm.md` ([template](guides/templates/brainstorm.md)), committed with the plan. The planner follows its chosen option and copies its diagram into `spec.md`, the plan reviewer fails a plan that builds a rejected option or leaves a risky area below level 3, and a re-plan keeps the choice. It is skipped in `fast`, for an import, and with `auto`; with `agent`, the driving agent picks, the file says `Picked by: agent`, and the eval records it.
 
 ## Starting from Spec Kit or OpenSpec
@@ -440,6 +442,7 @@ feature-flow eval <feature> [--later]                     record the run in plan
 python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
 python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser
+feature-flow brainstorm-page <feature> [--style NAME] [--fragment]   the brainstorm as a review page (Forkboard); --live DIR, --asks, --answer, --apply for the live page
 python3 scripts/gate.py <feature>                         run Build, Test and Lint from commands.md
 python3 scripts/floor-guard.py <feature> <NN> [base]      check a ticket's diff, run from the repo root
 ```
@@ -473,6 +476,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
 | `FLOW_NO_OPEN` | unset | `1` makes `flow-view.py` never open a browser |
 | `FLOW_WATCH_SECONDS` | `3` | how often `flow-view.py --watch` rewrites the page |
+| `FLOW_STYLE` | `route` | the brainstorm page's look when the brainstorm has no `Style:` line: `route` or `blueprint` (Forkboard's themes) |
 
 The run also stops on its own after a number of phases (`BUILD` and `REVIEW` hand-outs, the spec review and the quality review each counting as one, a single review counting as one) that grows with the ticket count, recomputed at every pick, so a loop of failures cannot go on forever.
 
@@ -500,11 +504,15 @@ Then `cd` into it, start the agent and type `/feature-flow hello` (Codex: `$feat
 ```bash
 bash tests/run.sh
 python3 -m unittest discover -s tests/py
+python3 -m unittest discover -s packages/forkboard/tests            # Forkboard, the brainstorm page
+(cd packages/forkboard/tests/browser && npm install && npm test)    # the page in Chromium
 ```
 
 Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, the Done when checks, the test-first check, the two reviews and the debugging guide on a send-back, and the acceptance harness. `tests/run.sh` also drives a prepared demo with no model through both checks and both reviews. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`, with `FLOW_TRUSTED=1` set as the runner sets it. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
 
 A `package` job builds the wheel and the sdist and runs `tests/package_smoke.py` on Ubuntu (Python 3.9 and the latest), macOS and Windows: it installs the wheel in a fresh virtual environment, runs `feature-flow install`, and checks that the repo gets the same files as from `install.py` in a clone. Run it locally with `python3 -m pip install build && python3 tests/package_smoke.py`.
+
+Two jobs test Forkboard ([packages/forkboard/](packages/forkboard/)) on its own: its unit tests and a build-and-install smoke test on Ubuntu, macOS and Windows, and the page driven in Chromium through Playwright (the diagram editor, no sideways scroll at phone width, and a live-page save that clashes with someone else's, reloads and saves again).
 
 `RUN_REAL=1 bash tests/smoke-real.sh --interactive` is the acceptance run with Claude Code. It runs real sessions on the demo project and spends money, which is why it asks for `RUN_REAL=1`.
 
