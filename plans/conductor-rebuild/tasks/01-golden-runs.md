@@ -1,7 +1,7 @@
 # Record golden runs of the conductor before anything moves
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: no
 Level: 3
@@ -59,3 +59,31 @@ prints recordings
 - `feature_flow/conductor.py` (read only): `start`, `next`, `lane_next`, `dispatch`
 
 ## Answer
+
+- **Built**: `tests/py/test_golden.py` (new) and 13 recordings in `tests/py/golden/` (new, `test_<scenario>.txt`), all made on commit 6ea4a74's conductor; nothing under `feature_flow/` changed.
+- **Proof**:
+  - `python3 -m unittest discover -s tests/py -p "test_golden.py" -v`: lists the 13 scenario tests (`test_serial`, `test_relay`, `test_fast`, `test_fast_batch`, `test_lanes`, `test_fast_lanes`, `test_acceptance`, `test_lanes_acceptance`, `test_agent`, `test_agent_budget`, `test_ask_in_a_lane`, `test_failing_feature_review`, `test_mode_errors`) plus `test_the_comparison_catches_each_kind_of_change`; `Ran 14 tests in 35.460s`, `OK`, exit 0.
+  - The recordings check prints `recordings 13`, exit 0.
+  - In `test_serial.txt`, `test_lanes.txt` and `test_failing_feature_review.txt` there are BUILD, REVIEW, HANDOFF, WAIT and DONE lines, a `=== log events ===` section and a `=== state keys ===` section. `grep -rnE "[0-9a-f]{8,}|/tmp|tmp[a-z0-9_]{6}|/usr/bin|python3\.[0-9]" tests/py/golden/` finds nothing.
+  - Stability: the compare run passes again with a longer `TMPDIR`, and with `TMPDIR` behind a symlink (the macOS `/var` case) under `/usr/bin/python3.11` (a different interpreter path): `OK` both times.
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0.
+- **Decisions**:
+  - One `Session` class drives every scenario through `helpers.Repo.flow`. It records `$ <extra env> <args>`, `exit <rc>`, the cleaned stdout, and `# ...` notes for what the test itself did (built, replied, spent). At the end come the log events (timestamp column dropped) and the sorted state keys. The recording format is plain text, one file per scenario.
+  - Normalisation, all in `Session.clean`, in this order:
+    1. The repo path, in every form (as given, `resolve()`, `realpath`, git's `--show-toplevel`, each with `/` and `\`), becomes `<repo>`. The lane worktrees and the reply file sit under it or beside it, so they become `<repo>/.feature-flow/lanes/f/lane-1` and `<repo>-reply.txt`.
+    2. `sys.executable` becomes `<python>`.
+    3. 40-hex shas become `<sha>`. This runs before the token step, so a token never cuts into a sha.
+    4. Session tokens become `<token>`; their owner hash and its 8-character prefix become `<owner>`.
+    5. Remaining `\` become `/`.
+    6. The single quotes `shlex.quote` puts around a Windows path are dropped.
+  - Fixture roles and guides: every role and guide name `prompts.py` knows, plus `debug.md`. Each is written with front matter, every placeholder the conductor fills in, and a `python3 scripts/flow-status.py` line, so the lane rewrite of that line to `<repo>/scripts/...` is recorded too.
+  - "Lanes run from a subfolder" runs `<repo>/scripts/flow.py` from `<repo>/sub` with `FLOW_DIR=<repo>/plans`. Without it, `start` finds no plan there and prints `PLAN` before it ever reaches the lanes rule.
+  - Beyond the ticket's list, the recordings also hold:
+    - the ticket text after a FAIL send-back (serial) and the feature review's fix ticket (`Session.show`);
+    - `scout-prompt` output;
+    - a successful `start` after the refused ones in `test_mode_errors`, so its state keys are recorded.
+  - `compare()` finds the first differing line and names its section: calls, log events or state keys, judged by where that line sits in the recording. It shows the recorded and the current line plus a unified diff. A CRLF copy compares equal.
+- **Shortcuts taken**:
+  - `test_agent_budget` writes `spent` into the state file, as `test_budget_drive.py` does, and records `31 of 30 active minute(s)`. That holds as long as less than 60 seconds pass between that write and the `budget` call; today it is about 2 seconds.
+  - Windows normalisation (8.3 short paths, `shlex` quoting, backslashes) is reasoned from the code, not run here. The first Windows CI run is its proof.
+- **For later tickets**: the recordings are frozen (map.md). On a mismatch the failure names the scenario and the first differing line: fix the code, never the recording. A changed `prompt` output in a lane (ticket 12, Workspace) shows up in `test_lanes.txt` and `test_ask_in_a_lane.txt`. The state keys are recorded sorted and without values, so ticket 05 must keep every key name and add none.

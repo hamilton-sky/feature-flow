@@ -1,0 +1,381 @@
+# scenario test_serial
+# env FLOW_TICKETS_PER_SESSION=1
+$ start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha>
+$ scouts
+exit 0
+SCOUT 1 flow-scout <repo>/.feature-flow/state/scout-f-1.txt
+$ scout-prompt 1
+exit 0
+You are the flow-scout (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+ROLE: builder
+
+Ticket `plans/f/tasks/01-a.md` is about to be built. Read it as it was planned, with `git show <sha>:plans/f/tasks/01-a.md`, never its `## Answer`. Find how the code it is about works today: the functions and types it will change or call, the helpers and tests that already exist for this, and the conventions the new code should follow.
+
+Reply in the shape your role gives, and change nothing.
+# scout 1 replied
+$ prompt
+exit 0
+You are the ticket-builder (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The build guide follows. Follow it exactly.
+
+# Guide build (fixture)
+
+Feature f, ticket 01 at plans/f/tasks/01-a.md, sha <sha>, base <sha>, base commit <sha>, start <sha>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: build ticket 01 of the feature `f`, in auto mode (`f auto 01`). The ticket is `plans/f/tasks/01-a.md`. The work starts at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+When you are done, reply with what you built and the commit. Do not review your own work.
+
+## Scout findings (unverified)
+
+Cheap helper agents read the code before you started. Use what they found as leads and check anything before you rely on it: they can be wrong, and they prove nothing.
+
+### Scout 1
+
+scout 1 found the code in src/
+# built plans/f/tasks/01-a.md
+$ next
+exit 0
+REVIEW plans/f/tasks/01-a.md 01 <sha>
+$ scouts
+exit 0
+NONE
+$ prompt
+exit 0
+You are the ticket-reviewer (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The review guide follows. Follow it exactly.
+
+# Guide review-single (fixture)
+
+Feature f, ticket 01 at plans/f/tasks/01-a.md, sha <sha>, base <sha>, base commit <sha>, start <sha>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: review ticket 01 of the feature `f` (`f 01 <sha>`) (single pass). The ticket is `plans/f/tasks/01-a.md`, and the work started at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+Do not edit any file or create a commit. Your final reply must end with exactly `REVIEW: PASS` or `REVIEW: FAIL`.
+The conductor notes: the conductor ran 1 Done when check(s) and all passed
+The conductor notes: this ticket is level 2 (standard)
+The conductor notes: one review covers the spec and quality passes: do the spec checklist first
+# reply: SPEC |  | 1. blocker work-01-a.txt: the work is wrong - write it again |  | REVIEW: FAIL
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha>
+# file plans/f/tasks/01-a.md:
+# A
+
+Type: task
+Status: open
+Blocked by: —
+Test first: no
+Level: 2
+
+body
+
+## Done when
+
+- x
+
+```check
+$ "<python>" -c "print('fine')"
+prints fine
+```
+
+## Answer
+
+## Review findings (round 1, single review)
+
+SPEC
+
+1. blocker work-01-a.txt: the work is wrong - write it again
+
+REVIEW: FAIL
+# end of plans/f/tasks/01-a.md
+$ prompt
+exit 0
+You are the ticket-builder (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The build guide follows. Follow it exactly.
+
+# Guide build (fixture)
+
+Feature f, ticket 01 at plans/f/tasks/01-a.md, sha <sha>, base <sha>, base commit <sha>, start <sha>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: build ticket 01 of the feature `f`, in auto mode (`f auto 01`). The ticket is `plans/f/tasks/01-a.md`. The work starts at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+When you are done, reply with what you built and the commit. Do not review your own work.
+
+The debugging guide follows. Follow it before you change any code.
+
+# Guide debug (fixture)
+
+Feature <feature>, ticket <NN> at <ticket>, sha <sha>, base <base>, base commit <base-commit>, start <start-commit>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py <feature> --next`.
+# built plans/f/tasks/01-a.md
+$ next
+exit 0
+REVIEW plans/f/tasks/01-a.md 01 <sha>
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+HANDOFF /feature-flow f
+$ start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/02-b.md 02 <sha>
+$ scouts
+exit 0
+SCOUT 1 flow-scout <repo>/.feature-flow/state/scout-f-1.txt
+SCOUT 2 flow-scout <repo>/.feature-flow/state/scout-f-2.txt
+$ scout-prompt 1
+exit 0
+You are the flow-scout (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+ROLE: builder
+
+Ticket `plans/f/tasks/02-b.md` is about to be built. Read it as it was planned, with `git show <sha>:plans/f/tasks/02-b.md`, never its `## Answer`. Find how the code it is about works today: the functions and types it will change or call, the helpers and tests that already exist for this, and the conventions the new code should follow.
+
+Reply in the shape your role gives, and change nothing.
+# scout 1 replied
+$ scout-prompt 2
+exit 0
+You are the flow-scout (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+ROLE: builder
+
+Ticket `plans/f/tasks/02-b.md` (read it with `git show <sha>:plans/f/tasks/02-b.md`, never its `## Answer`) changes a boundary. Find everything that depends on what it changes: callers, importers, tests, config and docs that would break or need updating, with file paths.
+
+Reply in the shape your role gives, and change nothing.
+# scout 2 replied
+$ prompt
+exit 0
+You are the ticket-builder (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The build guide follows. Follow it exactly.
+
+# Guide build (fixture)
+
+Feature f, ticket 02 at plans/f/tasks/02-b.md, sha <sha>, base <sha>, base commit <sha>, start <sha>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: build ticket 02 of the feature `f`, in auto mode (`f auto 02`). The ticket is `plans/f/tasks/02-b.md`. The work starts at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+When you are done, reply with what you built and the commit. Do not review your own work.
+
+## Scout findings (unverified)
+
+Cheap helper agents read the code before you started. Use what they found as leads and check anything before you rely on it: they can be wrong, and they prove nothing.
+
+### Scout 1
+
+scout 1 found the code in src/
+
+### Scout 2
+
+scout 2 found the code in src/
+# built plans/f/tasks/02-b.md
+$ next
+exit 0
+REVIEW plans/f/tasks/02-b.md 02 <sha>
+$ scouts
+exit 0
+SCOUT 1 flow-scout <repo>/.feature-flow/state/scout-f-1.txt
+$ scout-prompt 1
+exit 0
+You are the flow-scout (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+ROLE: reviewer
+
+The change from commit `<sha>` to HEAD is about to be reviewed. List what it touches with `git diff --stat <sha>..HEAD -- . ':(exclude)plans/f/tasks/'`. Find the rules it must follow: how similar code in this repository is written and tested, and the rules in README, CONTRIBUTING, CLAUDE.md or AGENTS.md that apply to these files. Do not judge the change itself, and never read a ticket's `## Answer`.
+
+Reply in the shape your role gives, and change nothing.
+# scout 1 replied
+$ prompt
+exit 0
+You are the ticket-reviewer (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The review guide follows. Follow it exactly.
+
+# Guide review (fixture)
+
+Feature f, ticket 02 at plans/f/tasks/02-b.md, sha <sha>, base <sha>, base commit <sha>, start <sha>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: review ticket 02 of the feature `f` (`f 02 <sha>`) (spec pass). The ticket is `plans/f/tasks/02-b.md`, and the work started at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+Do not edit any file or create a commit. Your final reply must end with exactly `REVIEW: PASS` or `REVIEW: FAIL`.
+The conductor notes: the conductor ran 1 Done when check(s) and all passed
+The conductor notes: this ticket is level 3 (boundary)
+
+## Scout findings (unverified)
+
+Cheap helper agents read the code before you started. Use what they found as leads and check anything before you rely on it: they can be wrong, and they prove nothing.
+
+### Scout 1
+
+scout 1 found the code in src/
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+REVIEW plans/f/tasks/02-b.md 02 <sha>
+$ prompt
+exit 0
+You are the ticket-reviewer (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The review guide follows. Follow it exactly.
+
+# Guide review-quality (fixture)
+
+Feature f, ticket 02 at plans/f/tasks/02-b.md, sha <sha>, base <sha>, base commit <sha>, start <sha>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: review ticket 02 of the feature `f` (`f 02 <sha>`) (quality pass). The ticket is `plans/f/tasks/02-b.md`, and the work started at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+Do not edit any file or create a commit. Your final reply must end with exactly `REVIEW: PASS` or `REVIEW: FAIL`.
+The conductor notes: the conductor ran 1 Done when check(s) and all passed
+The conductor notes: this ticket is level 3 (boundary)
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+DONE f is complete: 2 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-PERSON
+01,BUILD
+01,SCOUTS-1
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-SINGLE
+01,REVIEW
+01,VERDICT-FAIL
+01,BUILD
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-SINGLE
+01,REVIEW
+01,VERDICT-PASS
+01,HANDOFF
+01,START
+01,DRIVER-PERSON
+02,BUILD
+02,SCOUTS-2
+02,GATE-FULL
+02,GATE-PASS
+02,GUARD-PASS
+02,DONEWHEN-PASS
+02,LEVEL-3
+02,REVIEW
+02,SCOUTS-1
+02,VERDICT-PASS
+02,REVIEW
+02,VERDICT-PASS
+02,DONE
+=== state keys ===
+ask_from
+ask_role
+asks
+attempt
+base
+code_files
+code_sha
+done
+due_checks
+due_minors
+edit_note
+lanes
+level
+level_note
+level_raised
+limit
+num
+owner
+phase
+relay_handoff
+reply_minors
+review_attempt
+review_notes
+review_pass
+review_sha
+round
+runs
+scout_key
+scout_n
+seen
+session_done
+slowest
+spec_ok
+spent
+ticket
+ticket_clock
+verdict

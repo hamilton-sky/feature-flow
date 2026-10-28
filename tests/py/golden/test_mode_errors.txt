@@ -1,0 +1,38 @@
+# scenario test_mode_errors
+# env
+$ FLOW_LANES=2 FLOW_RELAY=1 start
+exit 1
+STOP FLOW_RELAY hands off after every phase, which lanes cannot do. drop one of them
+$ FLOW_LANES=9 start
+exit 1
+STOP FLOW_LANES must be 1 to 4, not 9
+$ FLOW_LANES=x start
+exit 1
+STOP FLOW_LANES must be a whole number, not x
+$ FLOW_DRIVER=robot start
+exit 1
+STOP FLOW_DRIVER must be person or agent, not robot
+$ FLOW_FAST=2 start
+exit 1
+STOP FLOW_FAST must be 1 or 0, not 2
+# from the folder <repo>/sub
+$ FLOW_DIR=<repo>/plans FLOW_LANES=2 start
+exit 1
+STOP run the conductor from the top of the repo (<repo>) to use lanes
+$ start
+exit 0
+OK <token>
+=== log events ===
+-,STOP FLOW_RELAY hands off after every phase, which lanes cannot do. drop one of them
+-,STOP FLOW_LANES must be 1 to 4, not 9
+-,STOP FLOW_LANES must be a whole number, not x
+-,STOP FLOW_DRIVER must be person or agent, not robot
+-,STOP FLOW_FAST must be 1 or 0, not 2
+-,STOP run the conductor from the top of the repo (<repo>) to use lanes
+-,START
+-,DRIVER-PERSON
+=== state keys ===
+lanes
+owner
+seen
+session_done

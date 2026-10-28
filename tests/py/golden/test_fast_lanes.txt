@@ -1,0 +1,112 @@
+# scenario test_fast_lanes
+# env FLOW_LANES=2 FLOW_TICKETS_PER_SESSION=99
+$ FLOW_FAST=1 start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha> 1
+$ next
+exit 0
+BUILD plans/f/tasks/02-b.md 02 <sha> 2
+$ next
+exit 0
+WAIT 1,2
+# built plans/f/tasks/01-a.md in lane 1
+$ next 1
+exit 0
+WAIT 2
+# built plans/f/tasks/02-b.md in lane 2
+$ next 2
+exit 0
+REVIEW plans/f all <sha>
+$ next 1
+exit 1
+STOP next 1: the feature review has no lane. run next without one
+$ prompt
+exit 0
+You are the ticket-reviewer (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The feature review guide follows. Follow it exactly.
+
+# Guide review-feature (fixture)
+
+Feature f, ticket <NN> at <ticket>, sha <sha>, base <sha>, base commit <base-commit>, start <start-commit>, plan plans/f, tasks plans/f/tasks, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: review the whole feature `f` (feature pass), from commit `<sha>` to HEAD. The plan is in `plans/f`. These tickets were built in fast mode without a review of their own: 01, 02.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+Do not edit any file or create a commit. Your final reply must end with exactly `REVIEW: PASS` or `REVIEW: FAIL`.
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+DONE f is complete: 2 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-PERSON
+01,LEASE-1
+01,BUILD
+02,LEASE-2
+02,BUILD
+-,WAIT
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,FOOTPRINT-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-DEFERRED
+-,MERGE-GATE-FULL-PASS
+01,MERGED-1
+-,WAIT
+02,GATE-FULL
+02,GATE-PASS
+02,GUARD-PASS
+02,FOOTPRINT-PASS
+02,DONEWHEN-PASS
+02,LEVEL-2
+02,REVIEW-DEFERRED
+-,MERGE-GATE-FULL-PASS
+02,MERGED-2
+all,REVIEW
+all,STOP next 1: the feature review has no lane. run next without one
+all,VERDICT-PASS
+all,FEATURE-PASS
+all,DONE
+=== state keys ===
+code_files
+code_sha
+deferred
+done
+due_checks
+due_minors
+edit_note
+fast
+final_base
+final_round
+findings_for
+lanes
+limit
+num
+owner
+phase
+relay_handoff
+reply_minors
+review_attempt
+review_sha
+runs
+scout_key
+seen
+session_done
+slowest
+spent
+ticket
+verdict
