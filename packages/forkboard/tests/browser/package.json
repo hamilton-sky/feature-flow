@@ -1,0 +1,7 @@
+{
+  "name": "forkboard-browser-tests",
+  "private": true,
+  "description": "Forkboard's page driven in a real browser: node --test page.test.js",
+  "scripts": { "test": "node --test page.test.js" },
+  "devDependencies": { "playwright": "1.63.0" }
+}

@@ -8,6 +8,7 @@ Upgrade between features, not in the middle of a run (see [Upgrading](../README.
 
 | Version | Added |
 |---|---|
+| 0.26.0 | **Forkboard**: the review page is now its own package, [packages/forkboard/](../packages/forkboard/) (Forkboard 0.1.0), with its own tests, browser tests in CI and its own PyPI build. feature-flow turns the brainstorm into a review document (`bundle/1`) and Forkboard renders it; `brainstorm-page`, its flags and the pages it writes are unchanged. The page's script and CSS are now real files instead of Python strings. Every install carries Forkboard inside the package. Styles moved from `guides/styles/` to Forkboard's themes. |
 | 0.25.0 | **Live brainstorm page** (Claude only; `brainstorm-page <feature> --live <folder>`, published as an artifact that saves itself). Everyone it is shared with can save their own version of each diagram, switch between the original and anyone's version, and **compare with original** (added, removed and renamed boxes and arrows marked). **Ask Claude** in the page redraws a diagram with that person's own Claude. **Talk to Claude** sends the session questions; the session answers on the page (`--asks`, `--answer`) and can put a version into the brainstorm (`--apply`). **Sketch first** (`/feature-flow <feature> brainstorm sketch`): you draw the idea, and the options build on it. |
 
 ## 0.24: seeing the brainstorm

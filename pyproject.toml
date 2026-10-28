@@ -34,6 +34,7 @@ feature-flow-cli = "feature_flow.command:main"
 [tool.setuptools]
 packages = [
     "feature_flow",
+    "feature_flow._forkboard",
     "feature_flow._bundle.skills",
     "feature_flow._bundle.agents",
     "feature_flow._bundle.guides",
@@ -43,6 +44,7 @@ packages = [
 include-package-data = false
 
 [tool.setuptools.package-dir]
+"feature_flow._forkboard" = "packages/forkboard/forkboard"  # the brainstorm's review page, its own package
 "feature_flow._bundle.skills" = "skills"
 "feature_flow._bundle.agents" = "agents"
 "feature_flow._bundle.guides" = "guides"
@@ -50,6 +52,7 @@ include-package-data = false
 "feature_flow._bundle.scripts" = "scripts"
 
 [tool.setuptools.package-data]
+"feature_flow._forkboard" = ["assets/*", "themes/*"]
 "feature_flow._bundle.skills" = ["**/*"]
 "feature_flow._bundle.agents" = ["*.md"]
 "feature_flow._bundle.guides" = ["**/*"]

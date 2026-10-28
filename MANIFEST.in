@@ -3,6 +3,7 @@ graft skills
 graft agents
 graft guides
 graft adapters/codex
+graft packages/forkboard/forkboard
 include scripts/*.py scripts/*.html
 include LICENSE README.md install.py install.sh
-global-exclude .DS_Store
+global-exclude .DS_Store *.pyc

@@ -1,0 +1,50 @@
+{
+ "schema": "bundle/1",
+ "id": "csv",
+ "kind": "Brainstorm",
+ "title": "Brainstorm: csv",
+ "meta": {
+  "picked by": "person",
+  "style": "blueprint"
+ },
+ "intro": "\n",
+ "sections": [
+  {
+   "title": "Idea",
+   "kind": "text",
+   "markdown": "\nAdmins want a **CSV** of every task. See [the docs](https://docs.python.org/3/library/csv.html).\n",
+   "items": []
+  },
+  {
+   "title": "Options",
+   "kind": "text",
+   "markdown": "",
+   "items": [
+    {
+     "title": "A. Stream it",
+     "label": "A",
+     "chosen": false,
+     "markdown": "\n```mermaid\nflowchart LR\n  Admin([Admin]) -->|clicks Export| Api[Export endpoint]\n  Api --> Db[(Tasks table)]\n  Api -- streams rows --> Admin\n```\n\n- Pros: small\n"
+    },
+    {
+     "title": "B. In the background",
+     "label": "B",
+     "chosen": true,
+     "markdown": "\n```mermaid\nsequenceDiagram\n  Admin->>Api: export\n```\n"
+    }
+   ]
+  },
+  {
+   "title": "Chosen",
+   "kind": "chosen",
+   "markdown": "\nB. Big exports are common.\n",
+   "items": []
+  },
+  {
+   "title": "Open",
+   "kind": "open",
+   "markdown": "\n- <script>alert(1)</script> and [bad](javascript:alert(1))",
+   "items": []
+  }
+ ]
+}
