@@ -43,3 +43,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - 1. minor feature_flow/conductor/facade.py: in a run without lanes, a root state phase=merge makes next find Merge, whose judge returns Outcome(None), so next returns None instead of falling to scheduler().next. Only a damaged state file reaches it. Fix: skip merge in that lookup or Stop in Merge.judge without a lane. (single review)
 - 2. minor feature_flow/conductor/schedulers/lane.py: LaneScheduler.finish only forwards to self.end.finish(); drop it. (single review)
+
+## 11-guards-and-budget (left for later)
+
+- 1. minor feature_flow/conductor/schedulers/lane.py: guards.before_ticket(c, busy, only=("replan","budget")) drops its return value; a later guard returning a line would be lost. Return it as the serial scheduler does. (single review)
+- 2. minor feature_flow/conductor/guards.py: before_ticket's only= silently skips unknown names; check them against the known guards. (single review)
