@@ -35,6 +35,7 @@
 - (plan) `MODE_RULES` has 6 rows: the `FLOW_LANES` range, lanes with relay (used by `start` and `lane_next`), lanes need the repo top, `FLOW_DRIVER` values, `FLOW_FAST` values, the batch preconditions (read from `start`, `lane_next`, `batch_for`). The `lane(s) ... still hold tickets` STOP in `start` is not a mode rule and stays in `start`.
 - (plan) `policy/limits.py` holds `round_cap`, the "limits" policy in the brief's Design layer list (step 4 names only levels and review).
 - 01 — Golden test drives 13 CLI sessions in throwaway repos and compares stdout, exit codes, log events and sorted state keys with tests/py/golden/*.txt (shas, tokens, repo/lane paths and the interpreter replaced by placeholders); `python3 tests/py/test_golden.py --record` rewrites them.
+- 03 — conductor.py is now feature_flow/conductor/ (facade.py holds Conductor; errors.py Stop/NoPhase; planning.py a Planner built per call from the conductor's paths, the facade forwarding the 7 plan commands); 4 packages in pyproject; flowrepo copies the package folder.
 
 ## Open questions
 

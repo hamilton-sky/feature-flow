@@ -590,6 +590,8 @@ flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and fe
   cp "$ROOT/scripts/flow.py" "$d/scripts/"
   mkdir -p "$d/feature_flow"
   cp "$ROOT"/feature_flow/*.py "$d/feature_flow/"
+  cp -R "$ROOT/feature_flow/conductor" "$d/feature_flow/"
+  find "$d/feature_flow/conductor" -name __pycache__ -prune -exec rm -rf {} +
   (cd "$d" && git add -A && git commit -qm "add flow.py")
   echo "$d"
 }

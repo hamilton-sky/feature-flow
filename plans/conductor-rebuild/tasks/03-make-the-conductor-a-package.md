@@ -1,7 +1,7 @@
 # Turn conductor.py into the package, with errors and the Planner split out
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -65,3 +65,34 @@ needs the build module (pip install build) and the network
 - `pyproject.toml`, `tests/package_smoke.py`, `tests/run.sh` (`flowrepo`, the Python 3.9 parse check)
 
 ## Answer
+
+- **Built**:
+  - `feature_flow/conductor.py` moved (git mv) to `feature_flow/conductor/facade.py`. Removed from it: `Stop`, `NoPhase`, `BRAINSTORM`, `LENSES`, `HELPERS`, `HELPER_LIMITS`, the planning helpers, and the now unused `import shutil`.
+  - The seven planning commands in the facade are now one-line forwarders, `return Planner(self).<name>(...)`, each keeping its docstring.
+  - New files:
+    - `feature_flow/conductor/errors.py`: `Stop`, `NoPhase`, verbatim.
+    - `feature_flow/conductor/planning.py`: `Planner`, the planning helpers and the constants.
+    - `feature_flow/conductor/__init__.py`: re-exports the seven names.
+    - `feature_flow/conductor/policy/__init__.py`, `phases/__init__.py`, `schedulers/__init__.py`: a docstring each.
+    - `tests/py/test_conductor_package.py`.
+  - Changed:
+    - `pyproject.toml`: the four packages added.
+    - `tests/run.sh` `flowrepo`: also copies `feature_flow/conductor/` and removes its `__pycache__`.
+    - Path strings only in `tests/py/test_trust_drive.py`, `tests/py/test_trust_runner.py`, `tests/py/test_install.py` and `tests/py/test_state_report.py`.
+- **Proof**:
+  - The import check prints `<class 'feature_flow.conductor.facade.Conductor'> <class 'feature_flow.conductor.errors.Stop'> <class 'feature_flow.conductor.errors.NoPhase'>`, rc 0. The second check prints `conductor.py gone: True`, rc 0.
+  - `python3 -m unittest discover -s tests/py -p "test_conductor_package.py" -v`: 5 tests, `OK`. At the test-only commit 016f842 the same command failed: 3 failures and 2 errors, because `conductor.py` still existed and there was no package.
+  - The facade check prints `facade strings True`, rc 0.
+  - `python3 tests/package_smoke.py` needs the `build` module, which the system python3 lacks (`No module named build`). With a scratchpad venv that has `build` 1.6.1, the same script printed `all passed`, including `both installs put the same files in place`.
+  - `bash tests/run.sh`: `466 passed, 0 failed`, exit 0. This includes `the conductor parses as Python 3.9` and `the conductor imports only the standard library`.
+  - `test_golden.py` on its own: 14 tests, OK, with `tests/py/golden/` unchanged.
+- **Decisions**:
+  - `Planner(conductor)` copies the paths and settings it reads when it is built: feature, scripts, plan, draft_root, draft, brief_file, brainstorm_file, state_file, scouts_on. It binds `log` and `one_scout` from the conductor. That kept the moved method bodies byte for byte the same. The facade builds a fresh `Planner` per call, so there is no stale state.
+  - `BRAINSTORM` lives in `planning.py` and the facade imports it, because `replan_prompt` uses it too. The import goes only facade -> planning, so there is no cycle.
+  - In `test_trust_drive.py`'s `Holes` test, the inserted `return` goes into `facade.py`, so its `assert_stops_naming` names `facade.py` as well. That is the file the STOP reports.
+  - In `test_trust_runner.py`, the `HoleC` docstring's path changed with the rest. The `LinkedFolders` fake file system (lines 586-619) is untouched.
+- **Shortcuts taken**: none.
+- **For later tickets**:
+  - `planning.py` imports `Stop` and `NoPhase` from `errors`, so a later ticket can import `planning` without loading the facade.
+  - `facade.py` is 2138 lines.
+  - Running `tests/package_smoke.py` here needs a venv with `build` installed (see learnings).

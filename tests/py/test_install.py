@@ -343,7 +343,7 @@ class PackageTests(unittest.TestCase):
             installer = install.Installer(str(bundle), str(target), "all", False, False, False, out.append)
             installer.package = str(package)
             self.assertEqual(installer.run(), 0)
-            self.assertTrue((target / ".feature-flow" / "feature_flow" / "conductor.py").is_file())
+            self.assertTrue((target / ".feature-flow" / "feature_flow" / "conductor" / "__init__.py").is_file())
             self.assertTrue((target / ".claude" / "skills" / "feature-flow" / "SKILL.md").is_file())
             self.assertTrue((target / ".agents" / "skills" / "feature-flow" / "SKILL.md").is_file())
             self.assertFalse((target / ".feature-flow" / "feature_flow" / install.BUNDLE).exists())

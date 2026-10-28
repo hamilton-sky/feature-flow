@@ -34,6 +34,10 @@ feature-flow-cli = "feature_flow.command:main"
 [tool.setuptools]
 packages = [
     "feature_flow",
+    "feature_flow.conductor",
+    "feature_flow.conductor.policy",
+    "feature_flow.conductor.phases",
+    "feature_flow.conductor.schedulers",
     "feature_flow._bundle.skills",
     "feature_flow._bundle.agents",
     "feature_flow._bundle.guides",
