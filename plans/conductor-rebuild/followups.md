@@ -34,3 +34,7 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - 1. minor feature_flow/conductor/phases/test.py: Test.scout_questions raises NoPhase where old code returned []; scout-prompt in a tester phase would give NoPhase instead of "no scout k: there are 0". Hard to reach. Fix: return []. (single review)
 - 2. minor feature_flow/conductor/phases/base.py: Phase.lane_scoped defaults True, so prompt_text's not-lane_scoped guard is nearly dead. Fix: drop it or comment why. (single review)
+
+## 09-serial-batch-schedulers-and-end-of-run (left for later)
+
+- 1. minor feature_flow/conductor/schedulers/facade_lanes.py: temporary class reaches back into the facade and relies on inheriting SerialScheduler for start_ticket; ticket 10 should replace it outright. (single review)
