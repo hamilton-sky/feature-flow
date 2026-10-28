@@ -451,7 +451,12 @@ def live_tool(tool, path, text, state_path, extra, out, err):
             state_path.write_text(brainstorm_live.dump(brainstorm_live.answer(st, int(extra[0]), extra[1])), encoding="utf-8")
             out.write("answered ask %s in %s\n" % (extra[0], state_path.as_posix()))
         else:
+            blocks = brainstorm_live.diagrams(text)
+            dropped = brainstorm_live.lost(blocks[int(extra[0]) - 1][1]) if extra[0].isdigit() and 0 < int(extra[0]) <= len(blocks) else []
             path.write_text(brainstorm_live.apply(text, st, extra[0], extra[1]), encoding="utf-8")
+            if dropped:
+                err.write("note: figure %s had %s, which the page does not keep; they are gone from the brainstorm now\n"
+                          % (extra[0], ", ".join(dropped)))
             out.write("figure %s in %s is now version %s\n" % (extra[0], path.as_posix(), extra[1]))
     except ValueError as e:
         err.write("%s\n" % e)

@@ -76,6 +76,17 @@ class State(unittest.TestCase):
         self.assertEqual(len(again["asks"]), 2)
         self.assertEqual(live.state(BRAINSTORM, "csv", "junk")["round"], 1)
 
+    def test_titles_count_figures_like_the_page_even_after_other_fences(self):
+        text = "## Code\n\n```python\nx = 1\n```\n\n## Flow\n\n```mermaid\nflowchart LR\n  A --> B\n```\n"
+        self.assertEqual(live.titles(text), {1: "Flow"})
+        self.assertEqual(live.state(text, "f")["figures"]["1"]["title"], "Flow")
+
+    def test_what_a_rewrite_would_drop_is_named(self):
+        self.assertEqual(live.lost("flowchart LR\n  %% note\n  subgraph S\n  A --> B\n  end\n  style A fill:#fff\n"
+                                   "  classDef big font-size:20px\n  classDef red fill:#fff\n"),
+                         ["comments", "subgraph", "style", "classDef"])
+        self.assertEqual(live.lost("flowchart LR\n  A --> B\n  classDef red fill:#fff\n  class A red\n"), [])
+
     def test_mermaid_round_trips_shapes_labels_styles_and_colours(self):
         text = live.mermaid(DANA)
         self.assertIn('Api["Export #quot;API#quot;"]', text)
@@ -110,7 +121,10 @@ class Session(unittest.TestCase):
         self.assertNotIn("Tasks table", text)
         self.assertIn("sequenceDiagram", text)  # the other diagrams stay as they were
         self.assertEqual(live.diagrams(text)[0][2]["nodes"][1]["colour"], "red")
-        self.assertIn("Tasks table", live.apply(text, saved(), "1", "original"))
+        with self.assertRaises(ValueError):  # the file changed since this state was built: apply would hit a diagram nobody saw
+            live.apply(text, saved(), "1", "original")
+        fresh = live.state(text, "csv", saved())
+        self.assertIn("Export", live.apply(text, fresh, "1", "original"))
         for figure, version in (("1", "u_nobody"), ("2", "original"), ("9", "original")):
             with self.assertRaises(ValueError):
                 live.apply(BRAINSTORM, saved(), figure, version)

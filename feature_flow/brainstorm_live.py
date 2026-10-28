@@ -11,6 +11,7 @@ brainstorm file's diagram; asks are questions for the session, which answers the
 The n-th figure is the n-th mermaid block in the brainstorm file, counted from 1, as on the page.
 """
 
+import hashlib
 import json
 import re
 
@@ -32,18 +33,32 @@ def diagrams(text):
 
 
 def titles(text):
-    """{figure number: the heading it sits under}."""
-    out, heading, n = {}, "", 0
-    fenced = False
-    for line in text.splitlines():
-        if line.startswith("```"):
-            if not fenced and line.strip().lower() == "```mermaid":
-                n += 1
-                out[n] = heading
-            fenced = not fenced
-        elif not fenced and line.startswith(("## ", "### ")):
-            heading = line.lstrip("#").strip()
+    """{figure number: the heading it sits under}, counting figures exactly as diagrams() does."""
+    headings = [(m.start(), m.group(1).strip()) for m in re.finditer(r"^#{2,3} (.+)$", text, re.M)]
+    out = {}
+    for n, m in enumerate(FENCE.finditer(text), 1):
+        above = [h for at, h in headings if at < m.start()]
+        out[n] = above[-1] if above else ""
     return out
+
+
+def fingerprint(source):
+    return hashlib.sha256(source.strip().encode("utf-8")).hexdigest()[:16]
+
+
+def lost(source):
+    """What a rewrite of this mermaid block drops: the page keeps boxes, arrows, shapes and palette colours only."""
+    keep = {c[0] for c in page.COLOURS}
+    found = []
+    for line in source.splitlines():
+        word = line.strip().split(" ", 1)[0]
+        if word in ("subgraph", "style", "linkStyle", "click") and word not in found:
+            found.append(word)
+        elif word == "classDef" and line.split()[1:2] and line.split()[1] not in keep and "classDef" not in found:
+            found.append("classDef")
+        elif line.strip().startswith("%%") and "comments" not in found:
+            found.append("comments")
+    return found
 
 
 def mermaid(graph):
@@ -70,11 +85,12 @@ def state(text, feature, old=None):
     old = old if isinstance(old, dict) else {}
     named = titles(text)
     figures = {}
-    for n, _, graph in diagrams(text):
+    for n, source, graph in diagrams(text):
         if graph is None:
             continue
         kept = (old.get("figures") or {}).get(str(n)) or {}
-        figures[str(n)] = {"title": named.get(n, ""), "original": graph, "versions": kept.get("versions") or {}}
+        figures[str(n)] = {"title": named.get(n, ""), "source": fingerprint(source), "original": graph,
+                           "versions": kept.get("versions") or {}}
     return {"feature": feature, "round": int(old.get("round") or 0) + 1, "figures": figures,
             "asks": old.get("asks") if isinstance(old.get("asks"), list) else []}
 
@@ -118,6 +134,9 @@ def apply(text, st, figure, version):
     if not str(figure).isdigit() or not 1 <= int(figure) <= len(blocks):
         raise ValueError("the brainstorm file has %d diagrams, so no figure %s: build the page again" % (len(blocks), figure))
     block = blocks[int(figure) - 1]
+    if fig.get("source") and fingerprint(block.group(1)) != fig["source"]:
+        raise ValueError("figure %s in the brainstorm changed since the page was built: build the page again (--live), "
+                         "publish it, and apply after the next save" % figure)
     return text[:block.start(1)] + mermaid(graph) + "\n" + text[block.end(1):]
 
 
@@ -205,18 +224,26 @@ LIVE_JS = r"""
                   : Promise.resolve(ids.reduce(function (o, id) { o[id] = id === me ? 'You' : 'Someone'; return o; }, {}));
     }
     function save(change, done) {  // change the state and publish it; a clash with someone else's save reloads and tries once more
-      var pending = JSON.parse(sessionStorage.getItem(STASH) || '[]'); pending.push(change);
-      try { sessionStorage.setItem(STASH, JSON.stringify(pending)); } catch (e) {}
-      merge(st, change);
-      var body = JSON.stringify(st, null, 1) + '\n';
+      try {  // kept across the reload a clash causes; a private window may refuse it, and then a clash loses the change
+        var pending = JSON.parse(sessionStorage.getItem(STASH) || '[]'); pending.push(change);
+        sessionStorage.setItem(STASH, JSON.stringify(pending));
+      } catch (e) {}
+      var next = JSON.parse(JSON.stringify(st));  // the page's state changes only once the save lands
+      merge(next, change);
+      var body = JSON.stringify(next, null, 1) + '\n';
       artifact.publish({ 'state.json': { content: body, contentType: 'application/json', ifMatch: sha } }).then(function (res) {
         try { sessionStorage.removeItem(STASH); } catch (e) {}
+        merge(st, change);
         sha = res && res.shas && res.shas['state.json'];
         if (!sha) hash(body).then(function (h) { sha = h; });
         render().then(function () { if (done) done(); });
       }, function (e) {
         var code = e && e.code;
-        if (code === 'conflict') { toast('Someone saved at the same moment. Reloading, then your change is saved again.'); return; }
+        if (code === 'conflict') {  // this view still holds the old state.json: load the new one, then the stash saves the change again
+          toast('Someone saved at the same moment. Reloading, then your change is saved again.');
+          setTimeout(function () { location.reload(); }, 1200);
+          return;
+        }
         try { sessionStorage.removeItem(STASH); } catch (x) {}
         if (code === 'not_writer' || code === 'not_granted' || code === 'capability_disabled' || code === 'consent_required') { writable = false; toast('This view is read only: ask the owner for edit access to save.'); render(); }
         else toast('Could not save (' + (code || 'error') + '). Try again in a moment.');
@@ -286,8 +313,11 @@ LIVE_JS = r"""
             { modelTier: 'default' }).then(function (out) {
             var g = out && out.graph;
             if (!g || !Array.isArray(g.nodes) || !Array.isArray(g.edges)) throw { code: 'invalid_json' };
-            ed.load({ dir: now.dir, nodes: g.nodes.filter(function (n) { return n && n.id; }).map(function (n) { return { id: String(n.id).replace(/[^\w-]/g, '') || 'N', label: String(n.label || n.id), shape: n.shape in { rect: 1, round: 1, stadium: 1, diamond: 1, hexagon: 1, circle: 1, cylinder: 1 } ? n.shape : 'rect', colour: PALETTE[n.colour] ? n.colour : '' }; }),
-                      edges: g.edges.filter(function (e) { return e && e.from && e.to; }).map(function (e) { return { from: String(e.from), to: String(e.to), label: String(e.label || ''), style: { arrow: 1, open: 1, dotted: 1, thick: 1 }[e.style] ? e.style : 'arrow' }; }) }, null, 'claude');
+            var ident = function (x) { return String(x).replace(/[^\w-]/g, ''); }, ids = {};
+            var boxes = g.nodes.filter(function (n) { return n && ident(n.id) && !ids[ident(n.id)] && (ids[ident(n.id)] = true); }).map(function (n) { return { id: ident(n.id), label: String(n.label || n.id), shape: n.shape in { rect: 1, round: 1, stadium: 1, diamond: 1, hexagon: 1, circle: 1, cylinder: 1 } ? n.shape : 'rect', colour: PALETTE[n.colour] ? n.colour : '' }; });
+            var arrows = g.edges.filter(function (e) { return e && ids[ident(e.from)] && ids[ident(e.to)]; }).map(function (e) { return { from: ident(e.from), to: ident(e.to), label: String(e.label || ''), style: { arrow: 1, open: 1, dotted: 1, thick: 1 }[e.style] ? e.style : 'arrow' }; });
+            if (!boxes.length) throw { code: 'invalid_json' };
+            ed.load({ dir: now.dir, nodes: boxes, edges: arrows }, null, 'claude');
             said.hidden = false; said.textContent = 'Claude: ' + String(out.reply || 'Done.') + ' Undo takes it back; Save as my version keeps it.';
             box.value = '';
           }).catch(function (e) {
