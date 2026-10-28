@@ -48,3 +48,9 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - 1. minor feature_flow/conductor/schedulers/lane.py: guards.before_ticket(c, busy, only=("replan","budget")) drops its return value; a later guard returning a line would be lost. Return it as the serial scheduler does. (single review)
 - 2. minor feature_flow/conductor/guards.py: before_ticket's only= silently skips unknown names; check them against the known guards. (single review)
+
+## 12-workspace-in-place-of-in-lane (left for later)
+
+- 1. minor feature_flow/conductor/workspace.py Workspace.__getattr__: still forwards every missing name to the Conductor; an allow-list would enforce the lane view. (single review)
+- 2. minor feature_flow/conductor/workspace.py _working_in: two call sites (entered, flow_code); ticket 15 should remove both. (single review)
+- 3. minor tests/py/test_schedulers.py:304 stale "as in_lane gives it" comment. (single review)
