@@ -53,7 +53,7 @@ class Cwd(unittest.TestCase):
         self.assertEqual(git.head(cwd=there), self.there.head())
         self.assertEqual(git.head(), self.here.head())
         self.assertEqual(os.path.realpath(str(git.toplevel(cwd=there))), os.path.realpath(there))
-        self.assertIn("02-b", git.show_text("HEAD:plans/f/tasks/03-c.md", cwd=there))
+        self.assertIn("# C\n", git.show_text("HEAD:plans/f/tasks/03-c.md", cwd=there))
         with self.assertRaises(RuntimeError):
             git.show_text("HEAD:plans/f/tasks/03-c.md")
         self.there.path("only-there.txt").write_text("x\n", encoding="utf-8")

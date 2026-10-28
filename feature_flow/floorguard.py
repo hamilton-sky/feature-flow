@@ -159,12 +159,13 @@ def count_assertions(diff):
     return removed, added
 
 
-def _find_ticket(dir_, num):
-    """The first match of the glob "$DIR"/"$NUM"-*.md, or None."""
+def _find_ticket(dir_, num, cwd=None):
+    """The first match of the glob "$DIR"/"$NUM"-*.md, or None. The folder is read under cwd when given;
+    the path returned is as the glob would print it."""
     prefix = dir_ + "/" + num + "-"
     folder, start = os.path.split(prefix)
     try:
-        names = os.listdir(folder or ".")
+        names = os.listdir(_under(cwd, folder or "."))
     except OSError:
         return None
     hits = sorted(name for name in names
@@ -173,12 +174,18 @@ def _find_ticket(dir_, num):
     return prefix + hits[0][len(start):] if hits else None
 
 
+def _under(cwd, path):
+    """path read from cwd: the path itself when cwd is None or the path is absolute."""
+    return path if cwd is None else os.path.join(cwd, path)
+
+
 class _Guard:
-    def __init__(self, err):
+    def __init__(self, err, cwd=None):
         self.err = err
+        self.cwd = cwd
 
     def git(self, *args, quiet=False):
-        result = subprocess.run(["git"] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(["git"] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.cwd)
         stdout = result.stdout.decode("utf-8", "surrogateescape")
         stderr = result.stderr.decode("utf-8", "surrogateescape")
         if stderr and not quiet:
@@ -186,8 +193,9 @@ class _Guard:
         return result.returncode, stdout
 
 
-def run(argv, out, err, environ=None):
-    """Run the guard. out and err take text; returns the exit code."""
+def run(argv, out, err, environ=None, cwd=None):
+    """Run the guard. out and err take text; returns the exit code. cwd is the repo folder its git runs in and
+    the plan folder is read under, None for the working folder; the paths it prints stay relative."""
     environ = os.environ if environ is None else environ
     feature = argv[0] if len(argv) > 0 else ""
     num = argv[1] if len(argv) > 1 else ""
@@ -198,17 +206,17 @@ def run(argv, out, err, environ=None):
 
     root = environ.get("FLOW_DIR") or "plans"
     dir_ = "%s/%s/%s" % (root, feature, environ.get("FLOW_TICKETS") or "tasks")
-    ticket = _find_ticket(dir_, num)
-    if ticket is None or not os.path.exists(ticket):
+    ticket = _find_ticket(dir_, num, cwd)
+    if ticket is None or not os.path.exists(_under(cwd, ticket)):
         err("no ticket %s in %s\n" % (num, dir_))
         return 2
 
-    g = _Guard(err)
+    g = _Guard(err, cwd)
     if g.git("cat-file", "-e", "%s:./%s" % (base, ticket), quiet=True)[0] == 0:
         source = _strip_newlines(g.git("show", "%s:./%s" % (base, ticket), quiet=True)[1])
     else:
         try:
-            with open(ticket, encoding="utf-8", errors="surrogateescape") as f:
+            with open(_under(cwd, ticket), encoding="utf-8", errors="surrogateescape") as f:
                 source = _strip_newlines(f.read())
         except OSError as e:
             err("cat: %s: %s\n" % (ticket, e.strerror))
@@ -230,7 +238,7 @@ def run(argv, out, err, environ=None):
         findings += "\n" + "\n".join("test-delete: " + p for p in deleted)
 
     touched = _git_lines(g, CONFIG, "diff", "--name-only", base, "HEAD", *outside)
-    touched += _content_config(g, base, "%s/%s/commands.md" % (root, feature), outside)
+    touched += _content_config(g, base, _under(cwd, "%s/%s/commands.md" % (root, feature)), outside)
     if touched and not allows("config"):
         findings += "\n" + "\n".join("config: " + p for p in touched)
 

@@ -37,15 +37,16 @@ class _Collect:
         return "".join(self.parts)
 
 
-def flow_status(scripts, feature, mode, root=None):
+def flow_status(scripts, feature, mode, root=None, cwd=None):
     """The ticket graph reader with --next, --counts or --check, in process. stderr is folded into the output.
-    root, when given, stands in for FLOW_DIR for this one call (the planner's draft folder)."""
+    root, when given, stands in for FLOW_DIR for this one call (the planner's draft folder). cwd is the folder
+    the plan is read under, None for the working folder."""
     out = _Collect()
     saved = os.environ.get("FLOW_DIR")
     if root is not None:
         os.environ["FLOW_DIR"] = str(root)
     try:
-        code = status.run([feature, mode], out, out)
+        code = status.run([feature, mode], out, out, cwd=cwd)
     finally:
         if root is not None:
             if saved is None:
@@ -55,29 +56,30 @@ def flow_status(scripts, feature, mode, root=None):
     return Result(code, out.text())
 
 
-def gate(scripts, feature, timeout=None, quick=False):
+def gate(scripts, feature, timeout=None, quick=False, cwd=None):
     """The gate, run in process. stderr is folded into the output as the subprocess call did.
-    timeout is minutes, None for FLOW_GATE_TIMEOUT. quick runs Quick in the place of Test."""
+    timeout is minutes, None for FLOW_GATE_TIMEOUT. quick runs Quick in the place of Test. cwd: see gate.run."""
     chunks = []
-    code = gate_module.run(str(feature), chunks.append, chunks.append, timeout, quick)
+    code = gate_module.run(str(feature), chunks.append, chunks.append, timeout, quick, cwd=cwd)
     out = "".join(chunks).encode("utf-8", "surrogateescape").decode("utf-8", "replace")
     out = out.replace("\r\n", "\n").replace("\r", "\n")
     return Result(code, out)
 
 
-def floor_guard(scripts, feature, num, base):
-    """feature_flow.floorguard in-process; stdout and stderr are folded together in order."""
+def floor_guard(scripts, feature, num, base, cwd=None):
+    """feature_flow.floorguard in-process; stdout and stderr are folded together in order. cwd: see floorguard.run."""
     chunks = []
-    code = floorguard.run([str(feature), str(num), str(base)], chunks.append, chunks.append)
+    code = floorguard.run([str(feature), str(num), str(base)], chunks.append, chunks.append, cwd=cwd)
     out = "".join(chunks).encode("utf-8", "surrogateescape").decode("utf-8", "replace")
     return Result(code, out)
 
 
-def smoke(command, timeout=None):
-    """The smoke command. timeout is minutes, 0 or None for none. Result.timed_out is set when it ran out."""
+def smoke(command, timeout=None, cwd=None):
+    """The smoke command, run in cwd (None: the working folder). timeout is minutes, 0 or None for none.
+    Result.timed_out is set when it ran out."""
     args, use_shell = gate_module.shell(command)
     with tempfile.TemporaryFile() as log:
-        code, timed_out = proc.run(args, use_shell, log, timeout)
+        code, timed_out = proc.run(args, use_shell, log, timeout, cwd=cwd)
         log.seek(0)
         out = log.read().decode("utf-8", "replace").replace("\r\n", "\n")
     result = Result(1 if timed_out else code, out)
