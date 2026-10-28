@@ -47,7 +47,6 @@ SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.
 GUIDES = ("build.md", "review.md", "review-quality.md", "review-single.md", "review-feature.md", "plan.md", "plan-review.md", "replan.md", "test.md", "debug.md")  # prompts.GUIDES + debug.md
 SKILL_GUIDES = ("brainstorm.md", "brief.md", "show.md")  # read by the skills themselves
 LENSES = ("positive.md", "researcher.md", "open-minded.md", "artistic.md", "ux.md", "security.md")  # guides/lenses/
-STYLES = ("route.css", "blueprint.css")  # guides/styles/, for the brainstorm page
 TEMPLATES = ("brainstorm.md", "commands.md", "learnings.md", "map.md", "spec.md", "ticket.md", "ui-mockup.md")  # guides/templates/
 ROLES = ("ticket-builder.md", "ticket-reviewer.md", "feature-planner.md", "plan-reviewer.md", "flow-scout.md",
          "flow-web.md", "flow-architect.md", "flow-designer.md", "flow-po.md", "flow-skeptic.md", "flow-tester.md",
@@ -131,7 +130,7 @@ def code_files(here, top):
     found += [parent / "guides" / name for name in GUIDES + SKILL_GUIDES] + [parent / "agents" / name for name in ROLES]
     found += [parent / "guides" / "templates" / name for name in TEMPLATES]
     found += [parent / "guides" / "lenses" / name for name in LENSES]
-    found += [parent / "guides" / "styles" / name for name in STYLES]
+    found += tree(parent / "packages" / "forkboard" / "forkboard")  # the review page in a checkout or the plugin
     for rel in OWNED:
         found += tree(top / rel)
     found += [top / ".claude" / "agents" / name for name in ROLES]

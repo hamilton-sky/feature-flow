@@ -7,6 +7,7 @@ them first, which needs the build module. Checks, in a throwaway folder:
   - `feature-flow --version` and `python -m feature_flow --version` print the version
   - `feature-flow install` puts the same files in a repo as `python install.py` from this checkout
   - the installed scripts/flow.py and the `feature-flow status` command both read a plan there
+  - Forkboard comes along inside the package, and the installed flow-status.py makes a brainstorm page with it
 Network: pip installs the wheel with --no-deps --no-index, so nothing is downloaded.
 """
 
@@ -38,6 +39,11 @@ BUNDLED = [
     "feature_flow/_bundle/scripts/flow-view.html",
     "feature_flow/install.py",
     "feature_flow/command.py",
+    "feature_flow/_forkboard/__init__.py",
+    "feature_flow/_forkboard/page.py",
+    "feature_flow/_forkboard/assets/editor.js",
+    "feature_flow/_forkboard/assets/live.js",
+    "feature_flow/_forkboard/themes/route.css",
 ]
 FAILED = []
 
@@ -100,7 +106,8 @@ def main(argv):
         with tarfile.open(str(sdist)) as tar:
             members = [m.name.split("/", 1)[-1] for m in tar.getmembers()]
         need = ["skills/feature-flow/SKILL.md", "guides/build.md", "agents/ticket-builder.md",
-                "adapters/codex/feature-flow/SKILL.md", "scripts/flow-view.html", "feature_flow/install.py"]
+                "adapters/codex/feature-flow/SKILL.md", "scripts/flow-view.html", "feature_flow/install.py",
+                "packages/forkboard/forkboard/page.py", "packages/forkboard/forkboard/assets/editor.js"]
         missing = [n for n in need if n not in members]
         check("the sdist holds the files the wheel bundles", not missing, "missing %s" % missing)
 
@@ -153,6 +160,13 @@ def main(argv):
         page = tmp / "page.html"
         code, out = run([command, "view", "f", "--no-open", "--out", page], cwd=from_pkg, env=env)
         check("feature-flow view writes the page", code == 0 and page.is_file(), out)
+        brainstorm = from_pkg / ".feature-flow" / "state" / "brainstorm-f.md"
+        brainstorm.parent.mkdir(parents=True, exist_ok=True)
+        brainstorm.write_text("# Brainstorm: f\n\n## Options\n\n### A. One\n\n```mermaid\nflowchart LR\n  A --> B\n```\n",
+                              encoding="utf-8")
+        code, out = run([sys.executable, "-I", "scripts/flow-status.py", "f", "--brainstorm-page"], cwd=from_pkg, env=env)
+        check("the installed flow-status.py makes the brainstorm page with Forkboard, under -I too",
+              code == 0 and 'class="dg graph"' in brainstorm.with_suffix(".html").read_text(encoding="utf-8"), out)
         code, out = run([command, "nonsense"], cwd=work, env=env)
         check("an unknown command is a usage error", code == 2 and "usage:" in out, out)
 

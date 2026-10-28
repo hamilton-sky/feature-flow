@@ -12,7 +12,7 @@ A run on your repo, with a feature you actually need, teaches more than another 
 
 ## During
 
-Talk the feature through, then `/feature-flow` (Codex: `$feature-flow`). Say yes twice. Let it run, and write down anything you did not expect. If another agent drives the session for you, add `agent` (`/feature-flow <feature> agent`), so the eval does not count its stops as your time.
+Talk the feature through, then `/feature-flow` (Codex: `$feature-flow`). Say yes twice. To try the brainstorm too, add `brainstorm` (`/feature-flow <feature> brainstorm`); [brainstorm.md](brainstorm.md) shows what to expect, and the review page and its diagram editor are worth a note of their own. Let it run, and write down anything you did not expect. If another agent drives the session for you, add `agent` (`/feature-flow <feature> agent`), so the eval does not count its stops as your time.
 
 ## After
 
