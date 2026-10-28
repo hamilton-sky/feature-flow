@@ -1,6 +1,7 @@
 """The schedulers: the serial one hands out the lowest ready ticket and ends through the shared end of run, the
-batch one picks what a builder may build together, and the end of run keeps its order (the tester, the
-acceptance run, the feature review, DONE). Run in process on throwaway repos."""
+batch one picks what a builder may build together, the lane one leases what may run beside the busy lanes and
+merges a passed lane first, and the end of run keeps its order (the tester, the acceptance run, the feature
+review, DONE). Run in process on throwaway repos."""
 
 import contextlib
 import io
@@ -17,7 +18,9 @@ from feature_flow import lanes  # the package under test, from this checkout
 from feature_flow.conductor import Conductor
 from feature_flow.conductor.phases.final import Final
 from feature_flow.conductor.phases.test import Test
-from feature_flow.conductor.schedulers import BatchScheduler, EndOfRun, SerialScheduler
+from feature_flow.conductor.phases import REGISTRY
+from feature_flow.conductor.schedulers import BatchScheduler, EndOfRun, LaneScheduler, SerialScheduler
+from feature_flow.conductor.store import TicketState
 
 T = "plans/f/tasks/%s.md"
 
@@ -201,6 +204,112 @@ class EndOrder(unittest.TestCase):
         self.assertTrue(line.startswith("DONE "), line)
         self.assertEqual(run.c.all.get("owner"), "")
         remove.assert_called_once_with(run.c.top, "f")
+
+
+class LaneDispatch(unittest.TestCase):
+    """dispatch in a lane run, with lease and integrate replaced by recorders: which ready ticket it leases beside
+    the busy lanes, when it waits, and that a passed lane merges before anything new is leased."""
+
+    def lanes(self, tickets, busy, commands="", per_session="4", session_done=0, count=3):
+        """A lane run of count lanes; busy maps a lane to (ticket slug, phase)."""
+        run = Run(self, tickets, commands, FLOW_TICKETS_PER_SESSION=per_session)
+        run.c.all.update({"lanes": count, "session_done": session_done})
+        for k, (slug, phase) in busy.items():
+            run.c.all.update({"L%d.ticket" % k: T % slug, "L%d.num" % k: slug[:2], "L%d.phase" % k: phase})
+        sched = run.c.scheduler()
+        self.assertIsInstance(sched, LaneScheduler)
+        return run, sched
+
+    def dispatch(self, sched):
+        calls = []
+
+        def lease(self, k, path):
+            calls.append(("lease", k, os.path.basename(path)[:-3]))
+            return "LEASED %d" % k
+
+        def integrate(self, k):
+            calls.append(("integrate", k))
+            return "MERGED %d" % k
+
+        with mock.patch.object(LaneScheduler, "lease", autospec=True, side_effect=lease), \
+                mock.patch.object(LaneScheduler, "integrate", autospec=True, side_effect=integrate):
+            return sched.dispatch(), calls
+
+    def test_the_facade_picks_the_lane_scheduler_once_per_call(self):
+        run, sched = self.lanes({"01-a": ()}, {})
+        self.assertIs(run.c.scheduler(), sched)
+        self.assertTrue(sched.lanes)
+
+    def test_what_it_leases_beside_the_busy_lanes(self):
+        one, three = ["Level: 1"], ["Level: 3"]
+        rows = [
+            ("a ticket clear of the busy one goes to the first free lane",
+             dict(tickets={"01-a": one + ["Touches: a/"], "02-b": one + ["Touches: b/"]}, busy={1: ("01-a", "build")}),
+             [("lease", 2, "02-b")]),
+            ("the first free lane, not the next one",
+             dict(tickets={"01-a": one + ["Touches: a/"], "02-b": one + ["Touches: b/"]}, busy={2: ("01-a", "review")}),
+             [("lease", 1, "02-b")]),
+            ("a ticket that overlaps a busy one waits, the next ready one goes",
+             dict(tickets={"01-a": one + ["Touches: a/"], "02-b": one + ["Touches: a/x.py"],
+                           "03-c": one + ["Touches: c/"]}, busy={1: ("01-a", "build")}),
+             [("lease", 2, "03-c")]),
+            ("a ticket without Touches runs alone",
+             dict(tickets={"01-a": one + ["Touches: a/"], "02-b": one, "03-c": one + ["Touches: c/"]},
+                  busy={1: ("01-a", "build")}),
+             [("lease", 2, "03-c")]),
+            ("a ticket on a Shared path runs alone",
+             dict(tickets={"01-a": one + ["Touches: a/"], "02-b": one + ["Touches: b/x.py"],
+                           "03-c": one + ["Touches: c/"]}, busy={1: ("01-a", "build")}, commands="Shared: b/\n"),
+             [("lease", 2, "03-c")]),
+            ("nothing runs beside a busy ticket on a Shared path",
+             dict(tickets={"01-a": one + ["Touches: b/"], "02-b": one + ["Touches: c/"]},
+                  busy={1: ("01-a", "build")}, commands="Shared: b/\n"),
+             []),
+            ("a level 3 ticket keeps clear of a busy one's top folder",
+             dict(tickets={"01-a": one + ["Touches: a/x.py"], "02-b": three + ["Touches: a/y.py"],
+                           "03-c": one + ["Touches: c/"]}, busy={1: ("01-a", "build")}),
+             [("lease", 2, "03-c")]),
+            ("a level 3 ticket in another folder goes",
+             dict(tickets={"01-a": one + ["Touches: a/"], "02-b": three + ["Touches: b/"]},
+                  busy={1: ("01-a", "ask")}),
+             [("lease", 2, "02-b")]),
+            ("with no lane busy the lowest ready ticket goes to lane 1",
+             dict(tickets={"01-a": one + ["Touches: a/"], "02-b": one + ["Touches: b/"]}, busy={}),
+             [("lease", 1, "01-a")]),
+        ]
+        for name, kw, want in rows:
+            with self.subTest(name):
+                _, sched = self.lanes(**kw)
+                line, calls = self.dispatch(sched)
+                self.assertEqual(calls, want)
+                busy = ",".join(str(k) for k in sorted(kw["busy"]))
+                self.assertEqual(line, "LEASED %d" % want[0][1] if want else "WAIT %s" % busy)
+
+    def test_a_full_session_waits_for_the_busy_lanes(self):
+        _, sched = self.lanes({"01-a": ["Touches: a/"], "02-b": ["Touches: b/"], "03-c": ["Touches: c/"]},
+                              {1: ("01-a", "build"), 3: ("02-b", "review")}, per_session="3", session_done=1)
+        line, calls = self.dispatch(sched)
+        self.assertEqual((line, calls), ("WAIT 1,3", []))
+
+    def test_a_full_session_with_no_busy_lane_hands_off(self):
+        run, sched = self.lanes({"01-a": ["Touches: a/"]}, {}, per_session="2", session_done=2)
+        line, calls = self.dispatch(sched)
+        self.assertEqual(calls, [])
+        self.assertTrue(line.startswith("HANDOFF "), line)
+        self.assertEqual(run.c.all.get("owner"), "")
+
+    def test_a_passed_lane_merges_before_a_new_lease(self):
+        run, sched = self.lanes({"01-a": ["Touches: a/"], "02-b": ["Touches: b/"], "03-c": ["Touches: c/"]},
+                                {1: ("01-a", "review"), 2: ("02-b", "build")})
+        run.c.st = TicketState(run.c.all, 1)  # lane 1's view, as in_lane gives it
+        self.assertIsNone(sched.on_passed(run.c))  # queued: nothing to hand out yet
+        self.assertEqual(run.c.all.get("L1.phase"), "merge")
+        self.assertIs(run.c.pending(), REGISTRY["merge"])
+        self.assertEqual(run.c.num_all("done"), 0)  # counted once the merge lands
+        run.c.st = TicketState(run.c.all)
+        line, calls = self.dispatch(sched)
+        self.assertEqual((line, calls), ("MERGED 1", [("integrate", 1)]))
+        self.assertTrue(REGISTRY["merge"].lane_scoped)
 
 
 if __name__ == "__main__":
