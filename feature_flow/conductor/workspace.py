@@ -247,8 +247,10 @@ class Workspace:
     def flow_code(self):
         """codehash's fingerprint of the flow code, read from the working folder: in a lane or the integration
         worktree that is the main worktree's top (lanes start there and never change it), so the roles and guides
-        it covers are the ones the prompts read (prompts_top), never a lane's copies."""
-        return codehash.flow_code(self.scripts)
+        it covers are the ones the prompts read (prompts_top), never a lane's copies. The names are relative to
+        this Workspace's own repo, as when the run worked inside it: in a lane the main worktree's files are
+        absolute."""
+        return codehash.flow_code(self.scripts, cwd=self.folder)
 
     def snapshot_code(self):
         whole, each = self.flow_code()

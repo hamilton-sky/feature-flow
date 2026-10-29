@@ -170,7 +170,8 @@ class CodeFingerprint(unittest.TestCase):
             self.assertEqual((Path.cwd().resolve(), self.ws.folder.resolve()), (self.run.c.top.resolve(), self.lane.resolve()))
         names = codehash.load(self.ws.get("code_files"))
         main = hashlib.sha256((self.run.c.top / self.ROLE).read_bytes()).hexdigest()
-        self.assertEqual(names.get(self.ROLE.as_posix()), main)
+        # named as the old code named it from inside the lane: the main worktree's file by its absolute path
+        self.assertEqual(names.get((self.run.c.top / self.ROLE).resolve().as_posix()), main)
         self.assertFalse([n for n in names if "lane-1" in n], names)
 
     def test_editing_the_main_worktrees_role_during_a_lane_build_stops(self):

@@ -84,3 +84,28 @@ If you are sure a test asks for something spec.md does not say, do not work arou
     FAILED (failures=13)
 
 ## Answer
+
+## Attempt note
+
+Attempt from 52b85d9 (auto). Status left open: the acceptance bullet still fails, on 13 tests that need a product-owner ruling (Ask below).
+
+**Fixed (cause 2 of ticket 14's Answer, lane `code_files` keys):** `codehash.flow_code(scripts, cwd=None)` now finds the repo top with `git.toplevel(cwd=cwd)` (falling back to `cwd`, else the working folder), and `Workspace.flow_code` passes `cwd=self.folder`. So a lane names files relative to the lane's own repo, as the old code did after `os.chdir` into the lane: the main worktree's files get absolute paths (`<TMP-REPO>/agents/flow-architect.md`), which is what the old code wrote. The file list itself is unchanged (still the main top's roles and guides, ticket 12's review fix). The main worktree passes `folder=None`, so serial, batch and run-wide snapshots are unchanged. `tests/py/test_workspace.py` `test_a_lane_snapshot_names_the_main_worktrees_role` asserted the relative key that the acceptance tests show is a state change; it now looks up the same hash under the main role's absolute path (same check, same strength; the `lane-1` check is unchanged).
+
+**Proof, run fresh after the last edit:**
+- `bash tests/run.sh`: `466 passed, 0 failed`, exit 0.
+- `python3 -m unittest discover -s plans/conductor-rebuild/acceptance -v`: `Ran 48 tests`, `FAILED (failures=13)`, exit 1; A3 and A4 ok. The same 13 names still fail, but every one now differs only in package file names: a script that joins each failure's diff lines and removes every `"(<TMP-REPO>/)?feature_flow/conductor[^"]*": "<SHA>"` entry finds old and new equal for all 13 (it found them different for `test_guides_and_roles_come_from_the_main_worktree` before the fix, the relative vs absolute keys).
+- `python3 -m unittest test_golden` (from tests/py): 14 tests OK.
+
+## Ask: po
+
+All 13 remaining acceptance failures are the `support.twins` snapshot assertion (`the run left different files on the current code`), and the only difference left is the file list in the state's `code_files` (and `L<k>.code_files`): the old code lists `feature_flow/conductor.py`, the current code lists `feature_flow/conductor/__init__.py`, `facade.py`, ... (the package files). Tests:
+
+- test_rebuild_lanes: `test_a_lane_run_leases_merges_and_finishes_as_today`, `test_a_lane_worktree_that_is_gone_stops_as_today`, `test_guides_and_roles_come_from_the_main_worktree`
+- test_rebuild_modes: `test_other_commands_ignore_a_bad_flow_lanes`, `test_patching_check_code_on_the_class_turns_the_code_check_off`, `test_batch_preconditions`
+- test_rebuild_user: `test_state_log_findings_ticket_sections_and_followups_are_the_same`, `test_the_17_commands_print_the_same_lines_with_the_same_exit_codes`, `test_a_batch_is_judged_as_today`, `test_a_fast_run_defers_reviews_to_one_feature_review_then_done`, `test_a_serial_run_with_acceptance_tests_ends_with_the_same_done_line`, `test_relay_hands_off_after_each_phase`, `test_serial_run_hands_out_the_tests_before_the_first_ticket`
+
+**What they expect:** the state file left by a run on the new code equals the old code's byte for byte after `World.norm` (shas, tokens, temp paths), including the `code_files` value, which names every flow file.
+
+**Where spec.md disagrees:** line 11 (`feature_flow/conductor.py` becomes the package `feature_flow/conductor/`), line 17 (`feature_flow/conductor.py` no longer exists) and line 180 (`feature_flow/codehash.py` hash every file under `feature_flow/`, recursively, ... picks the package up without changes; the trust digest of a run changes once, when the files change). Line 38 asks for the same keys and the same `key=value` format, which holds: the key `code_files` and its JSON format are the same, only the file names inside the value follow the move. No code change can make the value name `feature_flow/conductor.py` while that file must not exist and codehash must hash the package files.
+
+**Options I see:** (a) rule these 13 wrong as written: the twins snapshot should normalise the file names inside `code_files` (or the package entries against `feature_flow/conductor.py`), a tester change; (b) accept them as known failures for this feature. I changed nothing under `plans/conductor-rebuild/acceptance/`.

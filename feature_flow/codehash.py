@@ -41,10 +41,11 @@ def _name(path, top):
         return path.as_posix()
 
 
-def flow_code(scripts):
-    """(the sha256 over every file's path and bytes, {path relative to the repo: sha256 of the file})."""
-    top = git.toplevel()
-    top = top.resolve() if top is not None else Path(os.getcwd()).resolve()
+def flow_code(scripts, cwd=None):
+    """(the sha256 over every file's path and bytes, {path relative to the repo: sha256 of the file}); the repo
+    is the one cwd is in (None: the working folder), and a file outside it is named by its absolute path."""
+    top = git.toplevel(cwd=cwd)
+    top = top.resolve() if top is not None else Path(cwd if cwd is not None else os.getcwd()).resolve()
     each = {}
     for path in _files(scripts):
         try:
