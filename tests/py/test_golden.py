@@ -87,6 +87,8 @@ class Session:
         self.test = test
         self.repo = Repo(tickets=())
         test.addCleanup(self.repo.close)
+        # run in the real path, as the scripts folder is: on Windows the temp folder can be a short (8.3) name
+        self.repo.dir = self.repo.dir.resolve()
         self.dir = self.repo.dir
         for name in ROLES:
             self.write("agents/%s.md" % name, role_text(name))
@@ -108,7 +110,7 @@ class Session:
         self.paths = self.known_paths()
 
     def known_paths(self):
-        found = {str(self.dir), str(self.dir.resolve()), os.path.realpath(str(self.dir)),
+        found = {str(self.dir), self.repo.tmp.name, os.path.realpath(str(self.dir)),
                  git(self.dir, "rev-parse", "--show-toplevel")}
         out = set()
         for path in found:

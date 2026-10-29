@@ -31,7 +31,7 @@ class ModeRules(unittest.TestCase):
         ("lanes_relay", {"lanes": 1, "relay": True}, ""),
         ("lanes_relay", {"lanes": 2}, ""),
         ("lanes_top", {"lanes": 2, "cwd": TOP / "sub"},
-         "run the conductor from the top of the repo (/repo) to use lanes"),
+         "run the conductor from the top of the repo (%s) to use lanes" % TOP),
         ("lanes_top", {"lanes": 1, "cwd": TOP / "sub"}, ""),
         ("lanes_top", {"lanes": 2}, ""),
         ("driver", {"driver": "robot"}, "FLOW_DRIVER must be person or agent, not robot"),
