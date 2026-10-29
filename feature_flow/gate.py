@@ -60,10 +60,10 @@ def timeout_minutes():
         raise ValueError("FLOW_GATE_TIMEOUT must be a whole number, not %s" % value)
 
 
-def run(feature, out, err, timeout=None, quick=False):
+def run(feature, out, err, timeout=None, quick=False, cwd=None):
     """Run the gate for feature. out and err take text. timeout is minutes (a float is fine), 0 for none;
-    None reads FLOW_GATE_TIMEOUT. With quick, a usable Quick: value runs in the place of Test.
-    Returns the exit code."""
+    None reads FLOW_GATE_TIMEOUT. With quick, a usable Quick: value runs in the place of Test. cwd is the folder
+    commands.md is read under and the commands run in, None for the working folder. Returns the exit code."""
     if not feature:
         err("usage: python3 scripts/gate.py <feature>\n")
         return 2
@@ -74,6 +74,8 @@ def run(feature, out, err, timeout=None, quick=False):
             err("gate: %s\n" % problem)
             return 2
     path = Path(os.environ.get("FLOW_DIR") or "plans") / feature / "commands.md"
+    if cwd is not None:
+        path = Path(cwd) / path
     if not path.is_file():
         out("gate: no commands.md for " + feature + ", nothing to run\n")
         return 0
@@ -89,7 +91,7 @@ def run(feature, out, err, timeout=None, quick=False):
         out("gate: " + key + ": " + cmd + "\n")
         with tempfile.TemporaryFile() as log:
             args, use_shell = shell(cmd)
-            code, timed_out = proc.run(args, use_shell, log, timeout)
+            code, timed_out = proc.run(args, use_shell, log, timeout, cwd=cwd)
             if timed_out:
                 out("gate: %s timed out after %s minutes, stopped: %s\n" % (key, format(timeout, "g"), cmd))
                 return 1

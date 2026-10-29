@@ -1,0 +1,162 @@
+# scenario test_ask_in_a_lane
+# env FLOW_LANES=2 FLOW_TICKETS_PER_SESSION=99
+$ start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha> 1
+$ next
+exit 0
+BUILD plans/f/tasks/02-b.md 02 <sha> 2
+$ next
+exit 0
+WAIT 1,2
+# appended to plans/f/tasks/01-a.md in lane 1: ## Ask: architect
+$ next 1
+exit 0
+ASK architect plans/f/tasks/01-a.md 01 <sha> 1
+$ scouts 1
+exit 0
+SCOUT 1 flow-scout <repo>/.feature-flow/state/scout-f-L1-1.txt
+$ scout-prompt 1 1
+exit 0
+You are the flow-scout (fixture role).
+Status: `python3 <repo>/scripts/flow-status.py <feature>`.
+
+---
+
+Work in the folder `<repo>/.feature-flow/lanes/f/lane-1`: it is the worktree the architect will work in. Run `cd <repo>/.feature-flow/lanes/f/lane-1` before any git command, and read every path here relative to it, as `<repo>/.feature-flow/lanes/f/lane-1/<path>`.
+
+ROLE: architect
+
+The architect is about to answer the question below for a ticket of this feature. Gather what it needs from the repository and the plan, without answering it yourself.
+
+The question:
+
+Should the cache live in a/ or b/?
+
+Reply in the shape your role gives, and change nothing.
+# scout 1 replied
+$ prompt 1
+exit 0
+You are the flow-architect (fixture role).
+Status: `python3 <repo>/scripts/flow-status.py <feature>`.
+
+---
+
+Work in the folder `<repo>/.feature-flow/lanes/f/lane-1` (`cd <repo>/.feature-flow/lanes/f/lane-1` first): the worktree of this ticket. Every path here is relative to it.
+
+Your question comes from the builder of ticket 01 of the feature `f`. Read the plan in `plans/f` (`spec.md`, `map.md`, and the mock-ups if there are any) and the ticket as it was planned, with `git show <sha>:plans/f/tasks/01-a.md`. The work started at commit `<sha>`.
+
+The question:
+
+Should the cache live in a/ or b/?
+
+Do not edit any file or create a commit. Your final reply must end with exactly `ANSWER: GIVEN` or `ANSWER: USER`.
+
+## Scout findings (unverified)
+
+Cheap helper agents read the code before you started. Use what they found as leads and check anything before you rely on it: they can be wrong, and they prove nothing.
+
+### Scout 1
+
+scout 1 found the code in src/
+# reply: ## Answer |  | In a/. |  | ANSWER: GIVEN
+$ verdict <repo>-reply.txt 1
+exit 0
+OK
+$ next 1
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha> 1
+$ prompt 1
+exit 0
+You are the ticket-builder (fixture role).
+Status: `python3 <repo>/scripts/flow-status.py <feature>`.
+
+---
+
+The build guide follows. Follow it exactly.
+
+# Guide build (fixture)
+
+Feature f, ticket 01 at plans/f/tasks/01-a.md, sha <sha>, base <sha>, base commit <sha>, start <sha>, plan <plan>, tasks <tasks>, folder <folder>, acceptance <acceptance>.
+Run `python3 <repo>/scripts/flow-status.py f --next`.
+
+---
+
+Work in the folder `<repo>/.feature-flow/lanes/f/lane-1`: a git worktree on the branch `ff/f/01`, made for this ticket while other tickets are built beside it in their own folders. Change to it first (`cd <repo>/.feature-flow/lanes/f/lane-1`) and run every command there. The ticket, the plan and every path in this prompt are relative to it. Never change a file outside it, and do not switch its branch.
+Your task: build ticket 01 of the feature `f`, in auto mode (`f auto 01`). The ticket is `plans/f/tasks/01-a.md`. The work starts at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+When you are done, reply with what you built and the commit. Do not review your own work.
+# built plans/f/tasks/01-a.md in lane 1
+$ next 1
+exit 0
+REVIEW plans/f/tasks/01-a.md 01 <sha> 1
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt 1
+exit 0
+OK
+$ next 1
+exit 0
+WAIT 2
+# built plans/f/tasks/02-b.md in lane 2
+$ next 2
+exit 0
+REVIEW plans/f/tasks/02-b.md 02 <sha> 2
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt 2
+exit 0
+OK
+$ next 2
+exit 0
+DONE f is complete: 2 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-PERSON
+01,LEASE-1
+01,BUILD
+02,LEASE-2
+02,BUILD
+-,WAIT
+01,ASK
+01,SCOUTS-1
+01,ANSWER-GIVEN
+01,ASK-ARCHITECT-GIVEN
+01,BUILD
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,FOOTPRINT-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-SINGLE
+01,REVIEW
+01,VERDICT-PASS
+-,MERGE-GATE-FULL-PASS
+01,MERGED-1
+-,WAIT
+02,GATE-FULL
+02,GATE-PASS
+02,GUARD-PASS
+02,FOOTPRINT-PASS
+02,DONEWHEN-PASS
+02,LEVEL-2
+02,REVIEW-SINGLE
+02,REVIEW
+02,VERDICT-PASS
+-,MERGE-GATE-FULL-PASS
+02,MERGED-2
+-,DONE
+=== state keys ===
+done
+findings_for
+lanes
+limit
+owner
+relay_handoff
+runs
+seen
+session_done
+slowest
+spent

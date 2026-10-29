@@ -1,0 +1,121 @@
+# scenario test_agent_budget
+# env FLOW_SCOUTS=off
+$ FLOW_BUDGET=30 FLOW_DRIVER=agent start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/01-t.md 01 <sha>
+# built plans/f/tasks/01-t.md
+$ next
+exit 0
+REVIEW plans/f/tasks/01-t.md 01 <sha>
+# spent 31 minute(s)
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+BUILD plans/f/tasks/02-t.md 02 <sha>
+# built plans/f/tasks/02-t.md
+$ next
+exit 1
+STOP over the time budget for f: 31 of 30 active minute(s) spent, 1 ticket(s) left, fast mode on. To finish sooner, the open tickets can be re-planned into fewer with the same bar: with the user's yes, run replan-prompt and give it to the feature-planner. To go on as planned, run next, and `budget <minutes>` sets a new budget
+$ budget
+exit 0
+OK budget 30 minute(s), 31 spent, fast on (switched on by the budget at minute 31)
+$ next
+exit 0
+BUILD plans/f/tasks/03-t.md 03 <sha>
+# built plans/f/tasks/03-t.md
+$ next
+exit 0
+REVIEW plans/f all <sha>
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+DONE f is complete: 3 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-AGENT
+01,BUILD
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-SINGLE
+01,REVIEW
+01,VERDICT-PASS
+01,BUDGET-FAST
+02,BUILD
+02,GATE-FULL
+02,GATE-PASS
+02,GUARD-PASS
+02,DONEWHEN-PASS
+02,LEVEL-2
+02,REVIEW-DEFERRED
+02,BUDGET-OVER
+02,STOP over the time budget for f: 31 of 30 active minute(s) spent, 1 ticket(s) left, fast mode on. To finish sooner, the open tickets can be re-planned into fewer with the same bar: with the user's yes, run
+03,BUILD
+03,GATE-FULL
+03,GATE-PASS
+03,GUARD-PASS
+03,DONEWHEN-PASS
+03,LEVEL-2
+03,REVIEW-DEFERRED
+all,REVIEW
+all,VERDICT-PASS
+all,FEATURE-PASS
+all,DONE
+=== state keys ===
+ask_from
+ask_role
+asks
+attempt
+base
+budget
+budget_fast
+budget_offer
+code_files
+code_sha
+deferred
+done
+driver
+due_checks
+due_minors
+edit_note
+fast
+fast_done
+final_base
+final_round
+findings_for
+lanes
+level
+level_note
+level_raised
+limit
+num
+owner
+phase
+relay_handoff
+reply_minors
+review_attempt
+review_notes
+review_pass
+review_sha
+round
+runs
+scout_key
+seen
+session_done
+slowest
+spec_ok
+spent
+ticket
+ticket_clock
+verdict

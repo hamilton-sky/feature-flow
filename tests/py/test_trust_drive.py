@@ -36,7 +36,7 @@ COMMANDS = ("# Commands: f\n\n"
             "Smoke: `%s -c \"pass\"`\n"
             "Test: `%s t.py`\n") % ((PYTHON,) * 3)
 # Hole (c): the builder's committed test script edits the conductor when the gate runs it.
-EVIL_TEST = ("with open('feature_flow/conductor.py', 'ab') as handle:\n"
+EVIL_TEST = ("with open('feature_flow/conductor/__init__.py', 'ab') as handle:\n"
              "    handle.write(b'\\n# edited by t.py\\n')\n")
 
 
@@ -173,12 +173,12 @@ class Untampered(Drive):
 class Holes(Drive):
     def test_a_builder_commit_that_makes_check_code_return_early(self):
         self.begin()
-        path = self.repo.path("feature_flow/conductor.py")
+        path = self.repo.path("feature_flow/conductor/facade.py")
         marker = b'"""Stop when the files the conductor runs from changed since the ticket was picked."""'
         path.write_bytes(helpers.insert_after_line(path.read_bytes(), marker, b"        return"))
         self.repo.resolve(T1)
         self.assertEqual(self.repo.porcelain(), "")
-        self.assert_stops_naming("feature_flow/conductor.py")
+        self.assert_stops_naming("feature_flow/conductor/facade.py")
 
     def test_phase_written_into_the_state_after_resolving_01(self):
         self.begin()
@@ -198,10 +198,10 @@ class Holes(Drive):
         self.begin()
         self.repo.path("t.py").write_text(EVIL_TEST, encoding="utf-8")
         self.repo.resolve(T1)
-        before = self.repo.path("feature_flow/conductor.py").read_bytes()
+        before = self.repo.path("feature_flow/conductor/__init__.py").read_bytes()
         lines = self.stopped()
-        self.assertNotEqual(self.repo.path("feature_flow/conductor.py").read_bytes(), before, "t.py did not run")
-        self.assertEqual(lines[0], DURING + "feature_flow/conductor.py")
+        self.assertNotEqual(self.repo.path("feature_flow/conductor/__init__.py").read_bytes(), before, "t.py did not run")
+        self.assertEqual(lines[0], DURING + "feature_flow/conductor/__init__.py")
 
 
 class Edits(Drive):
@@ -245,7 +245,7 @@ class PlantedBytecode(Drive):
     HONEST, FORGED = b'"BUILD %s %s %s%s"', b'"BXILD %s %s %s%s"'
 
     def plant(self):
-        source = self.repo.path("feature_flow/conductor.py")
+        source = self.repo.path("feature_flow/conductor/phases/build.py")
         original = source.read_bytes()
         stat = source.stat()
         self.assertIn(self.HONEST, original)

@@ -1,0 +1,131 @@
+# scenario test_fast
+# env FLOW_TICKETS_PER_SESSION=99
+$ FLOW_FAST=1 start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha>
+# built plans/f/tasks/01-a.md
+$ next
+exit 0
+BUILD plans/f/tasks/02-b.md 02 <sha>
+# built plans/f/tasks/02-b.md
+$ next
+exit 0
+REVIEW plans/f all <sha>
+$ scouts
+exit 0
+SCOUT 1 flow-scout <repo>/.feature-flow/state/scout-f-1.txt
+$ scout-prompt 1
+exit 0
+You are the flow-scout (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+ROLE: reviewer
+
+The change from commit `<sha>` to HEAD is about to be reviewed. List what it touches with `git diff --stat <sha>..HEAD -- . ':(exclude)plans/f/tasks/'`. Find the rules it must follow: how similar code in this repository is written and tested, and the rules in README, CONTRIBUTING, CLAUDE.md or AGENTS.md that apply to these files. Do not judge the change itself, and never read a ticket's `## Answer`.
+
+Reply in the shape your role gives, and change nothing.
+# scout 1 replied
+$ prompt
+exit 0
+You are the ticket-reviewer (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The feature review guide follows. Follow it exactly.
+
+# Guide review-feature (fixture)
+
+Feature f, ticket <NN> at <ticket>, sha <sha>, base <sha>, base commit <base-commit>, start <start-commit>, plan plans/f, tasks plans/f/tasks, folder <folder>, acceptance <acceptance>.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: review the whole feature `f` (feature pass), from commit `<sha>` to HEAD. The plan is in `plans/f`. These tickets were built in fast mode without a review of their own: 01, 02.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+Do not edit any file or create a commit. Your final reply must end with exactly `REVIEW: PASS` or `REVIEW: FAIL`.
+
+## Scout findings (unverified)
+
+Cheap helper agents read the code before you started. Use what they found as leads and check anything before you rely on it: they can be wrong, and they prove nothing.
+
+### Scout 1
+
+scout 1 found the code in src/
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+DONE f is complete: 2 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-PERSON
+01,BUILD
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,DONEWHEN-PASS
+01,LEVEL-1
+01,REVIEW-DEFERRED
+02,BUILD
+02,GATE-FULL
+02,GATE-PASS
+02,GUARD-PASS
+02,DONEWHEN-PASS
+02,LEVEL-2
+02,REVIEW-DEFERRED
+all,REVIEW
+all,SCOUTS-1
+all,VERDICT-PASS
+all,FEATURE-PASS
+all,DONE
+=== state keys ===
+ask_from
+ask_role
+asks
+attempt
+base
+code_files
+code_sha
+deferred
+done
+due_checks
+due_minors
+edit_note
+fast
+final_base
+final_round
+findings_for
+lanes
+level
+level_note
+level_raised
+limit
+num
+owner
+phase
+relay_handoff
+reply_minors
+review_attempt
+review_notes
+review_pass
+review_sha
+round
+runs
+scout_key
+scout_n
+seen
+session_done
+slowest
+spec_ok
+spent
+ticket
+ticket_clock
+verdict

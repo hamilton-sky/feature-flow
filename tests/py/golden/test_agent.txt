@@ -1,0 +1,89 @@
+# scenario test_agent
+# env FLOW_SCOUTS=off
+$ FLOW_DRIVER=agent start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha>
+# built plans/f/tasks/01-a.md
+$ next
+exit 0
+REVIEW plans/f/tasks/01-a.md 01 <sha>
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+BUILD plans/f/tasks/02-b.md 02 <sha>
+# built plans/f/tasks/02-b.md
+$ next
+exit 0
+REVIEW plans/f/tasks/02-b.md 02 <sha>
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+DONE f is complete: 2 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-AGENT
+01,BUILD
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-SINGLE
+01,REVIEW
+01,VERDICT-PASS
+02,BUILD
+02,GATE-FULL
+02,GATE-PASS
+02,GUARD-PASS
+02,DONEWHEN-PASS
+02,LEVEL-2
+02,REVIEW-SINGLE
+02,REVIEW
+02,VERDICT-PASS
+02,DONE
+=== state keys ===
+ask_from
+ask_role
+asks
+attempt
+base
+code_files
+code_sha
+done
+driver
+due_checks
+due_minors
+edit_note
+lanes
+level
+level_note
+level_raised
+limit
+num
+owner
+phase
+relay_handoff
+reply_minors
+review_attempt
+review_notes
+review_pass
+review_sha
+round
+runs
+seen
+session_done
+slowest
+spec_ok
+spent
+ticket
+ticket_clock
+verdict

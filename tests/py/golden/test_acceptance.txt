@@ -1,0 +1,101 @@
+# scenario test_acceptance
+# env FLOW_SCOUTS=off FLOW_TICKETS_PER_SESSION=99
+$ start
+exit 0
+OK <token>
+$ next
+exit 0
+TEST plans/f <sha>
+$ prompt
+exit 0
+You are the flow-tester (fixture role).
+Status: `python3 scripts/flow-status.py <feature>`.
+
+---
+
+The test guide follows. Follow it exactly.
+
+# Guide test (fixture)
+
+Feature f, ticket <NN> at <ticket>, sha <sha>, base <sha>, base commit <base-commit>, start <start-commit>, plan plans/f, tasks <tasks>, folder plans/f/acceptance/, acceptance "<python>" plans/f/acceptance/check.py.
+Run `python3 scripts/flow-status.py f --next`.
+
+---
+
+Your task: write the acceptance tests of the feature `f` from its spec, before any of it is built. The plan is in `plans/f`. Write the tests only under `plans/f/acceptance/`, so that `"<python>" plans/f/acceptance/check.py` runs them, and commit them. The work starts at commit `<sha>`.
+Run `git log` and `git status` yourself before you start: a git snapshot taken when your session began can be stale.
+When you are done, reply with what you tested and what you could not.
+# the tester wrote plans/f/acceptance/check.py
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha>
+# built plans/f/tasks/01-a.md
+$ next
+exit 0
+REVIEW plans/f/tasks/01-a.md 01 <sha>
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+DONE f is complete: 1 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-PERSON
+accept,TEST
+accept,TEST-GATE-PASS
+accept,TEST-WRITTEN
+01,BUILD
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-SINGLE
+01,REVIEW
+01,VERDICT-PASS
+accept,ACCEPT-PASS
+accept,DONE
+=== state keys ===
+accept_rulings
+accept_sha
+ask_from
+ask_role
+asks
+attempt
+base
+code_files
+code_sha
+done
+due_checks
+due_minors
+edit_note
+lanes
+level
+level_note
+level_raised
+limit
+num
+owner
+phase
+relay_handoff
+reply_minors
+review_attempt
+review_notes
+review_pass
+review_sha
+round
+runs
+seen
+session_done
+slowest
+spec_ok
+spent
+test_attempt
+test_base
+test_mode
+test_note
+ticket
+ticket_clock
+verdict

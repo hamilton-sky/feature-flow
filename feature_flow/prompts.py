@@ -20,25 +20,23 @@ GUIDES = {"build": "build.md", "review": "review.md", "review-quality": "review-
           "plan-review": "plan-review.md", "replan": "replan.md", "test": "test.md"}
 
 
-REPO = "."  # where an install's .feature-flow/ is: the working folder, or the main worktree while a lane works
+def find_file(scripts, folder, name, top="."):
+    """folder/name beside the scripts folder (a checkout), else in top's .feature-flow/ (an install).
 
-
-def find_file(scripts, folder, name):
-    """folder/name beside the scripts folder (a checkout), else in .feature-flow/ (an install).
-
-    A candidate counts only when it holds the file, so an unrelated guides/ or agents/ folder
-    in the user's repo does not hide the installed one.
+    top is the main worktree's top: the working folder by default, the main worktree while a lane works, so
+    the guides and roles are never the lane's copies. A candidate counts only when it holds the file, so an
+    unrelated guides/ or agents/ folder in the user's repo does not hide the installed one.
     """
-    for root in (Path(scripts).parent, Path(REPO) / ".feature-flow"):
+    for root in (Path(scripts).parent, Path(top) / ".feature-flow"):
         path = root / folder / name
         if path.is_file():
             return path
     raise FileNotFoundError("cannot find %s/%s beside scripts/ or in .feature-flow/" % (folder, name))
 
 
-def lens(scripts, name):
+def lens(scripts, name, top="."):
     """A brainstorm lens's guide, guides/lenses/<name>.md."""
-    return _body(find_file(scripts, "guides", "lenses/%s.md" % name))
+    return _body(find_file(scripts, "guides", "lenses/%s.md" % name, top))
 
 
 def _body(path):
@@ -59,9 +57,9 @@ def _runner(text, scripts):
     return re.sub(r"python3 scripts/([\w.-]+)", lambda m: "python3 " + shlex.quote(base + "/" + m.group(1)), text)
 
 
-def role(scripts, name):
+def role(scripts, name, top="."):
     """A role file's body, ready to go in front of a prompt."""
-    return _runner(_body(find_file(scripts, "agents", name)), scripts)
+    return _runner(_body(find_file(scripts, "agents", name, top)), scripts)
 
 
 def _templates(text, guides):
@@ -87,9 +85,9 @@ def _templates(text, guides):
                   lambda m: "%s (%s)" % (m.group(1), span(base + "/templates/" + m.group(2))), text)
 
 
-def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None):
-    role_text = role(scripts, ROLES[phase])
-    guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase])), scripts)
+def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None, top="."):
+    role_text = role(scripts, ROLES[phase], top)
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase], top)), scripts)
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
                                ("<base>", sha), ("<base-commit>", sha), ("<start-commit>", sha)):
         guide = guide.replace(placeholder, value)
@@ -108,7 +106,7 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
                    fresh))
         for note in notes:
             task += "\nThe conductor notes: %s" % note
-        task += codeintel.note("reviewer", REPO, sha)
+        task += codeintel.note("reviewer", top, sha)
         intro = "The review guide follows. Follow it exactly."
     if workdir is not None:
         folder, branch = workdir
@@ -121,14 +119,14 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
     parts = [role_text, "---", intro, guide, "---", task]
     if retry and phase == "build":
         parts += ["The debugging guide follows. Follow it before you change any code.",
-                  _body(find_file(scripts, "guides", "debug.md"))]
+                  _body(find_file(scripts, "guides", "debug.md", top))]
     return "\n\n".join(parts) + "\n"
 
 
-def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
+def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks", top="."):
     """The prompt for the one review of a whole feature that fast mode defers the reviews of tickets nums to."""
-    role_text = role(scripts, ROLES["review-feature"])
-    guide = _runner(_body(find_file(scripts, "guides", GUIDES["review-feature"])), scripts)
+    role_text = role(scripts, ROLES["review-feature"], top)
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES["review-feature"], top)), scripts)
     for placeholder, value in (("<feature>", feature), ("<tasks>", plan + "/" + tasks), ("<plan>", plan), ("<base>", base)):
         guide = guide.replace(placeholder, value)
     task = ("Your task: review the whole feature `%s` (feature pass), from commit `%s` to HEAD. The plan is in `%s`. "
@@ -138,16 +136,16 @@ def feature_review(scripts, feature, plan, base, nums, notes=(), tasks="tasks"):
             "`REVIEW: PASS` or `REVIEW: FAIL`." % (feature, base, plan, ", ".join(nums) or "none"))
     for note in notes:
         task += "\nThe conductor notes: %s" % note
-    task += codeintel.note("reviewer", REPO, base)
+    task += codeintel.note("reviewer", top, base)
     parts = [role_text, "---", "The feature review guide follows. Follow it exactly.", guide, "---", task]
     return "\n\n".join(parts) + "\n"
 
 
-def tester(scripts, feature, plan, base, command, folder, rulings=(), notes=()):
+def tester(scripts, feature, plan, base, command, folder, rulings=(), notes=(), top="."):
     """The tester's prompt: write the acceptance tests from the plan's spec, or (with rulings) change the ones the
     product owner ruled wrong. It never gets the tickets or anything a builder wrote."""
-    role_text = role(scripts, ROLES["test"])
-    guide = _runner(_body(find_file(scripts, "guides", GUIDES["test"])), scripts)
+    role_text = role(scripts, ROLES["test"], top)
+    guide = _runner(_body(find_file(scripts, "guides", GUIDES["test"], top)), scripts)
     for placeholder, value in (("<feature>", feature), ("<plan>", plan), ("<folder>", folder), ("<base>", base),
                                ("<acceptance>", command)):
         guide = guide.replace(placeholder, value)
@@ -168,13 +166,13 @@ def tester(scripts, feature, plan, base, command, folder, rulings=(), notes=()):
     return "\n\n".join(parts) + "\n"
 
 
-def plan(phase, scripts, feature, draft, brief, findings="", brainstorm=False):
+def plan(phase, scripts, feature, draft, brief, findings="", brainstorm=False, top="."):
     """The prompt for the feature-planner (phase "plan") or the plan-reviewer ("plan-review").
 
     Both get the approved brief and the draft folder, never the conversation or each other's reasoning.
     """
-    role_text = role(scripts, ROLES[phase])
-    guide_file = find_file(scripts, "guides", GUIDES[phase])
+    role_text = role(scripts, ROLES[phase], top)
+    guide_file = find_file(scripts, "guides", GUIDES[phase], top)
     guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent)
     guide = guide.replace("<feature>", feature).replace("<draft>", draft)
     if phase == "plan":
@@ -199,10 +197,10 @@ def plan(phase, scripts, feature, draft, brief, findings="", brainstorm=False):
     return "\n\n".join(parts) + "\n"
 
 
-def replan(scripts, feature, plan, open_tickets, brainstorm=False):
+def replan(scripts, feature, plan, open_tickets, brainstorm=False, top="."):
     """The feature-planner's prompt to fold a running feature's open tickets into fewer, in place."""
-    role_text = role(scripts, ROLES["replan"])
-    guide_file = find_file(scripts, "guides", GUIDES["replan"])
+    role_text = role(scripts, ROLES["replan"], top)
+    guide_file = find_file(scripts, "guides", GUIDES["replan"], top)
     guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent)
     guide = guide.replace("<feature>", feature).replace("<plan>", plan)
     task = ("Your task: the feature `%s` is over its time budget. Re-plan its open tickets in `%s` into fewer, as "

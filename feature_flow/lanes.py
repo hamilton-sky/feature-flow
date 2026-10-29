@@ -11,48 +11,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from feature_flow.conductor.store import RUN_KEYS, Scoped  # re-exported under their old names
+
 LANES_DIR = Path(".feature-flow") / "lanes"
 INTEGRATE = "integrate"
-# the run's own state keys; every other key belongs to one lane and is stored as L<k>.<key>
-RUN_KEYS = frozenset(("owner", "limit", "runs", "done", "session_done", "followups", "lanes", "relay_handoff",
-                      "findings_for"))
 # plan files a builder (or the conductor) only appends to: two lanes appending is resolved by keeping both
 APPEND_ONLY = ("map.md", "learnings.md", "followups.md")
 WILD = re.compile(r"[*?\[]")
-
-
-class Scoped:
-    """One lane's view of the run state: its keys are stored as `L<k>.<key>`, the run's keys pass through."""
-
-    def __init__(self, root, lane):
-        self.root = root
-        self.prefix = "L%d." % lane
-
-    def key(self, key):
-        return key if key in RUN_KEYS else self.prefix + key
-
-    def get(self, key, default=None):
-        return self.root.get(self.key(key), default)
-
-    def __getitem__(self, key):
-        return self.root[self.key(key)]
-
-    def __setitem__(self, key, value):
-        self.root[self.key(key)] = value
-
-    def __contains__(self, key):
-        return self.key(key) in self.root
-
-    def setdefault(self, key, value):
-        return self.root.setdefault(self.key(key), value)
-
-    def update(self, values):
-        for key, value in values.items():
-            self[key] = value
-
-    def clear(self):
-        for key in [k for k in self.root if k.startswith(self.prefix)]:
-            del self.root[key]
 
 
 def branch(feature, num):

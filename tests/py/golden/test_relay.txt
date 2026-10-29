@@ -1,0 +1,86 @@
+# scenario test_relay
+# env FLOW_RELAY=1 FLOW_TICKETS_PER_SESSION=99
+$ start
+exit 0
+OK <token>
+$ next
+exit 0
+BUILD plans/f/tasks/01-a.md 01 <sha>
+# built plans/f/tasks/01-a.md
+$ next
+exit 0
+HANDOFF /feature-flow f
+$ start
+exit 0
+OK <token>
+$ next
+exit 0
+REVIEW plans/f/tasks/01-a.md 01 <sha>
+# reply: fine | REVIEW: PASS
+$ verdict <repo>-reply.txt
+exit 0
+OK
+$ next
+exit 0
+HANDOFF /feature-flow f
+$ start
+exit 0
+OK <token>
+$ next
+exit 0
+DONE f is complete: 1 ticket(s) resolved in this run
+=== log events ===
+-,START
+-,DRIVER-PERSON
+01,BUILD
+01,HANDOFF
+01,START
+01,DRIVER-PERSON
+01,GATE-FULL
+01,GATE-PASS
+01,GUARD-PASS
+01,DONEWHEN-PASS
+01,LEVEL-2
+01,REVIEW-SINGLE
+01,REVIEW
+01,VERDICT-PASS
+01,HANDOFF
+01,START
+01,DRIVER-PERSON
+01,DONE
+=== state keys ===
+ask_from
+ask_role
+asks
+attempt
+base
+code_files
+code_sha
+done
+due_checks
+due_minors
+edit_note
+lanes
+level
+level_note
+level_raised
+limit
+num
+owner
+phase
+relay_handoff
+reply_minors
+review_attempt
+review_notes
+review_pass
+review_sha
+round
+runs
+seen
+session_done
+slowest
+spec_ok
+spent
+ticket
+ticket_clock
+verdict

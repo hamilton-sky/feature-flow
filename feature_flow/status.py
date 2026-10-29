@@ -20,6 +20,11 @@ def _env(name, default):
     return os.environ.get(name) or default
 
 
+def _under(cwd, path):
+    """path read from cwd: the path itself when cwd is None or the path is absolute."""
+    return path if cwd is None else os.path.join(cwd, path)
+
+
 def jstr(s):
     out = ['"']
     for c in s:
@@ -39,8 +44,9 @@ def jstr(s):
     return "".join(out)
 
 
-def run(argv, out, err):
-    """Write what the bash script would to out and err, and return its exit code."""
+def run(argv, out, err, cwd=None):
+    """Write what the bash script would to out and err, and return its exit code. cwd is the folder the plan
+    is read under, None for the working folder; the paths it prints stay relative."""
     feature = argv[0] if len(argv) > 0 else ""
     mode = argv[1] if len(argv) > 1 and argv[1] != "" else "table"
     opt = argv[2] if len(argv) > 2 else ""
@@ -49,28 +55,30 @@ def run(argv, out, err):
         return 2
     root = _env("FLOW_DIR", "plans")
     folder = "%s/%s/%s" % (root, feature, _env("FLOW_TICKETS", "tasks"))
-    if not os.path.isdir(folder):
+    if not os.path.isdir(_under(cwd, folder)):
         err.write("no ticket folder: %s\n" % folder)
-        err.write(suggest.hint(feature, suggest.features(root)))
+        err.write(suggest.hint(feature, suggest.features(_under(cwd, root))))
         return 2
-    paths = tickets.ticket_files(folder)
+    paths = tickets.ticket_files(_under(cwd, folder))
     if not paths:
         err.write("no tickets in %s\n" % folder)
         return 2
 
     if mode in ("--check", "--lint"):
         learnings = "%s/%s/learnings.md" % (root, feature)
-        if os.path.isfile(learnings):
-            lines = sum(1 for line in tickets.records(learnings) if line.strip(" \t\n\v\f\r") != "")
+        if os.path.isfile(_under(cwd, learnings)):
+            lines = sum(1 for line in tickets.records(_under(cwd, learnings)) if line.strip(" \t\n\v\f\r") != "")
             if lines > 40:
                 out.write("warning: learnings.md has %d lines. every session reads it, so a human should prune it\n"
                           % lines)
 
     g = tickets.Graph(paths)
-    return _report(g, mode, opt, feature, out, err, root)
+    if cwd is not None:  # print the paths as found from the working folder
+        g.path = {t: "%s/%s" % (folder, p.rsplit("/", 1)[-1]) for t, p in g.path.items()}
+    return _report(g, mode, opt, feature, out, err, root, cwd)
 
 
-def _report(g, mode, opt, feature, out, err, root="plans"):
+def _report(g, mode, opt, feature, out, err, root="plans", cwd=None):
     n = len(g.order)
     count = {"resolved": 0, "open": 0, "claimed": 0, "waiting": 0, "parked": 0, "unknown": 0}
     ready = {}
@@ -142,7 +150,7 @@ def _report(g, mode, opt, feature, out, err, root="plans"):
         return 0
 
     if mode in ("--check", "--lint"):
-        extra = lint(g, "%s/%s" % (root, feature)) if mode == "--lint" else ([], [])
+        extra = lint(g, "%s/%s" % (root, feature), cwd) if mode == "--lint" else ([], [])
         return _check(g, ready, nready, unfinished, out, extra)
 
     for t in g.order:
@@ -152,9 +160,10 @@ def _report(g, mode, opt, feature, out, err, root="plans"):
     return 0
 
 
-def lint(g, plan_dir):
+def lint(g, plan_dir, cwd=None):
     """(errors, warnings) the stricter plan lint adds to --check: every ticket carries a check block or
-    says `Check: none <why>`, and commands.md names a Test command that can be found."""
+    says `Check: none <why>`, and commands.md names a Test command that can be found. Paths are read under
+    cwd when given."""
     errors, warnings = [], []
     for t in g.order:
         lab = g.lab[t]
@@ -163,7 +172,7 @@ def lint(g, plan_dir):
         if t not in g.haslevel:
             warnings.append("%s: no `Level:` line. set 1, 2 or 3 (plan guide, ticket rule 8a); without it the "
                             "ticket gets the review rules of 0.8.0" % lab)
-        lines = tickets.records(g.path[t])
+        lines = tickets.records(_under(cwd, g.path[t]))
         has_block = any(line.startswith("```check") for line in lines)
         none = next((line for line in lines[:20] if line.startswith("Check:")), None)
         if none is not None:
@@ -176,11 +185,11 @@ def lint(g, plan_dir):
             if line.strip().startswith("##"):
                 continue
             for ref in re.findall(r"`([A-Za-z0-9_./-]+/[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)`", line):
-                if "new" not in line.lower() and "plans/" not in ref and not os.path.exists(ref):
+                if "new" not in line.lower() and "plans/" not in ref and not os.path.exists(_under(cwd, ref)):
                     warnings.append("%s: names `%s`, which does not exist here (say `new` if it will be created)" % (lab, ref))
     commands = "%s/commands.md" % plan_dir
-    test = tickets.commands_value(commands, "Test")
-    if not os.path.isfile(commands):
+    test = tickets.commands_value(_under(cwd, commands), "Test")
+    if not os.path.isfile(_under(cwd, commands)):
         errors.append("commands.md is missing")
     elif not test:
         errors.append("commands.md has no Test command (a placeholder in angle brackets does not count)")

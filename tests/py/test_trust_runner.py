@@ -166,7 +166,7 @@ class FirstCalls(Base):
         text = path.read_text(encoding="utf-8")
         each = json.loads(text)
         self.assertEqual(list(each), sorted(each))
-        self.assertIn("feature_flow/conductor.py", each)
+        self.assertIn("feature_flow/conductor/__init__.py", each)
         self.assertIn("scripts/flow-trust.py", each)
         self.assertIn(STATE, each)
         self.assertNotIn(".feature-flow/state/flow-f.trust", each)
@@ -266,8 +266,8 @@ class Trips(Base):
 
     def test_an_edited_conductor(self):
         self.begin()
-        self.append(self.repo.path("feature_flow/conductor.py"))
-        self.assertStops("feature_flow/conductor.py")
+        self.append(self.repo.path("feature_flow/conductor/__init__.py"))
+        self.assertStops("feature_flow/conductor/__init__.py")
 
     def test_a_new_package_file(self):
         self.begin()
@@ -349,13 +349,13 @@ class Trips(Base):
 
     def test_hole_a_a_committed_return_in_check_code(self):
         self.begin()
-        path = self.repo.path("feature_flow/conductor.py")
+        path = self.repo.path("feature_flow/conductor/facade.py")
         text = path.read_text(encoding="utf-8")
         marker = '        """Stop when the files the conductor runs from changed since the ticket was picked."""\n'
         self.assertIn(marker, text)
         path.write_text(text.replace(marker, marker + "        return\n", 1), encoding="utf-8")
         self.repo.resolve(T1)
-        self.assertStops("feature_flow/conductor.py")
+        self.assertStops("feature_flow/conductor/facade.py")
 
     def test_hole_b_phase_written_into_the_state(self):
         self.begin()
@@ -366,7 +366,7 @@ class Trips(Base):
     def test_without_an_earlier_list_the_paths_are_not_named(self):
         self.begin()
         self.repo.path(".feature-flow/state/flow-f.trust").unlink()
-        self.append(self.repo.path("feature_flow/conductor.py"))
+        self.append(self.repo.path("feature_flow/conductor/__init__.py"))
         rc, out, err = self.call("next")
         self.assertEqual(rc, 1, (out, err))
         self.assertEqual(out.strip(), CHANGED + " (no earlier list to name them)")
@@ -413,7 +413,7 @@ class PlantedBytecode(Base):
     """A .pyc compiled from an edited conductor.py, with the source's mtime and size, is never run."""
 
     def plant(self):
-        source = self.repo.path("feature_flow/conductor.py")
+        source = self.repo.path("feature_flow/conductor/facade.py")
         original = source.read_bytes()
         stat = source.stat()
         honest, forged = b'return "OK %s" % token', b'return "PW %s" % token'
@@ -454,7 +454,7 @@ class PlantedBytecodeCrlf(PlantedBytecode):
     """The same, with conductor.py checked out with CRLF line endings, as on Windows."""
 
     def prepare(self):
-        path = self.repo.path("feature_flow/conductor.py")
+        path = self.repo.path("feature_flow/conductor/facade.py")
         data = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
         path.write_bytes(data)
         self.assertIn(b"\r\n", path.read_bytes())
@@ -628,7 +628,7 @@ NO_REPORT = "STOP the conductor did not report its state (it crashed?) during %s
 
 class HoleC(Base):
     """Hole (c): the gate's Test command runs the builder's t.py inside `next`, and t.py edits
-    feature_flow/conductor.py. The code must be the same after the call as before it."""
+    feature_flow/conductor/__init__.py. The code must be the same after the call as before it."""
 
     def prepare(self):
         self.write(self.repo.path("plans/f/commands.md"), "# Commands: f\n\nTest: `%s t.py`\n" % PYTHON)
@@ -636,14 +636,14 @@ class HoleC(Base):
     def test_a_test_command_that_edits_the_conductor_stops(self):
         self.begin()
         self.write(self.repo.path("t.py"),
-                   "with open('feature_flow/conductor.py', 'ab') as handle:\n"
+                   "with open('feature_flow/conductor/__init__.py', 'ab') as handle:\n"
                    "    handle.write(b'\\n# edited by t.py\\n')\n")
         self.repo.resolve(T1)
-        before = self.repo.path("feature_flow/conductor.py").read_bytes()
+        before = self.repo.path("feature_flow/conductor/__init__.py").read_bytes()
         rc, out, err = self.call("next")
-        self.assertNotEqual(self.repo.path("feature_flow/conductor.py").read_bytes(), before, "t.py did not run")
+        self.assertNotEqual(self.repo.path("feature_flow/conductor/__init__.py").read_bytes(), before, "t.py did not run")
         self.assertEqual(rc, 1, (out, err))
-        self.assertEqual(out.splitlines()[0], DURING % ("next", "feature_flow/conductor.py"))
+        self.assertEqual(out.splitlines()[0], DURING % ("next", "feature_flow/conductor/__init__.py"))
         self.assertNotRegex(out, r"(?m)^TRUST ")
 
     def test_a_test_command_that_edits_nothing_goes_through(self):
@@ -885,12 +885,12 @@ class Handoff(Base):
 
     def test_an_edited_conductor_between_the_sessions_stops_naming_it(self):
         digest = self.handoff()
-        with open(str(self.repo.path("feature_flow/conductor.py")), "ab") as handle:
+        with open(str(self.repo.path("feature_flow/conductor/__init__.py")), "ab") as handle:
             handle.write(b"\n# edited between sessions\n")
         rc, lines, err = self.new_session_start(digest)
         self.assertEqual(rc, 1, (lines, err))
         self.assertTrue(lines[0].startswith(CHANGED), (lines, err))
-        self.assertIn("feature_flow/conductor.py", lines[0])
+        self.assertIn("feature_flow/conductor/__init__.py", lines[0])
         self.assertFalse(any(line.startswith("OK ") for line in lines), lines)
 
     def test_an_old_style_handoff_with_no_digest_still_starts_with_new(self):

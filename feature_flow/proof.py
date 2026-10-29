@@ -104,27 +104,21 @@ def _wanted(check):
     return want + "".join(" and output containing %r" % text for text in check.prints)
 
 
-def run_checks(checks, timeout, deferred=None):
-    """Run every check (none is skipped after a failure). timeout is minutes, a float is fine, 0 for none.
+def run_checks(checks, timeout, deferred=None, cwd=None):
+    """Run every check (none is skipped after a failure) in the repo top of cwd (None: the working folder), or in
+    cwd itself outside a repo. timeout is minutes, a float is fine, 0 for none.
     Returns (ok, report); the report names each failing command, what was wanted, what happened and the
     last lines of its output. A failing check with a `needs` line is not a failure: it is appended to
     deferred (a list) as (check, what happened), when deferred is given."""
-    failures = []
-    top = git.toplevel()
-    here = os.getcwd()
-    try:
-        if top is not None:
-            os.chdir(str(top))
-        return _run_checks(checks, timeout, failures, deferred)
-    finally:
-        os.chdir(here)
+    top = git.toplevel(cwd=cwd)
+    return _run_checks(checks, timeout, [], deferred, str(top) if top is not None else cwd)
 
 
-def _run_checks(checks, timeout, failures, deferred):
+def _run_checks(checks, timeout, failures, deferred, where):
     for check in checks:
         with tempfile.TemporaryFile() as log:
             args, use_shell = gate.shell(check.command)
-            code, timed_out = proc.run(args, use_shell, log, timeout)
+            code, timed_out = proc.run(args, use_shell, log, timeout, cwd=where)
             log.seek(0)
             output = log.read().decode("utf-8", "replace").replace("\r\n", "\n")
         if timed_out:
@@ -182,38 +176,39 @@ def declared_level(text):
     return 0
 
 
-def repo_relative(path):
-    """path as a posix path relative to the repository root (git's own spelling), when it is inside it."""
-    top = git.toplevel()
+def repo_relative(path, cwd=None):
+    """path as a posix path relative to the repository root (git's own spelling), when it is inside it. A relative
+    path is read under cwd (None: the working folder)."""
+    top = git.toplevel(cwd=cwd)
     path = Path(path)
     if top is not None:
         try:
-            path = (path if path.is_absolute() else Path.cwd() / path).resolve().relative_to(top.resolve())
+            path = (path if path.is_absolute() else Path(cwd or Path.cwd()) / path).resolve().relative_to(top.resolve())
         except (ValueError, OSError):
             pass
     return path.as_posix()
 
 
-def _candidates(base, plan_dir):
+def _candidates(base, plan_dir, cwd=None):
     """The commits after base (oldest first, first parent only) that change test files and nothing else
     outside the plan folder, and whose whole tree differs from base only in test files and the plan folder
-    (a test commit on top of production changes does not count)."""
-    prefix = repo_relative(plan_dir).rstrip("/") + "/"
+    (a test commit on top of production changes does not count). git runs in cwd (None: the working folder)."""
+    prefix = repo_relative(plan_dir, cwd=cwd).rstrip("/") + "/"
     found = []
-    for sha in git._git("rev-list", "--reverse", "--first-parent", "%s..HEAD" % base).stdout.split():
-        paths = git._git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).stdout.splitlines()
+    for sha in git._git("rev-list", "--reverse", "--first-parent", "%s..HEAD" % base, cwd=cwd).stdout.split():
+        paths = git._git("diff-tree", "--no-commit-id", "--name-only", "-r", sha, cwd=cwd).stdout.splitlines()
         paths = [p for p in paths if not p.startswith(prefix)]
         if not (paths and all(floorguard.DELETED_TEST.search(p) for p in paths)):
             continue
-        total = git._git("diff", "--name-only", base, sha).stdout.splitlines()
+        total = git._git("diff", "--name-only", base, sha, cwd=cwd).stdout.splitlines()
         if all(p.startswith(prefix) or floorguard.DELETED_TEST.search(p) for p in total):
             found.append(sha)
     return found
 
 
-def _status():
+def _status(cwd=None):
     """(code, path) of every change `git status` sees, untracked files listed one by one."""
-    entries = git._git("status", "--porcelain", "-z", "--untracked-files=all").stdout.split("\0")
+    entries = git._git("status", "--porcelain", "-z", "--untracked-files=all", cwd=cwd).stdout.split("\0")
     out = []
     i = 0
     while i < len(entries):
@@ -227,17 +222,17 @@ def _status():
     return out
 
 
-def _ignored():
+def _ignored(cwd=None):
     """Paths git ignores right now (the `!!` entries), listed one by one."""
-    out = git._git("status", "--porcelain", "-z", "--ignored", "--untracked-files=all").stdout.split("\0")
+    out = git._git("status", "--porcelain", "-z", "--ignored", "--untracked-files=all", cwd=cwd).stdout.split("\0")
     return {entry[3:] for entry in out if entry.startswith("!! ")}
 
 
-def _drop_ignored(had_ignored):
+def _drop_ignored(had_ignored, cwd=None):
     """Remove the ignored files the Test command made, and the empty folders they leave. Old ones stay."""
-    top = git.toplevel()
-    root = Path(str(top)) if top is not None else Path(os.getcwd())
-    for path in sorted(_ignored() - had_ignored, key=len, reverse=True):
+    top = git.toplevel(cwd=cwd)
+    root = Path(str(top)) if top is not None else Path(cwd or os.getcwd())
+    for path in sorted(_ignored(cwd) - had_ignored, key=len, reverse=True):
         target = root / path
         try:
             if target.is_dir() and not target.is_symlink():
@@ -255,49 +250,45 @@ def _drop_ignored(had_ignored):
             parent = parent.parent
 
 
-def _undo(had):
+def _undo(had, cwd=None):
     """Undo what the Test command did: the tree was clean (apart from the untracked files in had) before."""
-    now = _status()
+    now = _status(cwd)
     if any(code != "??" for code, _ in now):
-        git._git("reset", "-q", "--hard")
+        git._git("reset", "-q", "--hard", cwd=cwd)
     made = [path for code, path in now if code == "??" and path not in had]
     if made:
-        git._git("clean", "-fdq", "--", *made)
+        git._git("clean", "-fdq", "--", *made, cwd=cwd)
 
 
-def _red(sha, test_command, timeout, remember):
-    """Run the Test command with HEAD detached at sha, then go back. True when it failed (not a timeout)."""
-    result = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False)
-    value = result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else git.head()
-    before = _status()
+def _red(sha, test_command, timeout, remember, cwd=None):
+    """Run the Test command with HEAD detached at sha, then go back. True when it failed (not a timeout). git runs in
+    cwd (None: the working folder), the Test command and the undo in its repo top."""
+    result = git._git("symbolic-ref", "-q", "--short", "HEAD", check=False, cwd=cwd)
+    value = result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else git.head(cwd=cwd)
+    before = _status(cwd)
     if any(code != "??" for code, _ in before):
         raise GitError("the working copy has uncommitted changes to tracked files (%s), so the red run cannot "
                        "be undone safely. commit or stash them and run again"
                        % " ".join(path for code, path in before if code != "??")[:200])
     had = {path for _, path in before}
-    had_ignored = _ignored()
+    had_ignored = _ignored(cwd)
     remember(value)
     try:
         try:
-            git._git("checkout", "-q", "--detach", sha)
+            git._git("checkout", "-q", "--detach", sha, cwd=cwd)
         except RuntimeError as err:
             raise GitError("%s. the working copy may be left detached: run `git checkout %s` by hand to go back"
                            % (err, value))
-        top = git.toplevel()
-        here = os.getcwd()
-        try:
-            if top is not None:
-                os.chdir(str(top))
-            with tempfile.TemporaryFile() as log:
-                args, use_shell = gate.shell(test_command)
-                code, timed_out = proc.run(args, use_shell, log, timeout)
-            _undo(had)
-            _drop_ignored(had_ignored)
-        finally:
-            os.chdir(here)
+        top = git.toplevel(cwd=cwd)
+        where = str(top) if top is not None else cwd
+        with tempfile.TemporaryFile() as log:
+            args, use_shell = gate.shell(test_command)
+            code, timed_out = proc.run(args, use_shell, log, timeout, cwd=where)
+        _undo(had, where)
+        _drop_ignored(had_ignored, where)
     finally:
         try:
-            git._git("checkout", "-q", value)
+            git._git("checkout", "-q", value, cwd=cwd)
         except RuntimeError as err:
             raise GitError("%s. the working copy is left at %s: run `git checkout %s` by hand to go back"
                            % (err, sha[:10], value))
@@ -305,18 +296,29 @@ def _red(sha, test_command, timeout, remember):
     return not timed_out and code != 0
 
 
+def _repo_of(plan_dir):
+    """The top of the repo an absolute plan_dir is in, as a str; None for a relative one (the working folder)."""
+    path = Path(plan_dir)
+    if not path.is_absolute() or not path.is_dir():
+        return None
+    top = git.toplevel(cwd=str(path))
+    return str(top) if top is not None else None
+
+
 def test_first(base, test_command, plan_dir, timeout, remember):
     """Prove a test-only commit between base and HEAD fails the Test command. Returns (ok, text): the note
     for the reviewer, or the send-back finding. remember(value) records the branch (or sha) to go back to
-    while HEAD is detached, and "" once it is back. Raises GitError when git cannot switch."""
-    found = _candidates(base, plan_dir)
+    while HEAD is detached, and "" once it is back. Raises GitError when git cannot switch. An absolute plan_dir
+    names the repo too: the check runs in the repo it is in; a relative one is read in the working folder."""
+    cwd = _repo_of(plan_dir)
+    found = _candidates(base, plan_dir, cwd)
     if not found:
         return False, ("no commit between base and HEAD changes only test files. Commit the failing test "
                        "alone first, then the code. A test commit does not count when earlier commits already changed "
                        "production files. "
                        + RECOVER)
     for sha in found:
-        if _red(sha, test_command, timeout, remember):
+        if _red(sha, test_command, timeout, remember, cwd):
             return True, "the conductor saw %s fail the Test command before the code" % sha[:10]
     return False, ("the test-only commit(s) %s: the Test command passes without the production change (or timed "
                    "out after %s minutes), so it does not show a failing test before the code. Write a test that "
