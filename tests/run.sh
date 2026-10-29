@@ -271,7 +271,9 @@ expect_has "the installed scripts/flow.py runs" "PLAN" "$out"
 mkdir -p "$I/repo/plans/f/tasks"
 out="$(cd "$I/repo" && python3 scripts/flow.py f start 2>&1)"
 expect_has "and starts a session on a plan" "OK " "$out"
-rm -rf "$I/repo/.git" "$I/repo/plans"
+out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"
+expect_has "an install while that run is open is refused" "a feature-flow run is open" "$out"
+rm -rf "$I/repo/.git" "$I/repo/plans" "$I/repo/.feature-flow/state"
 out="$(python3 "$ROOT/install.py" "$I/repo" 2>&1)"
 expect_has "a second run adds nothing" "added 0, updated 0" "$out"
 echo "my own edit" >> "$I/repo/.claude/skills/feature-flow/SKILL.md"
@@ -396,7 +398,7 @@ if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] &&
 LEFT="$(find "$BAR/home" -type f)"
 if [ -z "$LEFT" ]; then ok "the user uninstall leaves no files in the home"; else bad "the user uninstall leaves no files in the home" "$LEFT"; fi
 if [ ! -e "$BAR/home/.feature-flow" ]; then ok "and ~/.feature-flow is gone"; else bad "and ~/.feature-flow is gone"; fi
-expect_has "--version prints the version" "feature-flow 0.29.1" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
+expect_has "--version prints the version" "feature-flow 0.30.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"

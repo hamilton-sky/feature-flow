@@ -61,6 +61,15 @@ class Handle:
     def ticket_name(self):
         return "01-a"
 
+    def ticket(self):
+        return T1
+
+    def at(self, path):
+        return Path(path)
+
+    def fast(self):
+        return False
+
     def gate_quick(self):
         return self.quick
 
@@ -176,6 +185,22 @@ class RealChecks(unittest.TestCase):
         self.assertEqual(source, "footprint check")
         self.assertIn("outside the ticket's `Touches:` line (src/): other.txt", report)
         self.assertEqual(c.events, ["FOOTPRINT-FAIL"])
+
+    def test_one_extra_file_named_in_the_answer_passes_for_the_reviewer_to_judge(self):
+        self.ticket("Touches: src/\n")
+        c = self.base()
+        self.work("src/a.txt")
+        self.work("setup.cfg")
+        with open(T1, "a", encoding="utf-8") as handle:
+            handle.write("\nExtra file: `setup.cfg` - the new module has to be registered there\n")
+        self.repo.commit("answer")
+        source, report, notes = buildchecks.Footprint().run(c)
+        self.assertIsNone(source)
+        self.assertEqual(c.events, ["FOOTPRINT-EXTRA"])
+        self.assertIn("`setup.cfg` (the new module has to be registered there)", notes[0])
+        self.work("other.txt")  # a second one is not passed
+        c.events = []
+        self.assertEqual(buildchecks.Footprint().run(c)[0], "footprint check")
 
     def test_footprint_without_touches_logs_nothing(self):
         c = self.base()

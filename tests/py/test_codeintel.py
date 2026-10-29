@@ -104,7 +104,7 @@ class PromptTests(FakeCodeintel):
         self.assertIn("--op callers", scouts.prompt("role", "builder", "q", codeintel=True))
         self.assertNotIn("codeintel", scouts.prompt("role", "planner", "q"))
 
-    def test_reviews_get_the_section_and_builds_do_not(self):
+    def test_reviews_and_builds_get_their_own_section(self):
         os.chdir(str(self.repo))
         self.addCleanup(os.chdir, str(helpers.ROOT))
         scripts = helpers.ROOT / "scripts"
@@ -112,7 +112,9 @@ class PromptTests(FakeCodeintel):
         self.assertIn("--op changed --target abc123", review)
         self.assertTrue(review.rstrip().endswith("wrong: <what it got wrong>"))
         self.assertIn("--op changed --target b4se", prompts.feature_review(scripts, "f", "plans/f", "b4se", ["01"]))
-        self.assertNotIn("codeintel", prompts.build("build", scripts, "f", "plans/f/tasks/01-a.md", "01", "abc123"))
+        build = prompts.build("build", scripts, "f", "plans/f/tasks/01-a.md", "01", "abc123")
+        self.assertIn("--op callers --target", build)  # before changing a function, ask who calls it
+        self.assertNotIn("--op changed", build)
 
 
 def said(text, mid="m"):
