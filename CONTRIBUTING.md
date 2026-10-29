@@ -2,7 +2,7 @@
 
 feature-flow is a small, standard-library Python project with one maintainer. Issues and field-run reports are the most useful thing you can send (see [docs/field-run.md](docs/field-run.md)).
 
-- Run the checks before a pull request: `python3 -m unittest discover -s tests/py` and `bash tests/run.sh`. CI runs both on Linux, macOS and Windows.
+- Run the checks before a pull request: `python3 -m unittest discover -s tests/py` and `bash tests/run.sh`. CI runs the unit tests in four parallel shards (`python tests/shard.py <k> 4`) on Linux, macOS and Windows, and `tests/run.sh` on Linux and macOS. A pull request that changes only `docs/`, `README.md`, `CONTRIBUTING.md` or `LICENSE` runs a short docs check instead. The package jobs run on `main` only.
 - Forkboard, the brainstorm's review page, is its own package in [packages/forkboard/](packages/forkboard/), with its own checks: `python3 -m unittest discover -s packages/forkboard/tests`, and `npm install && npm test` in `packages/forkboard/tests/browser/` to drive the page in Chromium. It never reads or writes feature-flow's files; feature-flow hands it a review document.
 - Tests must not skip by platform (`skipUnless`): the floor guard treats a new skip as weakening the bar. Write test commands that work everywhere, for example `python -c` scripts.
 - Editing `scripts/flow-trust.py` changes the sha256 its skills pin. Re-pin it in `skills/feature-flow/SKILL.md` and `adapters/codex/feature-flow/SKILL.md` and run the tests.

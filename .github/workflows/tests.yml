@@ -13,10 +13,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
-    name: ${{ matrix.name }}
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Is this pull request only docs?
+        id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # a push to main always runs everything; a pull request that changes only docs/, README.md,
+          # CONTRIBUTING.md or LICENSE runs the docs check alone. guides/ and skills/ are code: agents read them
+          if [ "${{ github.event_name }}" != "pull_request" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          other="$(git diff --name-only "$BASE...$HEAD" | grep -vE '^(docs/|README\.md$|CONTRIBUTING\.md$|LICENSE$)' || true)"
+          if [ -n "$other" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; else echo "code=false" >> "$GITHUB_OUTPUT"; fi
+          echo "files outside the docs: ${other:-none}"
+
+  docs:
+    name: docs only
+    needs: changes
+    if: needs.changes.outputs.code == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the tests that read the README and the docs
+        run: python3 -m unittest discover -s tests/py -p "test_profiles.py"
+
+  unit:
+    name: unit ${{ matrix.os }} ${{ matrix.shard }}/4
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30  # macOS runs the suite in about 15 minutes, past the old limit
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show the tool versions
+        shell: bash
+        run: |
+          python --version
+          git --version
+
+      - name: Run this shard of the Python unit tests and the fixture drive
+        run: python tests/shard.py ${{ matrix.shard }} 4 -v
+
+  scripts:
+    name: scripts ${{ matrix.name }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -39,30 +100,14 @@ jobs:
           git --version
           jq --version
 
-      - name: Run the Python unit tests and the fixture drive
-        run: python3 -m unittest discover -s tests/py
-
-      - name: Run the tests
+      - name: Run the tests (the unit tests run in their own shards)
+        env:
+          FLOW_UNIT_IN_SHARDS: "1"
         run: bash tests/run.sh
-
-  windows:
-    name: windows with python
-    runs-on: windows-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Show the tool versions
-        shell: bash
-        run: |
-          python --version
-          git --version
-
-      - name: Run the Python unit tests and the fixture drive
-        run: python -m unittest discover -s tests/py -v
 
   package:
     name: package on ${{ matrix.os }} with python ${{ matrix.python }}
+    if: github.event_name == 'push'  # main only; a version tag builds and smoke-tests the wheel in release.yml
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
@@ -95,6 +140,8 @@ jobs:
 
   forkboard:
     name: forkboard on ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
@@ -118,6 +165,8 @@ jobs:
 
   forkboard-browser:
     name: forkboard in a browser
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
