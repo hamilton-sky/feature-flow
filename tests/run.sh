@@ -576,9 +576,13 @@ else
 fi
 
 echo "flow.py, unit tests"
-out="$(cd "$ROOT" && python3 -m unittest discover -s tests/py 2>&1)"; rc=$?
-expect_rc "python3 -m unittest discover -s tests/py passes" 0 $rc
-[ "$rc" = 0 ] || printf '%s\n' "$out" | tail -20
+if [ "${FLOW_UNIT_IN_SHARDS:-}" = 1 ]; then
+  echo "  note  the unit tests run in CI's own shard jobs (tests/shard.py), not here"
+else
+  out="$(cd "$ROOT" && python3 -m unittest discover -s tests/py 2>&1)"; rc=$?
+  expect_rc "python3 -m unittest discover -s tests/py passes" 0 $rc
+  [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -20
+fi
 out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py feature_flow/conductor/*.py feature_flow/conductor/*/*.py packages/forkboard/forkboard/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor and Forkboard parse as Python 3.9" 0 $?
 out="$(cd "$ROOT" && grep -rlE --include='*.py' '^(import|from) ' feature_flow packages/forkboard/forkboard | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat|traceback|fnmatch|contextlib|html|importlib)(\b|\s)')"
