@@ -1,6 +1,6 @@
 {
   "name": "feature-flow",
-  "version": "0.29.0",
+  "version": "0.29.1",
   "description": "Plan a feature as a graph of small tickets, then build each with a fresh builder subagent and check it with scripts and a fresh reviewer that never saw the builder's reasoning.",
   "author": { "name": "hamilton-sky" },
   "homepage": "https://github.com/hamilton-sky/feature-flow",
