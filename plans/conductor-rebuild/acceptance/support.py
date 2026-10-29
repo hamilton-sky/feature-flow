@@ -8,6 +8,7 @@ current code and compares what a user sees. Not a test module: the runner only l
 
 import atexit
 import io
+import json
 import os
 import re
 import shutil
@@ -93,6 +94,27 @@ def accept_test(nums):
     """An acceptance test that passes once every ticket of nums has been built."""
     paths = ["t%s/%s.txt" % (n, n) for n in nums]
     return "import os, sys\nsys.exit(0 if all(os.path.exists(p) for p in %r) else 1)\n" % (paths,)
+
+
+def conductor_files_as_one(value):
+    """A code_files value with the conductor's own file names folded into one entry: the old code names
+    feature_flow/conductor.py, the current code the files of the package feature_flow/conductor/ (spec.md lines 11,
+    17 and 180: codehash hashes every file under feature_flow/, so the names follow the move). The key, its JSON
+    format and every other file name stay as they are."""
+    try:
+        each = json.loads(value)
+    except ValueError:
+        return value
+    if not isinstance(each, dict):
+        return value
+    folded = {}
+    for name, digest in each.items():
+        found = re.match(r"^(.*?)feature_flow/conductor(?:\.py$|/)", name.replace("\\", "/"))
+        if found and (found.group(1) == "" or found.group(1).endswith("/")):
+            folded[found.group(1) + "feature_flow/conductor<the conductor's files>"] = "<SHA>"
+        else:
+            folded[name] = digest
+    return json.dumps(folded, sort_keys=True)
 
 
 class World:
@@ -300,6 +322,8 @@ class World:
                 key, sep, value = line.partition("=")
                 if any(word in key for word in ("seen", "spent", "clock", "slow", "time")):
                     value = "<T>"
+                if key == "code_files" or key.endswith(".code_files"):
+                    value = conductor_files_as_one(value)
                 lines.append("%s%s%s" % (key, sep, value))
             out.append("state:\n" + self.norm("\n".join(sorted(lines))))
         log_file = state_dir / "flow-f.log"
