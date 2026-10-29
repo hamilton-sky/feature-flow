@@ -1,0 +1,323 @@
+{
+  "active_minutes": 175,
+  "brainstorm": null,
+  "driver": "agent",
+  "feature": "conductor-rebuild",
+  "feature_flow": "0.24.0",
+  "generated": "2026-10-29T02:51:32Z",
+  "tickets": {
+    "01": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "03": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "04": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "05": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "06": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "07": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "08": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "09": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "10": {
+      "builds": 3,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "11": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "12": {
+      "builds": 2,
+      "catches": {
+        "VERDICT-FAIL": 1
+      },
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 2
+    },
+    "13": {
+      "builds": 2,
+      "catches": {
+        "GUARD-FAIL": 1
+      },
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "14": {
+      "builds": 2,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "15": {
+      "builds": 2,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "16": {
+      "builds": 1,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 0,
+      "reviews": 1
+    },
+    "17": {
+      "builds": 2,
+      "catches": {},
+      "deferred_review": false,
+      "level": 3,
+      "questions": 1,
+      "reviews": 1
+    },
+    "accept": {
+      "builds": 0,
+      "catches": {
+        "ACCEPT-FAIL": 1
+      },
+      "deferred_review": false,
+      "level": null,
+      "questions": 0,
+      "reviews": 0
+    }
+  },
+  "tokens": {
+    "by_model": {
+      "claude-haiku-5-5": {
+        "cache_read": 20952066,
+        "cache_write": 3469942,
+        "input": 864,
+        "output": 399648
+      },
+      "claude-opus-5-5": {
+        "cache_read": 179843147,
+        "cache_write": 7242557,
+        "input": 3294,
+        "output": 1081434
+      }
+    },
+    "by_ticket": {
+      "-": {
+        "cache_read": 21681516,
+        "cache_write": 705716,
+        "input": 408,
+        "output": 213762
+      },
+      "01": {
+        "cache_read": 12009234,
+        "cache_write": 571814,
+        "input": 190,
+        "output": 78502
+      },
+      "03": {
+        "cache_read": 10203699,
+        "cache_write": 480589,
+        "input": 202,
+        "output": 55263
+      },
+      "04": {
+        "cache_read": 6947746,
+        "cache_write": 453776,
+        "input": 154,
+        "output": 57367
+      },
+      "05": {
+        "cache_read": 7571991,
+        "cache_write": 413053,
+        "input": 158,
+        "output": 54104
+      },
+      "06": {
+        "cache_read": 7038496,
+        "cache_write": 444307,
+        "input": 146,
+        "output": 50138
+      },
+      "07": {
+        "cache_read": 7702613,
+        "cache_write": 442485,
+        "input": 172,
+        "output": 50252
+      },
+      "08": {
+        "cache_read": 13616823,
+        "cache_write": 829265,
+        "input": 270,
+        "output": 108560
+      },
+      "09": {
+        "cache_read": 8724590,
+        "cache_write": 685048,
+        "input": 222,
+        "output": 78797
+      },
+      "10": {
+        "cache_read": 14861471,
+        "cache_write": 701628,
+        "input": 346,
+        "output": 107638
+      },
+      "11": {
+        "cache_read": 7206517,
+        "cache_write": 456691,
+        "input": 174,
+        "output": 59055
+      },
+      "12": {
+        "cache_read": 17898781,
+        "cache_write": 996323,
+        "input": 368,
+        "output": 127676
+      },
+      "13": {
+        "cache_read": 11222795,
+        "cache_write": 572310,
+        "input": 252,
+        "output": 67344
+      },
+      "14": {
+        "cache_read": 8242247,
+        "cache_write": 551243,
+        "input": 196,
+        "output": 57832
+      },
+      "15": {
+        "cache_read": 19136855,
+        "cache_write": 961529,
+        "input": 338,
+        "output": 133061
+      },
+      "16": {
+        "cache_read": 10620754,
+        "cache_write": 579049,
+        "input": 226,
+        "output": 67880
+      },
+      "17": {
+        "cache_read": 8063084,
+        "cache_write": 495329,
+        "input": 198,
+        "output": 42245
+      },
+      "accept": {
+        "cache_read": 8046001,
+        "cache_write": 372344,
+        "input": 138,
+        "output": 71606
+      }
+    },
+    "by_ticket_note": "approximate: split by the time between log lines",
+    "files": 100,
+    "source": "claude-code transcripts",
+    "total": {
+      "cache_read": 200795213,
+      "cache_write": 10712499,
+      "input": 4158,
+      "output": 1481082
+    }
+  },
+  "totals": {
+    "builds": 23,
+    "catches": 3,
+    "catches_by_check": {
+      "ACCEPT-FAIL": 1,
+      "GUARD-FAIL": 1,
+      "VERDICT-FAIL": 1
+    },
+    "deferred_checks": 1,
+    "fast": false,
+    "followups": 30,
+    "lanes": false,
+    "reviews": 17,
+    "reworked": [
+      "10",
+      "12",
+      "13",
+      "14",
+      "15",
+      "17"
+    ],
+    "settled_at_plan": [],
+    "tickets": 17
+  },
+  "verdict": null,
+  "window": [
+    "2026-10-28T08:11:05Z",
+    "2026-10-29T02:51:23Z"
+  ],
+  "you": {
+    "handoffs": 0,
+    "questions_to_user": 0,
+    "resets": 3,
+    "stops": [],
+    "takeovers": 0
+  }
+}
