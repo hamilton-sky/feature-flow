@@ -70,3 +70,7 @@ What the run left for later: minor findings of passing reviews, the findings a l
 
 - 1. minor feature_flow/conductor/schedulers/serial.py: put_back is main-worktree only but LaneScheduler inherits it; note that in its docstring. (single review)
 - 2. minor feature_flow/conductor/guards.py: becoming a catch-all (owner check, handoff, start checks, replan_prompt); a later split must keep the module-style planning import. (single review)
+
+## 14-ratchet-and-acceptance (left for later)
+
+- 1. minor plans/conductor-rebuild/map.md: the 14 line records run results; keep only the decision there. (single review)
