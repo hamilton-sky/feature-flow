@@ -74,3 +74,8 @@ What the run left for later: minor findings of passing reviews, the findings a l
 ## 14-ratchet-and-acceptance (left for later)
 
 - 1. minor plans/conductor-rebuild/map.md: the 14 line records run results; keep only the decision there. (single review)
+
+## 17-acceptance-fixes-1 (left for later)
+
+- 1. minor feature_flow/codehash.py: flow_code with a cwd that no longer exists raises FileNotFoundError from git.toplevel before the Path(cwd) fallback; not reachable today. Treat OSError like None or document that cwd must exist. (single review)
+- 2. minor feature_flow/conductor/workspace.py: docstring still says "read from the working folder" though names follow self.folder. (single review)
