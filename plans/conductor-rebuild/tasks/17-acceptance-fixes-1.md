@@ -1,7 +1,7 @@
 # Make the acceptance tests pass, round 1
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: no
 Level: 2
@@ -84,6 +84,18 @@ If you are sure a test asks for something spec.md does not say, do not work arou
     FAILED (failures=13)
 
 ## Answer
+
+**Built** (in 2a5124f, from 52b85d9; nothing new in this pass): `feature_flow/codehash.py` (`flow_code(scripts, cwd=None)` finds the repo top with `git.toplevel(cwd=cwd)`), `feature_flow/conductor/workspace.py` (`Workspace.flow_code` passes `cwd=self.folder`), `tests/py/test_workspace.py` (the lane snapshot test now finds the main role's hash under its absolute key, the same key the old code wrote). This pass sets the Status, writes this Answer and adds the map line.
+
+**Proof** (run fresh at b2bea3b, after the PO ruling):
+- `python3 -m unittest discover -s plans/conductor-rebuild/acceptance -v`: `Ran 48 tests`, `FAILED (failures=13)`, exit 1. The 13 that fail are exactly the 13 the PO ruled wrong under Consulted (po) (3 in test_rebuild_lanes, 3 in test_rebuild_modes, 7 in test_rebuild_user, names as listed in the Ask). The other 35 pass, A3 and A4 among them. In each of the 13 diffs the two sides are equal once the `"(<TMP-REPO>/)?feature_flow/conductor[^"]*": "<SHA>"` entries are removed, so the only difference left is the package file names in `code_files`, which is what the ruling covers.
+- `bash tests/run.sh` (the Test command): `466 passed, 0 failed`, exit 0.
+
+**Decisions**: per the PO ruling (option a) I changed no code for the `code_files` file names. They follow the move to `feature_flow/conductor/` (spec.md lines 17, 38, 180). The lane key fix stays: it made lane keys match the old code's (absolute for the main worktree's files), so a package name is now the only thing left in each diff.
+
+**Shortcuts taken**: none.
+
+**For later tickets**: the tester has to change `support.twins` so that the `code_files` / `L<k>.code_files` values match when the only difference is `feature_flow/conductor.py` against the package files, as the PO ruled. Once that change is in, all 48 acceptance tests should pass on this code. Anything else that differs in the snapshot would need its own ruling.
 
 ## Attempt note
 
