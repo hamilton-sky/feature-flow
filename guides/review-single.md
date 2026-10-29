@@ -53,7 +53,7 @@ One pass covers both the spec and the quality. Do these four in order.
 
 1. **Scope**: over `<base>..$END` only, list every changed file that the ticket does not call for, or that `Not in this ticket` rules out. Unrelated refactors, renames and reformatting count. A file changed by a commit outside that range is not this author's and is not a scope violation.
 
-2. **Done when**: for every bullet, write `MET` or `NOT MET` with what the command printed. If the conductor's notes say the ticket's `check` block passed, write `MET (conductor)` for each bullet that block covers and do not run it again. Run the prose-only bullets yourself, now. A bullet you could not run is `NOT MET`.
+2. **Done when**: for every bullet, write `MET` or `NOT MET` with what the command printed. If the conductor's notes say the ticket's `check` block or its gate passed, write `MET (conductor)` for each bullet they cover and do not run it again (above all, not the whole Test command). If the notes say a check was deferred because this host lacks what it needs, write `DEFERRED (conductor)`: it is in the plan's follow-ups and is not a reason to fail the ticket. Run the prose-only bullets yourself, now. Any other bullet you could not run is `NOT MET`.
 
 3. **Test first**: if the ticket says `Test first: yes`, check that the diff adds or changes a test, and say whether that test would fail without the production change.
 
@@ -81,7 +81,7 @@ If you cannot reach a verdict without an answer that is not yours to give (a des
 Use exactly this shape. Keep it short; no praise.
 
     SPEC
-    - <Done when bullet>: MET | MET (conductor) | NOT MET - <command and what it printed>
+    - <Done when bullet>: MET | MET (conductor) | DEFERRED (conductor) | NOT MET - <command and what it printed>
     - scope: OK | <files outside the ticket>
     - test first: n/a | OK | MISSING
 

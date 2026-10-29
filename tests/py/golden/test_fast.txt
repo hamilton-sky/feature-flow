@@ -68,6 +68,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 -,START
 -,DRIVER-PERSON
 01,BUILD
+01,CHECKS
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
@@ -75,6 +76,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 01,LEVEL-1
 01,REVIEW-DEFERRED
 02,BUILD
+02,CHECKS
 02,GATE-FULL
 02,GATE-PASS
 02,GUARD-PASS
@@ -95,6 +97,7 @@ base
 code_files
 code_sha
 deferred
+deferring
 done
 due_checks
 due_minors
@@ -117,6 +120,7 @@ review_attempt
 review_notes
 review_pass
 review_sha
+reviewed
 round
 runs
 scout_key

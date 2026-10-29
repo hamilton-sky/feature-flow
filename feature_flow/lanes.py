@@ -16,7 +16,7 @@ from feature_flow.conductor.store import RUN_KEYS, Scoped  # re-exported under t
 LANES_DIR = Path(".feature-flow") / "lanes"
 INTEGRATE = "integrate"
 # plan files a builder (or the conductor) only appends to: two lanes appending is resolved by keeping both
-APPEND_ONLY = ("map.md", "learnings.md", "followups.md")
+APPEND_ONLY = ("map.md", "learnings.md", "followups.md", "decisions.md")
 WILD = re.compile(r"[*?\[]")
 
 

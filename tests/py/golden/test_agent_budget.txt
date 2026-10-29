@@ -43,6 +43,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 -,START
 -,DRIVER-AGENT
 01,BUILD
+01,CHECKS
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
@@ -53,6 +54,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 01,VERDICT-PASS
 01,BUDGET-FAST
 02,BUILD
+02,CHECKS
 02,GATE-FULL
 02,GATE-PASS
 02,GUARD-PASS
@@ -62,6 +64,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 02,BUDGET-OVER
 02,STOP over the time budget for f: 31 of 30 active minute(s) spent, 1 ticket(s) left, fast mode on. To finish sooner, the open tickets can be re-planned into fewer with the same bar: with the user's yes, run
 03,BUILD
+03,CHECKS
 03,GATE-FULL
 03,GATE-PASS
 03,GUARD-PASS
@@ -84,6 +87,7 @@ budget_offer
 code_files
 code_sha
 deferred
+deferring
 done
 driver
 due_checks
@@ -108,6 +112,7 @@ review_attempt
 review_notes
 review_pass
 review_sha
+reviewed
 round
 runs
 scout_key

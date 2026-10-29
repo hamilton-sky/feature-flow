@@ -10,7 +10,7 @@ from feature_flow.conductor.phases import ask as ask_phase
 from feature_flow.conductor.phases.base import Outcome, Phase, read_reply, review_notes, ticket_prompt
 from feature_flow.conductor.policy import levels, review
 from feature_flow.conductor.policy.review import FINDING
-from feature_flow.conductor.replies import VERDICT, section_after
+from feature_flow.conductor.replies import SECOND, VERDICT, section_after
 from feature_flow.conductor.store import NOTE_SEP
 
 LEVEL_LINE = re.compile(r"^LEVEL: ([123])[ \t\r\f\v]*$")  # a reviewer raising the ticket's level
@@ -29,19 +29,35 @@ def take_verdict(ws, what):
     return verdict
 
 
+def pair_verdict(found):
+    """The one verdict of a pair review's two: a question wins, then a FAIL; PASS only when both passed; "" when the
+    file does not hold both replies."""
+    if len(found) < 2:
+        return ""
+    for word in found:
+        if word.startswith("ask"):
+            return word
+    return "fail" if "fail" in found else "pass"
+
+
 def record_verdict(ws, reply, final=False):
     """Record a reviewer's reply: its verdict, a raised level, a question, the findings or the minors. final is
-    the feature review, which has no ticket level to raise and no ticket to pause for a question."""
+    the feature review, which has no ticket level to raise and no ticket to pause for a question. A pair review's
+    file holds both reviewers' replies, one after the other."""
     text = read_reply(reply)
     found = ""
+    every = []
     asked = 0
     for line in text.splitlines():
         match = VERDICT.match(line)
         if match:
             found = match.group(1).lower()
+            every.append(found)
         match = LEVEL_LINE.match(line)
         if match:
             asked = max(asked, int(match.group(1)))
+    if not final and ws.get("review_pass") == "pair":
+        found = pair_verdict(every)
     level = ws.num("level")
     if final:
         asked = 0  # the feature review has no ticket level to raise
@@ -86,7 +102,8 @@ class Review(Phase):
         ws.st["review_sha"] = git.head(cwd=ws.folder)
         guards.mark_relay(ws, ws.st)
         ws.save()
-        return ws.emit("REVIEW %s %s %s%s" % (ws.ticket(), ws.get("num"), ws.get("base"), ws.lane_word()))
+        pair = " pair" if ws.get("review_pass") == "pair" and not ws.lane else ""
+        return ws.emit("REVIEW %s %s %s%s%s" % (ws.ticket(), ws.get("num"), ws.get("base"), ws.lane_word(), pair))
 
     @classmethod
     def judge(cls, ws):
@@ -115,7 +132,8 @@ class Review(Phase):
                 raise Stop("the review findings on file are not lane %d's: run verdict for this lane, then next %d"
                            % (ws.lane, ws.lane))
             findings = state.read_text(ws.findings_file, "findings") or ""
-            source = {"quality": "quality review", "single": "single review"}.get(review_pass, "spec review")
+            source = {"quality": "quality review", "single": "single review",
+                      "pair": "pair review"}.get(review_pass, "spec review")
             if review.on_fail(ws.num("level"), ws.num("round"), review_pass, findings) == "followups":
                 return Outcome(ws.pass_with_followups(source, findings), True)
             return Outcome(ws.send_back(source, findings))
@@ -126,6 +144,15 @@ class Review(Phase):
     @classmethod
     def prompt(cls, ws):
         word = "review"
+        if ws.get("review_pass") == "pair":
+            notes = review_notes(ws)
+            return (ticket_prompt(ws, "review-quality", notes + [
+                        "a second reviewer checks the ticket's Done when and scope at the same time: do the quality "
+                        "review only" + (", and probe the change as a hostile caller, as the guide says for level 3"
+                                         if ws.num("level") == 3 else "")])
+                    + "\n%s\n\n" % SECOND
+                    + ticket_prompt(ws, "review", notes + [
+                        "a second reviewer checks the code's quality at the same time: do the spec checklist only"]))
         if ws.get("review_pass") in ("quality", "single"):
             word = "review-" + ws.get("review_pass")
         return ticket_prompt(ws, word, review_notes(ws))
@@ -139,7 +166,7 @@ class Review(Phase):
         """A level 3 ticket's first review, never in a later round or after a question."""
         if not ws.scouts_on or ws.num("round") or ws.num("asks"):
             return []
-        if ws.num("level") == 3 and ws.get("review_pass") in ("spec", "single") and ws.num("review_attempt") == 1:
+        if ws.num("level") == 3 and ws.get("review_pass") in ("spec", "single", "pair") and ws.num("review_attempt") == 1:
             tasks = "%s/%s" % (ws.plan.as_posix(), os.environ.get("FLOW_TICKETS") or "tasks")
             return scouts.review(ws.get("base"), tasks)
         return []

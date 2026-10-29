@@ -74,6 +74,7 @@ Then, in your repo, in the agent:
 | The same, asking nothing | `/feature-flow csv-export auto` | `$feature-flow csv-export auto` |
 | Watch the graph, animated | `/feature-flow csv-export show` | `$feature-flow csv-export show` |
 | Weigh ways to build it first | `/feature-flow csv-export brainstorm` | `$feature-flow csv-export brainstorm` |
+| Everyday feature (what a new plan names): two reviewers per ticket, one round review | `/feature-flow csv-export standard` | `$feature-flow csv-export standard` |
 | Small, low-risk feature: one review at the end | `/feature-flow csv-export fast` | `$feature-flow csv-export fast` |
 | Costly to get wrong: full gate, own review per ticket | `/feature-flow csv-export careful` | `$feature-flow csv-export careful` |
 | Another agent drives the session, no handoffs | `/feature-flow csv-export agent` | `$feature-flow csv-export agent` |
@@ -219,7 +220,7 @@ The lines `commands.md` can hold ([template](guides/templates/commands.md)); del
 | `Acceptance:` | no | turns on the [tester](#acceptance-tests-the-tester); runs only `plans/<feature>/acceptance/` |
 | `Sensitive:` | no | paths that make any ticket touching them level 3 |
 | `Shared:`, `Setup:` | no | for [lanes](#tickets-side-by-side-lanes): paths that keep a ticket alone, and what a fresh worktree needs |
-| `Profile:` | no | `careful`, `normal` or `fast` for this plan ([profiles](#profiles)) |
+| `Profile:` | no | `careful`, `standard`, `normal` or `fast` for this plan ([profiles](#profiles)); a new plan's template says `standard` |
 
 One markdown file per ticket in `plans/<feature>/tasks/NN-slug.md`:
 
@@ -332,7 +333,9 @@ A builder, reviewer or planner that hits a question it should not decide alone a
 - **A builder** appends `## Ask: architect|designer|po` with the question to its ticket and stops. `next` hands out `ASK <role> <ticket> <NN> <sha>`. The answer goes into the ticket under `## Consulted (<role>)`, and the ticket is built again. The question does not count as a failed attempt.
 - **A reviewer** ends with a `## Question` and `REVIEW: ASK <role>`. The answer comes back in the next review's notes. On the fast path's feature review, the reviewer writes the question as a finding, and the fix ticket's builder can ask it.
 - **The planner** starts each open question with `architect:`, `designer:`, `po:` or `user:`. The session runs `consult-prompt <role> <question file>` for the first three, adds the answers to the brief under `Consulted:`, kept apart from your `Decided:` lines, and plans again.
-- **What still comes to you.** Any question the asker marks `user`, any answer a consultant ends with `ANSWER: USER` (it changes what you get, so its options come to you), and a third consultant question on one ticket all stop the run with the question, written into the ticket under `## Ask: user`. You answer under `## Consulted (user)` at the end of the ticket, commit, and run `next`. A reviewer's question for you reopens the ticket, so its builder builds again with your answer.
+- **A question for you goes to the product owner first.** A builder's or reviewer's question marked `user` is sent to `flow-po` once per ticket. The architect, designer and product owner decide what the spec leaves open; only scope, cost and steps outside the repo come to you.
+- **`plans/<feature>/decisions.md`** keeps every answer: the ticket, who asked, which role answered, the question, the answer and the role's `## Why`, committed with the ticket (`DECISION` in the log).
+- **What still comes to you.** Any question the product owner sends on with `ANSWER: USER`, any answer a consultant ends with `ANSWER: USER` (it changes what you get, so its options come to you), and a third consultant question on one ticket all stop the run with the question, written into the ticket under `## Ask: user`. You answer under `## Consulted (user)` at the end of the ticket, commit, and run `next`. A reviewer's question for you reopens the ticket, so its builder builds again with your answer.
 
 ## Acceptance tests (the tester)
 
@@ -371,6 +374,7 @@ Every finished run can leave a record of what it cost and what it caught, so a t
 - **Tokens** come from Claude Code's own session transcripts (`~/.claude/projects/`, or `CLAUDE_CONFIG_DIR`), never from the agent: every message of the sessions and subagents that worked in this repo during the run, each counted once, by model and, without lanes, split per ticket by time. Codex sessions are not read yet.
 - **codeintel**: when an agent asked [codeintel](#codeintel-optional), `codeintel` in `eval.json` counts the queries by op and what the agents said of the answers (helped, no answer, wrong, and why), and the form below asks whether it helped.
 - **`plans/<feature>/eval-verdict.md`**: a form for you. Was the plan right, how many fixes you made by hand, would you use it again, and for each catch whether it was real or a false alarm. Run `--eval` again and your answers land in `eval.json`. The false-alarm count is the only way to tell whether the checks are worth their cost.
+- **Timing**: `timing` in `eval.json` gives the wall clock, the minutes by phase, by ticket and by level, the slowest ticket and how many times the whole `Test` ran. `feature-flow eval <feature> --compare <eval.json> ...` puts several runs side by side.
 - **Later:** `feature-flow eval <feature> --later`, a week or two on, lists the commits since the run whose subject says fix, revert, bug or regression on the paths each ticket's `Touches:` names: the defects the run let through.
 
 Both files sit in the plan folder, so they are committed with it and survive a cloud session. Nothing is sent anywhere; attach `eval.json` to a field-run issue if you want to share it. Run logs from before 0.15.0 have no dates, so they give no tokens.
@@ -381,11 +385,14 @@ Most settings below never need touching. One word picks a sensible set:
 
 | Profile | Sets | For |
 |---|---|---|
-| `careful` | `FLOW_GATE_FULL=1`, `FLOW_FAST=0`, `FLOW_SMALL_LINES=0`, `FLOW_TICKETS_PER_SESSION=3` | code where a wrong "done" is expensive: the full gate and an own review for every ticket |
-| `normal` | nothing: the defaults | everyday features |
+| `careful` | `FLOW_GATE_FULL=1`, `FLOW_REVIEWERS=2`, `FLOW_ROUND_REVIEW=on`, `FLOW_BASE_GATE=on`, `FLOW_FAST=0`, `FLOW_SMALL_LINES=0`, `FLOW_TICKETS_PER_SESSION=3` | code where a wrong "done" is expensive: the full gate and an own review for every ticket |
+| `standard` | `FLOW_REVIEWERS=2`, `FLOW_ROUND_REVIEW=on`, `FLOW_BASE_GATE=on` | everyday features, and what a new plan's `commands.md` names: slower than `fast`, faster than `careful` |
+| `normal` | nothing: the defaults | plans written before 0.30.0 |
 | `fast` | `FLOW_FAST=1`, `FLOW_SCOUTS=off`, `FLOW_TICKETS_PER_SESSION=6` | small, low-risk features: one feature review at the end |
 
-Pick one with `/feature-flow <feature> careful` (or `fast`), `FLOW_PROFILE=<name>` on `start`, or a `Profile:` line in the plan's `commands.md`, approved with the plan. A profile fills only settings you did not set: `FLOW_PROFILE=fast FLOW_SCOUTS=on` keeps the scouts. The log records `PROFILE-<NAME>` at the start. A level 3 or `Sensitive:` ticket keeps its own reviews in every profile.
+**What `standard` does.** The gate runs once at the base before the first ticket, so a red base stops the run before a builder is blamed for it. Where one review would run, a quality reviewer and a ticket reviewer read the ticket side by side, both read only, in one subagent call each (`REVIEW <ticket> ... pair`); the session sends both replies to `verdict` and the conductor keeps the worse. On a level 1 or 2 ticket only a blocker sends the ticket back to its own builder; smaller findings go to `followups.md`, which later tickets' builders read. With an `Acceptance:` line the tester's tests run after each ticket and their output goes to the reviewers. Once every ticket is done, one more reviewer reads the whole round's diff against the plan. Level 3 and `Sensitive:` tickets keep their full own reviews.
+
+Pick one with `/feature-flow <feature> careful` (or `standard`, `fast`), `FLOW_PROFILE=<name>` on `start`, or a `Profile:` line in the plan's `commands.md`, approved with the plan. A profile fills only settings you did not set: `FLOW_PROFILE=fast FLOW_SCOUTS=on` keeps the scouts. The log records `PROFILE-<NAME>` at the start. A level 3 or `Sensitive:` ticket keeps its own reviews in every profile.
 
 The long `python3 -I -c ...` line the skill uses to call the conductor stays as it is: it is how the skill checks `flow-trust.py` against the sha256 it pins before running it, and a shorter wrapper would be one more file nothing checks. The session copies it from the skill; you never type it.
 
@@ -440,6 +447,8 @@ A session's context fills up, so the flow moves to a fresh session every few tic
 - **One owner at a time.** `start` gives the session a token, and every later call must carry it, so two sessions can never drive the same feature. `HANDOFF` and `DONE` release it.
 - **Resuming after a closed session.** If a session ended without `HANDOFF` (you closed it, it crashed, it ran out of budget), the feature is still owned by it, and a new session stops and says so. Once you are sure the old session is gone, answer yes when the new session asks, or start it with `FLOW_TAKEOVER=1`. With `auto` the skill never takes over on its own.
 - **Stuck on a ticket.** `python3 scripts/flow.py <feature> reset` (or `feature-flow reset <feature>`) reopens a ticket left `claimed` or `in-progress`, commits that, and clears the conductor's run state, so the next `/feature-flow <feature>` starts clean from the ticket files. `reset <NN>` reopens that one ticket, even a resolved one, to build it again. While a session owns the feature it needs `FLOW_TAKEOVER=1`. A mistyped command or feature name gets a `did you mean` hint.
+- **A ticket that cannot be built as planned.** `replan-prompt <feature> repair` gives a planner the stopped ticket and the run so far; it rewrites the open tickets, the session commits, and `next` reopens the stopped ticket and goes on (`REPAIR` in the log). It refuses once the stopped ticket has code commits.
+- **Long prompts.** `prompt <feature> file` writes the prompt to `.feature-flow/state/prompt-<feature>-<k>.md` and prints `PROMPT-FILE <path> <sha256>`, so the session hands a subagent a path, not the text.
 - **Relay mode.** `FLOW_RELAY=1` hands off after every build and every review, so each phase gets a session of its own.
 - **When an agent drives.** An orchestrating agent (another Claude session driving the skill for you) has no context to refresh, so handoffs are pure overhead. `/feature-flow <feature> agent` runs `start` with `FLOW_DRIVER=agent`: no `HANDOFF` unless `FLOW_TICKETS_PER_SESSION` is set by hand, builders skip the "continue in a fresh session" line (they leave it out whenever the flow runs them), and the eval records that an agent drove the run, so its stops, handoffs and resets are not read as your time. `next` runs the gate and the checks before it answers, which can take minutes: a caller with a 2 minute tool timeout should give it 10 minutes or more, or run it in the background.
 - **Argument mistakes say what to do.** `verdict` without its file, `--after-build` in the wrong place (the runner now accepts it anywhere), a `next` after a REVIEW with no `verdict` in between (it used to hand out the same review again; now it changes nothing and says to run `verdict` first), a digest from another feature (the runner says to pass `FLOW_TRUST=new` on a feature's first call), and a commit made between a review and its `next` (the stop says how to take it out and make it again later).
@@ -477,7 +486,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `FLOW_PROFILE` | unset | `careful`, `normal` or `fast`: fills the settings in this table that are not set; a `Profile:` line in `commands.md` does the same |
+| `FLOW_PROFILE` | unset | `careful`, `standard`, `normal` or `fast`: fills the settings in this table that are not set; a `Profile:` line in `commands.md` does the same |
 | `FLOW_TICKETS_PER_SESSION` | `4` | tickets per session before `HANDOFF`; `0` never hands off |
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
 | `FLOW_DRIVER` | `person` | read by `start`: `agent` when another agent drives the run: no handoffs (unless `FLOW_TICKETS_PER_SESSION` is set), and the eval says so |
@@ -491,6 +500,9 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |
 | `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks |
+| `FLOW_REVIEWERS` | `1` | `2` runs a quality and a ticket reviewer side by side where one review would run (not in lanes) |
+| `FLOW_ROUND_REVIEW` | `off` | `on` reviews the whole round once at the end, after every ticket's own review |
+| `FLOW_BASE_GATE` | `off` | `on` runs the whole gate once at the base, before the first ticket, and stops if it is red (`<feature>.base-gate.log`) |
 | `FLOW_GATE_FULL` | unset | `1` runs the full Build, Test and Lint after every ticket, even when `commands.md` has a `Quick:` line |
 | `FLOW_SMALL_FILES` | `3` | most files a ticket may change and still get the single review (no level), or stay level 1 |
 | `FLOW_SMALL_LINES` | `60` | most changed lines for the single review; `0` turns the single review off |

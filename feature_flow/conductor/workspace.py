@@ -12,7 +12,7 @@ import contextlib
 import os
 from pathlib import Path
 
-from feature_flow import checks, codehash, floorguard, git, proof, scouts, state, tickets
+from feature_flow import checks, codehash, codeintel, floorguard, git, proof, scouts, state, tickets
 from feature_flow.conductor import budget as time_budget
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import REGISTRY, Phase
@@ -163,7 +163,9 @@ class Workspace:
         """The scout replies saved for the phase handed out last, as a section for its prompt, or ""."""
         if self.get("scout_key") != self.phase_key():
             return ""
-        return scouts.section(self.state_file.parent, self.feature, self.scout_slot(), self.num("scout_n"))
+        text = scouts.section(self.state_file.parent, self.feature, self.scout_slot(), self.num("scout_n"))
+        codeintel.keep_lines(state.file_path(self.state_file.parent, self.feature, "codeintel"), self.phase_key(), text)
+        return text
 
     # ---- the ticket's outcome ------------------------------------------
 
@@ -221,6 +223,9 @@ class Workspace:
 
     def pass_ticket(self):
         self.write_due("%s (left for later)" % self.ticket_name())
+        if self.round_review and not self.get("deferring"):  # the whole round is reviewed once more at the end
+            items = [i for i in self.all.get("reviewed", "").split() if not i.startswith(self.get("num") + ":")]
+            self.all["reviewed"] = " ".join(items + ["%s:%s" % (self.get("num"), self.get("base"))])
         time_budget.note_slowest(self)
         return self.scheduler().on_passed(self)
 
@@ -240,7 +245,11 @@ class Workspace:
         items = [i for i in self.all.get("deferred", "").split() if not i.startswith(self.get("num") + ":")]
         self.all["deferred"] = " ".join(items + ["%s:%s" % (self.get("num"), self.get("base"))])
         self.log("REVIEW-DEFERRED")
-        return self.pass_ticket()
+        self.st["deferring"] = "1"
+        try:
+            return self.pass_ticket()
+        finally:
+            self.st["deferring"] = ""
 
     # ---- the code snapshot, the level and the ticket at base -------------
 

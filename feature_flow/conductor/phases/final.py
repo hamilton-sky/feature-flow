@@ -16,9 +16,18 @@ class Final(Phase):
     who = "feature review"
 
     @classmethod
+    def round_tickets(cls, ws):
+        """[(NN, base)] of the tickets that had their own review in this run, when the whole round is reviewed at the
+        end (FLOW_ROUND_REVIEW=on), else []."""
+        if not ws.round_review:
+            return []
+        return [tuple(item.split(":", 1)) for item in ws.all.get("reviewed", "").split() if ":" in item]
+
+    @classmethod
     def feature_base(cls, ws):
-        """The oldest base of the deferred tickets: the feature review covers from there to HEAD."""
-        bases = sorted({base for _, base in ws.deferred()})
+        """The oldest base of the deferred tickets and the round's reviewed ones: the review covers from there to
+        HEAD."""
+        bases = sorted({base for _, base in ws.deferred() + cls.round_tickets(ws)})
         if len(bases) == 1:
             return bases[0]
         result = git._git("merge-base", "--octopus", *bases, check=False)
@@ -51,7 +60,8 @@ class Final(Phase):
         verdict = take_verdict(ws, ws.feature)
         if verdict == "pass":
             ws.write_due("feature review (left for later)")
-            for key in ("phase", "deferred", "final_base", "final_round", "review_attempt", "review_sha", "scout_key"):
+            for key in ("phase", "deferred", "reviewed", "final_base", "final_round", "review_attempt", "review_sha",
+                        "scout_key"):
                 ws.all[key] = ""
             ws.save()
             ws.log("FEATURE-PASS")
@@ -107,10 +117,15 @@ class Final(Phase):
     @classmethod
     def final_note(cls, ws):
         round_no = ws.num("final_round")
+        reviewed = [num for num, _ in cls.round_tickets(ws)]
+        note = ("tickets %s had their own review as they were built. this review is of the whole round: look for what "
+                "a review of one ticket cannot see, such as how the tickets fit together, a caller one ticket changed "
+                "and another relies on, and a check one ticket weakened" % ", ".join(reviewed)) if reviewed else ""
         if not round_no:
-            return ""
-        return ("this is round %d of the feature review: the last round's findings are in the newest "
-                "feature-review-fixes ticket. check that each blocker and major is fixed" % (round_no + 1))
+            return note
+        return (note + ". " if note else "") + (
+            "this is round %d of the feature review: the last round's findings are in the newest feature-review-fixes "
+            "ticket. check that each blocker and major is fixed" % (round_no + 1))
 
     @classmethod
     def record(cls, ws, reply):

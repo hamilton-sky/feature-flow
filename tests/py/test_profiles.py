@@ -64,7 +64,7 @@ class ProfileDriveTests(unittest.TestCase):
     def test_an_unknown_profile_stops_the_run(self):
         repo, (rc, out) = self.setup("", FLOW_PROFILE="turbo")
         self.assertEqual(rc, 1)
-        self.assertIn("STOP the profile must be careful, fast, normal, not turbo", out)
+        self.assertIn("STOP the profile must be careful, fast, normal, standard, not turbo", out)
 
 
 if __name__ == "__main__":

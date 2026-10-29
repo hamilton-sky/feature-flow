@@ -127,6 +127,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 02,BUILD
 -,WAIT
 01,SCOUTS-1
+02,CHECKS
 02,GATE-FULL
 02,GATE-PASS
 02,GUARD-PASS
@@ -135,6 +136,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 02,LEVEL-2
 02,REVIEW-SINGLE
 02,REVIEW
+01,CHECKS
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
@@ -153,6 +155,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 03,LEASE-1
 03,BUILD
 -,WAIT
+03,CHECKS
 03,GATE-FULL
 03,GATE-PASS
 03,GUARD-PASS

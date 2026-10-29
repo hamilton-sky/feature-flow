@@ -29,6 +29,13 @@ def _env_int(name, default, environ=None):
         raise Stop("%s must be a whole number, not %s" % (name, value))
 
 
+def _reviewers(environ):
+    value = _env_int("FLOW_REVIEWERS", 1, environ)
+    if value not in (1, 2):
+        raise Stop("FLOW_REVIEWERS must be 1 or 2, not %d" % value)
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     root: Path
@@ -46,6 +53,9 @@ class Settings:
     scouts_on: bool
     relay: bool
     invoke: str
+    reviewers: int = 1  # 2: a quality and a ticket reviewer side by side, where one review would run
+    round_review: bool = False  # one review of the whole round at the end, after every ticket's own
+    base_gate: bool = False  # the whole gate once at the base, before the first ticket
 
     @classmethod
     def load(cls, feature, environ=None):
@@ -75,6 +85,9 @@ class Settings:
             scouts_on=environ.get("FLOW_SCOUTS", "on") != "off",
             relay=environ.get("FLOW_RELAY", "0") == "1",
             invoke=environ.get("FLOW_INVOKE") or "/feature-flow",
+            reviewers=_reviewers(environ),
+            round_review=environ.get("FLOW_ROUND_REVIEW", "off") == "on",
+            base_gate=environ.get("FLOW_BASE_GATE", "off") == "on",
         )
 
     def session_limit(self, driver):

@@ -44,6 +44,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 -,DRIVER-PERSON
 01,BATCH 2
 01,BUILD
+01,CHECKS
 01,GATE-PASS
 01,GUARD-PASS
 01,FOOTPRINT-PASS
@@ -92,6 +93,7 @@ review_attempt
 review_notes
 review_pass
 review_sha
+reviewed
 round
 runs
 scout_key

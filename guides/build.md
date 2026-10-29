@@ -86,6 +86,8 @@ For every bullet in **Done when**, in this order:
 
 The conductor also runs the ticket's `check` block (the `$` commands in Done when) before review, so run that block yourself first.
 
+While you work, run only the tests you are changing (or the `Quick:` command, when `commands.md` has one), not the whole Test command after every edit. Run the whole Test command once, at the end, as Done when asks. The conductor's gate runs it again after you, and the reviewer takes the gate's result: the full suite runs once per ticket where it counts.
+
 Fix failures that are inside the ticket. If a fix needs changes outside it, go to Failure handling.
 
 | You think | What is true |
@@ -112,7 +114,7 @@ Set `Status: resolved`. Add one line to `map.md` under Decisions so far: `NN —
 
 If you learned something a fresh worker would waste time rediscovering (a command that works, a trap, a quirk of the environment), append one or two lines to `learnings.md`, tagged `(NN)`. Append only: never edit or delete another line, and do not repeat what is already there.
 
-**You may change only:** your own ticket's `Status` line and Answer, lines appended to `map.md` and `learnings.md`, and the code the ticket calls for. The floor guard fails anything else: other tickets, the spec, `commands.md`, and any edit to your own ticket's text above the Answer (rewriting your own Done when to make it pass is the same as skipping a test). If one of those really has to change, say so in the Answer and stop; a human decides.
+**You may change only:** your own ticket's `Status` line and Answer, lines appended to `map.md` and `learnings.md`, and the code the ticket calls for. The floor guard fails anything else: other tickets, the spec, `commands.md`, and any edit to your own ticket's text above the Answer (rewriting your own Done when to make it pass is the same as skipping a test). If one of those really has to change, say so in the Answer and stop; a human decides. If the ticket has a `Touches:` line and its Done when forces you to change one file outside it (most often an existing test that pins the old behaviour, or the generator of a file it names), you may change that one file: add a line `Extra file: <path> - <why>` to your Answer. The conductor passes one such file, one ticket at a time, and the reviewer judges it. Two or more, or a file you only wanted to tidy, means the plan has to change: say so and stop.
 
 ## Step 10: Commit
 

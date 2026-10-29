@@ -57,6 +57,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 02,LEASE-2
 02,BUILD
 -,WAIT
+01,CHECKS
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
@@ -67,6 +68,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 -,MERGE-GATE-FULL-PASS
 01,MERGED-1
 -,WAIT
+02,CHECKS
 02,GATE-FULL
 02,GATE-PASS
 02,GUARD-PASS
@@ -102,6 +104,7 @@ relay_handoff
 reply_minors
 review_attempt
 review_sha
+reviewed
 runs
 scout_key
 seen

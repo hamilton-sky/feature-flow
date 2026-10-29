@@ -131,7 +131,7 @@ class SettingsLoad(unittest.TestCase):
 
     def test_two_bad_values_give_the_first_stop_in_todays_order(self):
         cases = (
-            ({"FLOW_PROFILE": "bogus", "FLOW_MAX_RETRIES": "x"}, "the profile must be careful, fast, normal, not bogus"),
+            ({"FLOW_PROFILE": "bogus", "FLOW_MAX_RETRIES": "x"}, "the profile must be careful, fast, normal, standard, not bogus"),
             ({"FLOW_SMALL_LINES": "y", "FLOW_MAX_RETRIES": "x"}, "FLOW_MAX_RETRIES must be a whole number, not x"),
             ({"FLOW_SMALL_LINES": "y", "FLOW_GATE_TIMEOUT": "z"}, "FLOW_GATE_TIMEOUT must be a whole number, not z"),
             ({"FLOW_BATCH": "b", "FLOW_TICKETS_PER_SESSION": "t"},

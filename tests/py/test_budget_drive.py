@@ -141,7 +141,8 @@ class Replan(Base):
         self.setup(FLOW_FAST="1", FLOW_BUDGET="10")
         self.flow("next")
         self.assertEqual(self.flow("replan-prompt"), (1, "STOP a ticket is in progress. run replan-prompt between "
-                                                         "tickets, when next would start a new one"))
+                                                         "tickets, when next would start a new one, or replan-prompt repair "
+                                                     "to repair the plan around it"))
         self.spend(11)
         self.assertEqual(self.build(1)[0], 1)  # the offer: between tickets now
         rc, out = self.flow("replan-prompt")

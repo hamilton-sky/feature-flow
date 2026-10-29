@@ -106,6 +106,7 @@ class LaneScheduler(SerialScheduler):
                        % " ".join(dirty[:5]))
         busy = self.busy_lanes()
         if not busy and self.end.tests_due():
+            guards.before_ticket(c, busy, only=("base",))
             return Test.hand_out(c)
         check = checks.flow_status(c.scripts, c.feature, "--check")
         if not check.ok:
@@ -121,7 +122,7 @@ class LaneScheduler(SerialScheduler):
         shared = lanes.touches("Touches: " + tickets.commands_text_value(c.show_head(c.commands), "Shared")) or []
         free = [k for k in range(1, c.num("lanes") + 1) if k not in busy]
         if ready.code == 0 and free:
-            guards.before_ticket(c, busy, only=("replan", "budget"))  # with busy lanes: no re-plan check, no offer
+            guards.before_ticket(c, busy, only=("replan", "budget", "base"))  # with busy lanes: no re-plan check, no offer
             for path in ready.out.strip().splitlines():
                 if path in leased:
                     continue
