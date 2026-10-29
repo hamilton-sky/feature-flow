@@ -1,6 +1,6 @@
 """The build of a ticket: handed to a builder, then judged by the check pipeline and the review policy."""
 
-from feature_flow import git, lanes, prompts, proof, scouts, tickets
+from feature_flow import checks, gate, git, lanes, prompts, proof, scouts, tickets
 from feature_flow.conductor import buildchecks, guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases import ask as ask_phase
@@ -25,6 +25,7 @@ class Build(Phase):
     @classmethod
     def judge(cls, ws):
         ws.check_code(ws.flow_edit_allowed())
+        ws.log("CHECKS")  # the build ended: eval times the checks from here
         if ws.get("batch"):
             return Outcome(ws.scheduler().judge_batch())
         status = tickets.status(ws.at(ws.ticket()))
@@ -45,7 +46,8 @@ class Build(Phase):
         level = ws.measure_level()
         decision, review_pass, more, events = review.after_checks(
             level, ws.fast(), ws.gate_on, ws.checks_ran, ws.small_note() if level == 0 else "",
-            proof.review_mode(ws.ticket_at_base()), ws.get("spec_ok"), ws.num("round"), ws.get("level_note"))
+            proof.review_mode(ws.ticket_at_base()), ws.get("spec_ok"), ws.num("round"), ws.get("level_note"),
+            pair=ws.reviewers == 2 and not ws.lane)
         if decision == "defer":
             return Outcome(ws.defer_review(), True)
         ws.st["review_pass"] = review_pass
@@ -53,8 +55,29 @@ class Build(Phase):
             if event == "REVIEW-SINGLE":
                 ws.st["level_raised"] = ""
             ws.log(event)
+        if review_pass == "pair":
+            more += cls.acceptance_note(ws)
         ws.st["review_notes"] = NOTE_SEP.join(notes + more)
         return Outcome(review_phase.Review.hand_out(ws))
+
+    @classmethod
+    def acceptance_note(cls, ws):
+        """With two reviewers: the tester's acceptance tests run after the ticket, so the ticket reviewer sees which
+        ones its work should have turned green. [] when the plan has no acceptance tests yet."""
+        end = ws.scheduler().end
+        command = end.acceptance_command()
+        if not command or end.tests_due():
+            return []
+        result = checks.smoke(command, ws.gate_timeout, cwd=ws.folder)
+        dirty = git.changes(cwd=ws.folder)
+        if dirty:
+            raise Stop("the Acceptance command of %s changed the working tree: %s. it must not change it"
+                       % (ws.feature, " ".join(dirty[:5])))
+        ws.log("ACCEPT-TICKET-%s" % ("PASS" if result.ok else "FAIL"))
+        return ["the conductor ran the acceptance tests (`%s`) after this ticket: they %s. tests for tickets not built "
+                "yet may fail; a test for what this ticket delivers that fails is NOT MET. the last lines: %s"
+                % (command, "pass" if result.ok else "fail",
+                   " ".join(gate.tail(result.out, 20).split())[:1500])]
 
     @classmethod
     def prompt(cls, ws):

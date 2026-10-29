@@ -20,6 +20,18 @@ You are the **planner**, called back in the middle of a build. The feature `<fea
 
 Do not commit. The session shows the user what changed, and commits only on the user's yes.
 
+## Repair
+
+When your task says **repair**, the plan has a gap that stopped the build, not too many tickets. Most often a ticket must change a file its `Touches:` does not name: a test that pins the old behaviour, a generator, a fixture or sample file. Fold nothing. Instead:
+
+1. Read the stopped ticket (if your task names one), its Attempt notes and its findings, and find what the plan missed.
+2. Audit every open ticket's `Touches:` the same way: grep for the tests that pin what it changes, the generators that write its files, and the fixtures in the old shape. Add each missing path.
+3. You may widen `Touches:`, fix a `Done when` or `check` block that cannot pass as written, and add a new open ticket (numbered after the last one) for work no ticket owns. Keep the bar: never drop a promise of `spec.md`, and never weaken a check.
+4. Change `commands.md` only when the gap is there (a Lint command that checks the plan folder, a missing `Quick:` line), and list the change under OPEN QUESTIONS as `user: commands.md: <the change>`: the session asks the user before it commits.
+5. Never edit a resolved ticket. Run `--check` and `--lint` as above.
+
+Reply in the shape below with `REPAIRED: <each ticket and what changed>` in place of `FOLDED:`.
+
 ## Reply
 
 Reply in this shape, with nothing after the last line:

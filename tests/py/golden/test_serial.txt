@@ -308,6 +308,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 -,DRIVER-PERSON
 01,BUILD
 01,SCOUTS-1
+01,CHECKS
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
@@ -317,6 +318,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 01,REVIEW
 01,VERDICT-FAIL
 01,BUILD
+01,CHECKS
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
@@ -330,6 +332,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 01,DRIVER-PERSON
 02,BUILD
 02,SCOUTS-2
+02,CHECKS
 02,GATE-FULL
 02,GATE-PASS
 02,GUARD-PASS

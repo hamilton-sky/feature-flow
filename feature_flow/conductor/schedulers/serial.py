@@ -61,10 +61,12 @@ class SerialScheduler:
         if dirty:
             raise Stop("working tree is not clean, commit or stash first: %s%s"
                        % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
+        nxt = checks.flow_status(c.scripts, c.feature, "--next")
+        if nxt.code == 0:
+            guards.before_ticket(c, only=("base",))  # before the tester too: its tests are judged by the gate
         line = self.end.tester()
         if line is not None:
             return line
-        nxt = checks.flow_status(c.scripts, c.feature, "--next")
         if nxt.code == 10:
             return self.end.finish()
         if nxt.code == 11:

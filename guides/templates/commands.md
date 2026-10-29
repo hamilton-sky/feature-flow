@@ -10,8 +10,8 @@ optional: when set, it runs in place of Test after the tickets in the middle of 
 Test runs after the last ticket and before each handoff. `Sensitive:` is optional: a ticket whose
 diff touches one of its paths is reviewed as level 3 whatever its own `Level:` says. `Shared:` and
 `Setup:` matter only when tickets are built side by side (`FLOW_LANES`): a ticket that touches a
-`Shared:` path is built alone, and `Setup:` runs once in each new lane worktree. `Profile:` is optional: `careful`, `normal` or `fast` sets
-several FLOW_ settings at once (README, Profiles). `Acceptance:` is optional: with it, a tester writes acceptance tests from the spec before the first ticket, and the flow runs this command once every ticket is resolved. Delete a line
+`Shared:` path is built alone, and `Setup:` runs once in each new lane worktree. `Profile:` sets
+several FLOW_ settings at once (README, Profiles): `standard` (the default for a new plan: two reviewers side by side on each ticket, one review of the whole round at the end), `careful`, `normal` or `fast`. `Acceptance:` is optional: with it, a tester writes acceptance tests from the spec before the first ticket, and the flow runs this command once every ticket is resolved. Delete a line
 you do not have; a line left as a placeholder is skipped.
 
 Build: `<command>`
@@ -23,5 +23,5 @@ Run: `<command, if the feature has something to start>`
 Shared: `<optional: paths many tickets change, comma separated, such as a changelog, a version file or a routes table. a ticket touching one is never built beside another>`
 Setup: `<optional: what a fresh checkout needs before Build and Test run, such as npm ci or a venv install. run once in each lane worktree>`
 Sensitive: `<optional: paths that make any ticket touching them level 3, comma separated. a folder ends with /, a * glob crosses folders. e.g. src/auth/, *token*, scripts/>`
-Profile: `<optional: careful | normal | fast. leave it out for normal>`
+Profile: `standard`
 Acceptance: `<optional: the command that runs only the tests in plans/<feature>/acceptance/, which the tester writes from spec.md before the build. never part of Test>`

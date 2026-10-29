@@ -69,15 +69,36 @@ class AskDrive(unittest.TestCase):
         repo, env = self.setup()
         self.flow("next")
         self.ask_in_ticket("user", "CSV or JSON for the export?")
+        rc, line = self.flow("next")
+        self.assertEqual(line.split()[:2], ["ASK", "po"])  # the product owner gets it first
+        self.assertIn("for the user", self.flow("prompt")[1])
+        self.assertEqual(self.answer("Both are fine; it is a cost call.", "ANSWER: USER"), (0, "OK"))
         rc, out = self.flow("next")
         self.assertEqual(rc, 1)
-        self.assertIn("01-t asks you: CSV or JSON for the export?", out)
+        self.assertIn("The po says only you can decide", out)
         self.assertEqual(self.flow("next")[0], 1)  # still waiting
         with open(str(repo.path(T1)), "a", encoding="utf-8") as handle:
             handle.write("\n## Consulted (user)\n\nCSV.\n")
         repo.commit("answer")
         rc, line = self.flow("next")
         self.assertTrue(line.startswith("BUILD"), line)
+
+    def test_a_question_for_the_user_the_po_can_answer_goes_on_and_is_logged_in_decisions(self):
+        repo, env = self.setup()
+        self.flow("next")
+        self.ask_in_ticket("user", "CSV or JSON for the export?")
+        self.assertEqual(self.flow("next")[1].split()[:2], ["ASK", "po"])
+        self.reply.write_text("## Answer\n\nCSV.\n\n## Why\n\nThe spec's users open it in a spreadsheet.\n\n"
+                              "ANSWER: GIVEN\n", encoding="utf-8")
+        self.assertEqual(self.flow("verdict", str(self.reply)), (0, "OK"))
+        rc, line = self.flow("next")
+        self.assertTrue(line.startswith("BUILD"), line)
+        decisions = repo.path("plans/f/decisions.md").read_text(encoding="utf-8")
+        for text in ("CSV or JSON for the export?", "CSV.", "open it in a spreadsheet", "po"):
+            self.assertIn(text, decisions)
+        self.assertIn("DECISION", repo.log())
+        self.assertIn("ASK-USER-TO-PO", repo.log())
+        self.assertEqual(repo.porcelain(), "")
 
     def test_a_consultant_that_says_user_stops_with_its_options_in_the_ticket(self):
         repo, env = self.setup()
@@ -134,9 +155,11 @@ class AskDrive(unittest.TestCase):
         self.flow("next")
         self.reply.write_text("## Question\n\nShip it behind a flag?\n\nREVIEW: ASK user\n", encoding="utf-8")
         self.flow("verdict", str(self.reply))
+        self.assertEqual(self.flow("next")[1].split()[:2], ["ASK", "po"])
+        self.answer("A flag changes the release plan.", "ANSWER: USER")
         rc, out = self.flow("next")
         self.assertEqual(rc, 1)
-        self.assertIn("01-t asks you: Ship it behind a flag?", out)
+        self.assertIn("Ship it behind a flag?", out)
         ticket = repo.path(T1).read_text(encoding="utf-8")
         self.assertIn("## Ask: user", ticket)
         self.assertIn("Status: open", ticket)

@@ -37,25 +37,39 @@ def reset(c, num=None):
                        % nums)
     dropped = c.lane_sched().drop_lanes()
     had_run = c.state_file.is_file()
-    keys = ("deferred", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if c.all.get("budget") else ())
+    keys = ("deferred", "reviewed", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if c.all.get("budget") else ())
     kept = {k: c.all[k] for k in keys if c.all.get(k)}  # a deferred ticket still owes its review,
     # and a budget's time stays spent
+    if c.all.get("phase") == "test" and c.all.get("test_base"):  # the tester's tests are judged after the reset
+        kept.update({k: c.all[k] for k in ("phase", "num", "test_base", "test_mode", "test_note") if c.all.get(k)})
     for path, kind in ((c.state_file, "state"), (c.findings_file, "findings")):
         state.remove(path, kind)
     for pattern in ("ask-%s.*" % c.feature, "ask-%s-L*" % c.feature, "scout-%s-*" % c.feature,
-                    "edit-%s-*" % c.feature):
+                    "edit-%s-*" % c.feature, "prompt-%s-*" % c.feature):
         for path in c.state_file.parent.glob(pattern):
             path.unlink()
     if not reopened and not had_run and not dropped:
         return "OK nothing to reset for %s. run %s %s" % (c.feature, c.invoke, c.feature)
     c.all = RunState(c.state_file, kept)
     Workspace.__init__(c, c)
+    if kept.get("phase") == "test":
+        c.snapshot_code()  # the code as it is now, an upgrade included, is what the judging holds the tester to
     if kept:
         c.save()
     c.log("RESET")
     done = ["cleared the run state"] if had_run else []
     if kept.get("deferred"):
         done.append("kept %d ticket(s) built in fast mode for the feature review" % len(c.deferred()))
+    if kept.get("phase") == "test":
+        done.append("kept the tester's commits since %s for the conductor to judge" % kept["test_base"][:12])
     done += dropped
     done += ["reopened %s" % tickets.name(p) for p in reopened]
     return "OK %s. run %s %s" % (", ".join(done), c.invoke, c.feature)
+
+
+def counters(c):
+    """The run's phase limit and counters, when a reset left none: the tester it kept is judged first."""
+    if "limit" not in c.all:
+        c.all["limit"] = c.run_limit()
+        c.all.setdefault("runs", 0)
+        c.all.setdefault("done", 0)

@@ -45,7 +45,14 @@ class Ask(Phase):
     @classmethod
     def hand_out(cls, ws, source, role, question):
         """Pause the build or review and hand the question to its consultant. It is not a failed attempt. A
-        question for the user, or one past MAX_ASKS, goes into the ticket as `## Ask: user` and stops the run."""
+        question for the user goes to the product owner first, once per ticket: the user is kept for scope, cost
+        and steps outside the project, which the product owner hands on. A question the product owner handed on,
+        or one past MAX_ASKS, goes into the ticket as `## Ask: user` and stops the run."""
+        routed = role == "user" and ws.get("user_routed") != ws.get("num") and ws.num("asks") < MAX_ASKS
+        if routed:
+            ws.st["user_routed"] = ws.get("num")
+            ws.log("ASK-USER-TO-PO")
+            role = "po"
         if role == "user" or ws.num("asks") >= MAX_ASKS:
             if role != "user":
                 question = "(for the %s, but this ticket asked its consultants %d times already)\n\n%s" % (
@@ -59,7 +66,8 @@ class Ask(Phase):
         state.write_text(cls.ask_file(ws, "question"), question.strip("\n") + "\n")
         state.remove(cls.ask_file(ws, "answer"))
         ws.st.update({"phase": "ask", "asks": ws.num("asks") + 1, "ask_role": role, "ask_from": source,
-                      "ask_attempt": 1, "verdict": "", "ask_sha": git.head(cwd=ws.folder)})
+                      "ask_attempt": 1, "verdict": "", "ask_sha": git.head(cwd=ws.folder),
+                      "ask_routed": "1" if routed else ""})
         ws.save()
         return cls.emit_ask(ws)
 
@@ -110,6 +118,8 @@ class Ask(Phase):
             if match:
                 ruling = match.group(1).lower()
         ws.st["ruling"] = ruling
+        why = section_after(text, "## Why")
+        state.write_text(cls.ask_file(ws, "why"), " ".join(why.split())[:600] + "\n")
         if found:
             answer = section_after(text, "## Answer") or "\n".join(l for l in text.splitlines() if not ANSWER.match(l))
             lines = [l for l in demote(answer).strip("\n").splitlines() if not RULING.match(l)]
@@ -167,12 +177,31 @@ class Ask(Phase):
                            "changes it once this ticket is resolved.")
         tickets.append_section(ws.at(ws.ticket()), "Consulted (%s)" % role,
                                "**Question:**\n\n%s\n\n**Answer:**\n\n%s" % (demote(question), answer))
-        if not git.commit_file(ws.ticket(), "chore(%s): %s answer from the %s" % (ws.feature, ws.get("num"), role),
-                               cwd=ws.folder):
+        decisions = cls.log_decision(ws, role, question, answer)
+        if not git.commit_paths([ws.ticket(), decisions], "chore(%s): %s answer from the %s"
+                                % (ws.feature, ws.get("num"), role), cwd=ws.folder):
             raise Stop("cannot commit the %s's answer to %s. this session must be allowed to run git commit"
                        % (role, ws.ticket_name()))
         ws.st["phase"] = "build"
         return Outcome(build_phase.Build.hand_out(ws))
+
+    @classmethod
+    def log_decision(cls, ws, role, question, answer):
+        """Append the question, who answered, the answer and why to the plan's decisions.md; its path. The user reads
+        it to see what the agents decided for them."""
+        path = ws.plan / "decisions.md"
+        why = (state.read_text(cls.ask_file(ws, "why")) or "").strip() or "(the answer gave no reason)"
+        asker = {"build": "builder", "review": "reviewer"}.get(ws.get("ask_from"), "builder")
+        text = "" if ws.at(path).is_file() else (
+            "# Decisions: %s\n\nQuestions the builders and reviewers asked during the run, and what the architect, "
+            "designer or product owner decided, so nobody had to stop for the user. Read them: an answer you disagree "
+            "with is a ticket to change.\n" % ws.feature)
+        text += "\n## %s, asked by the %s, answered by the %s\n\n- **Question:** %s\n- **Answer:** %s\n- **Why:** %s\n" % (
+            ws.ticket_name(), asker, role, " ".join(question.split())[:800], " ".join(answer.split())[:1500], why)
+        with open(str(ws.at(path)), "a", encoding="utf-8") as handle:
+            handle.write(text)
+        ws.log("DECISION")
+        return path
 
     @classmethod
     def prompt(cls, ws):
@@ -192,6 +221,11 @@ class Ask(Phase):
                      "`RULING: TEST WRONG` (the test asks for what spec.md does not say, and the tester changes it) or "
                      "`RULING: CODE WRONG` (the code must change to pass it) above your ANSWER line, and quote the "
                      "spec.md line you ruled by.")
+        if ws.get("ask_routed") == "1":
+            task += ("\n\nThe asker meant this question for the user. The user is kept for scope, cost and steps "
+                     "outside the project, so answer it yourself when it is about what the feature must do or how it "
+                     "behaves. End with `ANSWER: USER`, and the options in a sentence each, only when it is one of those "
+                     "three.")
         if ws.get("edit_note"):
             task += "\n\nThe conductor notes: %s" % ws.get("edit_note")
         if ws.lane:

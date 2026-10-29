@@ -119,7 +119,7 @@ class EndOfRun:
         line = self.check_acceptance()
         if line is not None:
             return line
-        if c.deferred():
+        if c.deferred() or Final.round_tickets(c):
             return Final.hand_out(c)
         if self.lanes:
             lanes.remove_all(c.top, c.feature)

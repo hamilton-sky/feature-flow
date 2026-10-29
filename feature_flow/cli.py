@@ -8,8 +8,8 @@ from pathlib import Path
 from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 
-USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] | verdict <file> [lane] | fast on|off\n"
-         "       python3 scripts/flow.py <feature> budget [<minutes>|+<minutes>|off] | replan-prompt\n"
+USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] [file] | verdict <file> [lane] | fast on|off\n"
+         "       python3 scripts/flow.py <feature> budget [<minutes>|+<minutes>|off] | replan-prompt [repair]\n"
          "       python3 scripts/flow.py <feature> scouts [lane] | scout-prompt <k> [lane] | plan-scouts <brief> | plan-scout-prompt <k>\n"
          "       python3 scripts/flow.py <feature> consult-prompt architect|designer|po <question file>\n"
          "       python3 scripts/flow.py <feature> brainstorm-prompt scout|web|architect|designer|po|skeptic <question file>\n"
@@ -18,9 +18,9 @@ USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt 
 COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset", "fast", "scouts",
             "scout-prompt", "plan-scouts", "plan-scout-prompt", "consult-prompt", "budget", "replan-prompt",
             "brainstorm-prompt")
-ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
+ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3, 4), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
         "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,), "brainstorm-prompt": (4,), "budget": (2, 3),
-        "replan-prompt": (2,)}
+        "replan-prompt": (2, 3)}
 WANTS = {"verdict": ("the file the reviewer's whole reply was saved to", "<file> [lane]"),
          "plan-prompt": ("the brief file", "<brief> [findings]"),
          "fast": ("on or off", "on|off"),
@@ -117,7 +117,13 @@ def run(args, scripts, trusted):
         elif command == "plan-accept":
             line = conductor.plan_accept()
         elif command == "prompt":
-            line = conductor.prompt(*args[2:])
+            rest = args[2:]
+            to_file = "file" in rest
+            rest = [a for a in rest if a != "file"]
+            if len(rest) > 1:
+                print(USAGE, file=sys.stderr)
+                return 2
+            line = conductor.prompt(*rest, to_file=to_file)
         elif command == "reset":
             line = conductor.reset(args[2] if len(args) == 3 else None)
         elif command == "scouts":
@@ -137,7 +143,7 @@ def run(args, scripts, trusted):
         elif command == "budget":
             line = conductor.budget_cmd(*args[2:])
         elif command == "replan-prompt":
-            line = conductor.replan_prompt()
+            line = conductor.replan_prompt(*args[2:])
         elif command == "start":
             line = conductor.start()
         else:

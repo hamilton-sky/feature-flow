@@ -22,7 +22,7 @@ from pathlib import Path
 
 from feature_flow import __version__, codeintel, git, lanes, report, state, suggest, tickets
 
-USAGE = "usage: feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]"
+USAGE = "usage: feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR] [--compare <eval.json> ...]"
 CATCHES = report.FAILS + ("FOOTPRINT-FAIL", "FEATURE-FAIL", "ACCEPT-FAIL")
 VERDICT_FILE = "eval-verdict.md"
 PLAN_ANSWERS = ("right", "partly", "wrong")
@@ -99,6 +99,49 @@ def run_summary(rows):
         "takeovers": run["TAKEOVER"],
         "questions_to_user": user_questions,
     }, (min(times), max(times)) if times else None
+
+
+PHASE_OF = {"BUILD": "build", "CHECKS": "checks", "REVIEW": "review", "ASK": "ask", "TEST": "test",
+            "STOP": "waiting", "HANDOFF": "waiting", "RESET": "waiting", "DONE": "waiting"}
+
+
+def timing(rows, per):
+    """Where the run's wall clock went, from the log's timestamps, which survive a reset: minutes per phase (build,
+    checks, review, ask, test, waiting for the user), per ticket and per level, the slowest ticket and its biggest
+    phase, and how often the gate ran the whole Test command per ticket. None for a log without dates."""
+    stamped = [r for r in rows if r[0] is not None]
+    if len(stamped) < 2:
+        return None
+    by_kind, by_ticket, kind, num = {}, {}, "waiting", "-"
+    for (t, n, event, _), (t2, _, _, _) in zip(stamped, stamped[1:]):
+        if event in PHASE_OF:
+            kind = PHASE_OF[event]
+            num = n if kind in ("build", "checks", "review", "ask") else "-"
+        elif event in ("START", "TAKEOVER"):
+            kind, num = "waiting", "-"
+        minutes = (t2 - t).total_seconds() / 60
+        by_kind[kind] = by_kind.get(kind, 0) + minutes
+        if num != "-" and num in per:
+            row = by_ticket.setdefault(num, {})
+            row[kind] = row.get(kind, 0) + minutes
+    by_level = {}
+    for n, row in by_ticket.items():
+        level = str(per[n].get("level") or "none")
+        by_level[level] = by_level.get(level, 0) + sum(row.values())
+    full = {}
+    for _, n, event, _ in rows:
+        if event in ("GATE-FULL", "MERGE-GATE-FULL-PASS", "MERGE-GATE-FULL-FAIL"):
+            full[n] = full.get(n, 0) + 1
+    slowest = None
+    if by_ticket:
+        n = max(by_ticket, key=lambda k: sum(by_ticket[k].values()))
+        slowest = {"ticket": n, "minutes": round(sum(by_ticket[n].values())),
+                   "most_in": max(by_ticket[n], key=by_ticket[n].get)}
+    whole = (stamped[-1][0] - stamped[0][0]).total_seconds() / 60
+    return {"wall_minutes": round(whole), "by_phase": {k: round(v) for k, v in sorted(by_kind.items())},
+            "by_ticket": {n: {k: round(v) for k, v in sorted(row.items())} for n, row in sorted(by_ticket.items())},
+            "by_level": {k: round(v) for k, v in sorted(by_level.items())}, "slowest": slowest,
+            "full_test_runs": dict(sorted(full.items()))}
 
 
 def driver(rows, run_state):
@@ -351,7 +394,9 @@ def build(feature, top, out_dir, home, with_later):
         "brainstorm": brainstorm(plan_dir, rows),
         "you": human,
         "tokens": tokens(found, rows),
-        "codeintel": codeintel.use(item for _, item in found),
+        "codeintel": codeintel.merge(codeintel.use(item for _, item in found),
+                                     codeintel.kept(state.file_path(folder, feature, "codeintel"))),
+        "timing": timing(rows, per),
         "verdict": read_verdict(out_dir / VERDICT_FILE),
     }
     if record["tokens"] and totals["lanes"]:
@@ -378,6 +423,14 @@ def render(record, out_dir, wrote_form):
         lines.append("  brainstorm: yes, the option picked by %s, %s" % (record["brainstorm"]["picked_by"], ", ".join(
             "%s x%d" % kv for kv in sorted(used.items())) or "no helpers"))
     lines.append("  active minutes: %s" % (record["active_minutes"] if record["active_minutes"] is not None else "unknown"))
+    tm = record.get("timing")
+    if tm:
+        lines.append("  wall clock: %d min (%s)" % (tm["wall_minutes"], ", ".join(
+            "%s %d" % kv for kv in sorted(tm["by_phase"].items(), key=lambda kv: -kv[1]))))
+        if tm["slowest"]:
+            lines.append("  slowest ticket: %(ticket)s, %(minutes)d min, most of it in %(most_in)s" % tm["slowest"])
+        if tm["full_test_runs"]:
+            lines.append("  whole Test runs by the gate: " + ", ".join("%s x%d" % kv for kv in tm["full_test_runs"].items()))
     tok = record["tokens"]
     if tok:
         total = tok["total"]
@@ -418,12 +471,15 @@ def render(record, out_dir, wrote_form):
 def main(argv, out=None, err=None):
     out = out or sys.stdout
     err = err or sys.stderr
-    args, out_dir, home, with_later = [], None, None, False
+    args, out_dir, home, with_later, others = [], None, None, False, []
     rest = list(argv)
     while rest:
         arg = rest.pop(0)
         if arg == "--later":
             with_later = True
+        elif arg == "--compare" and rest:
+            while rest and not rest[0].startswith("-"):
+                others.append(rest.pop(0))
         elif arg in ("--out", "--claude-home") and rest:
             value = rest.pop(0)
             if arg == "--out":
@@ -459,4 +515,28 @@ def main(argv, out=None, err=None):
                         encoding="utf-8")
     (out_dir / "eval.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     out.write(render(record, out_dir, wrote_form))
+    if others:
+        out.write(compare(record, others, err))
     return 0
+
+
+def compare(record, paths, err):
+    """A table of this run beside earlier runs' eval.json files: wall clock, where it went, builds, reviews,
+    catches and stops, so a change to the flow can be seen to save time or not."""
+    runs = [("this run", record)]
+    for path in paths:
+        try:
+            runs.append((path, json.loads(Path(path).read_text(encoding="utf-8"))))
+        except (OSError, ValueError) as problem:
+            err.write("cannot read %s: %s\n" % (path, problem))
+    lines = ["compare:"]
+    for name, rec in runs:
+        t, tm = rec.get("totals", {}), rec.get("timing") or {}
+        phases = tm.get("by_phase", {})
+        lines.append("  %s: %s, %s min wall (build %s, checks %s, review %s, waiting %s), %s ticket(s), %s build(s), "
+                     "%s review(s), %s catch(es), %s stop(s)" % (
+                         name, rec.get("feature", "?"), tm.get("wall_minutes", "?"), phases.get("build", 0),
+                         phases.get("checks", 0), phases.get("review", 0), phases.get("waiting", 0),
+                         t.get("tickets", "?"), t.get("builds", "?"), t.get("reviews", "?"), t.get("catches", "?"),
+                         len((rec.get("you") or {}).get("stops", []))))
+    return "\n".join(lines) + "\n"

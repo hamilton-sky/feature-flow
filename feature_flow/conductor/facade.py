@@ -18,7 +18,7 @@ from feature_flow.conductor.guards import owner_hash  # the package exports it
 from feature_flow.conductor.phases import REGISTRY
 from feature_flow.conductor.planning import Planner, one_scout
 from feature_flow.conductor.policy.review import followups_only
-from feature_flow.conductor.replies import demote, section_after  # the package exports them
+from feature_flow.conductor.replies import demote, prompt_files, section_after  # the package exports them
 from feature_flow.conductor.schedulers import BatchScheduler, LaneScheduler
 from feature_flow.conductor.settings import Settings, mode_ok
 from feature_flow.conductor.store import RunState
@@ -48,6 +48,8 @@ class Conductor(Workspace):
         self.scouts_on = settings.scouts_on
         self.relay = settings.relay
         self.invoke = settings.invoke
+        self.reviewers = settings.reviewers
+        self.round_review = settings.round_review
         top = git.toplevel()
         if top is None:
             raise Stop("not inside a git worktree")
@@ -125,9 +127,9 @@ class Conductor(Workspace):
         """`budget` reports; `budget <minutes>|+<minutes>|off` sets it between phases."""
         return time_budget.budget_cmd(self, value)
 
-    def replan_prompt(self):
-        """The feature-planner's prompt to fold the open tickets into fewer. Only between tickets."""
-        return guards.replan_prompt(self)
+    def replan_prompt(self, mode=None):
+        """The feature-planner's prompt to fold the open tickets into fewer (between tickets), or to repair the plan."""
+        return guards.replan_prompt(self, mode)
 
     def start(self):
         if not self.plan.is_dir():
@@ -164,6 +166,7 @@ class Conductor(Workspace):
             line = guards.after_phase(self)
             if line is not None:
                 return line
+            run_reset.counters(self)  # a reset that kept the tester's phase has none
             return wide.judge(self).line
         if self.scheduler().lanes:
             return self.scheduler().next(lane)
@@ -172,7 +175,7 @@ class Conductor(Workspace):
         self.scheduler().put_back()
         if not self.plan.is_dir():
             raise Stop("no plan folder %s" % self.plan)
-        line = guards.after_phase(self)
+        line = guards.after_phase(self) or guards.after_repair(self)
         if line is not None:
             return line
         if "limit" not in self.all:
@@ -204,14 +207,14 @@ class Conductor(Workspace):
         and forget the run. The tickets stay the truth; only the conductor's note and counters go."""
         return run_reset.reset(self, num)
 
-    def prompt(self, lane=None):
-        """The full prompt for the BUILD or REVIEW that `next` handed out. Exit 2 (NoPhase) when none is."""
+    def prompt(self, lane=None, to_file=False):
+        """The full prompt for the BUILD or REVIEW that `next` handed out (NoPhase when none is). to_file: in files,
+        a `PROMPT-FILE <path> <sha256>` line each, so the session hands a subagent a path, not 20 KB of text."""
         self.check_owner()
         wide = self.run_wide("prompt", lane)
-        if wide is not None:
-            return wide.prompt(self)
         with self.pending_phase("prompt", lane) as ws:
-            return ws.prompt_text()
+            text = wide.prompt(self) if wide is not None else ws.prompt_text()
+        return prompt_files(self.state_file, self.feature, lane, text) if to_file else text
 
     def consult_prompt(self, role, question_file):
         """A consultant's prompt for a question the planner raised. Stateless, like the other plan commands."""

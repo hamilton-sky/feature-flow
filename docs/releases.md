@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.30: the standard profile
+
+| Version | Added |
+|---|---|
+| 0.30.0 | **`standard`, the profile a new plan names** ([README](../README.md#profiles)): slower than `fast`, faster than `careful`. Where one review would run, a quality reviewer and a ticket reviewer read the ticket side by side, both read only (`REVIEW ... pair`, `FLOW_REVIEWERS=2`); on a level 1 or 2 ticket only a blocker sends it back to its builder, and smaller findings go to `followups.md` for later tickets. One reviewer reads the whole round at the end (`FLOW_ROUND_REVIEW=on`). The gate runs once at the base before the first ticket, so a red base stops the run instead of failing a builder (`FLOW_BASE_GATE=on`). With an `Acceptance:` line the tests run after each ticket and their output goes to the reviewers. **Questions stay with the roles**: a question for you goes to the product owner first, the architect, designer and product owner decide what the spec leaves open, and every answer and its reason is kept in `plans/<feature>/decisions.md`. **A repair re-plan** (`replan-prompt <feature> repair`) rewrites the open tickets when one cannot be built as planned, and the run goes on. **Run fixes** from two field runs: fast batches honour `Shared:`, a builder's question in a batch is routed, a Done when check that is the gate's own command is not run twice, the test-first proof tries `Quick` first, one declared `Extra file:` outside `Touches:` is allowed, `install` refuses while a run is open, `reset` keeps the tester's work, `prompt <feature> file` writes long prompts to a file, and `eval` records where the time went (`timing`, `--compare`). Plans written before 0.30.0 keep their old behaviour. |
+
 ## 0.29: debugging before fixing
 
 | Version | Added |

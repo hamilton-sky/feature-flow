@@ -23,6 +23,7 @@ class Fake:
 
     def __init__(self, per_session=0, session_done=0, relay_handoff=""):
         self.per_session = per_session
+        self.settings = mock.Mock(base_gate=False)
         self.values = {"session_done": session_done, "relay_handoff": relay_handoff}
         self.calls = []
 
@@ -58,9 +59,9 @@ class Recorded(unittest.TestCase):
 
 
 class Order(Recorded):
-    def test_four_guards_in_order(self):
-        self.assertEqual([g.name for g in guards.BEFORE_TICKET], ["session", "replan", "budget", "smoke"])
-        self.assertEqual([g.stage for g in guards.BEFORE_TICKET], ["pick", "pick", "pick", "start"])
+    def test_five_guards_in_order(self):
+        self.assertEqual([g.name for g in guards.BEFORE_TICKET], ["session", "replan", "budget", "base", "smoke"])
+        self.assertEqual([g.stage for g in guards.BEFORE_TICKET], ["pick", "pick", "pick", "pick", "start"])
 
     def test_all_pass_and_run_in_order(self):
         c = Fake()

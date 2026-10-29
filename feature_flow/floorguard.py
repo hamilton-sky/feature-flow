@@ -255,6 +255,7 @@ def run(argv, out, err, environ=None, cwd=None):
     m_rel = rel("%s/%s/map.md" % (root, feature))
     c_rel = rel("%s/%s/commands.md" % (root, feature))
     l_rel = rel("%s/%s/learnings.md" % (root, feature))
+    d_rel = rel("%s/%s/decisions.md" % (root, feature))  # the conductor appends consultants' answers mid-build
     a_rel = m_rel.rsplit("/", 1)[0] + "/acceptance/"
 
     added = []
@@ -270,7 +271,7 @@ def run(argv, out, err, environ=None, cwd=None):
                 add_finding("ticket-edit", path, "the ticket was added or deleted")
             elif frozen(show(base, path)) != frozen(show("HEAD", path)):
                 add_finding("ticket-edit", path, "text outside the Status line and the Answer was changed")
-        elif path in (m_rel, l_rel):
+        elif path in (m_rel, l_rel, d_rel):
             if allows("ticket-edit"):
                 continue
             if st == "D":

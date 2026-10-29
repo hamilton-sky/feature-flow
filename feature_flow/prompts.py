@@ -97,6 +97,7 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
         task = ("Your task: build ticket %s of the feature `%s`, in auto mode (`%s auto %s`). The ticket is `%s`. "
                 "The work starts at commit `%s`.\n%s\nWhen you are done, reply with what you built and the "
                 "commit. Do not review your own work." % (num, feature, feature, num, ticket, sha, fresh))
+        task += codeintel.note("builder", top, sha)
         intro = "The build guide follows. Follow it exactly."
     else:
         task = ("Your task: review ticket %s of the feature `%s` (`%s %s %s`) (%s pass). The ticket is `%s`, and the "
@@ -197,8 +198,9 @@ def plan(phase, scripts, feature, draft, brief, findings="", brainstorm=False, t
     return "\n\n".join(parts) + "\n"
 
 
-def replan(scripts, feature, plan, open_tickets, brainstorm=False, top="."):
-    """The feature-planner's prompt to fold a running feature's open tickets into fewer, in place."""
+def replan(scripts, feature, plan, open_tickets, brainstorm=False, top=".", repair=None):
+    """The feature-planner's prompt to fold a running feature's open tickets into fewer, in place; with repair (the
+    stopped ticket's path, or "" between tickets), to repair the plan instead."""
     role_text = role(scripts, ROLES["replan"], top)
     guide_file = find_file(scripts, "guides", GUIDES["replan"], top)
     guide = _templates(_runner(_body(guide_file), scripts), guide_file.parent)
@@ -206,6 +208,12 @@ def replan(scripts, feature, plan, open_tickets, brainstorm=False, top="."):
     task = ("Your task: the feature `%s` is over its time budget. Re-plan its open tickets in `%s` into fewer, as "
             "the re-plan guide says. Edit only the ticket files listed below and add new ones beside them. Do not "
             "commit. Your final reply must end with exactly `PLAN: READY` or `PLAN: QUESTIONS`." % (feature, plan))
+    if repair is not None:
+        task = ("Your task: repair the plan of the feature `%s` in `%s`, as the re-plan guide's Repair section says. %s"
+                "Do not commit. Your final reply must end with exactly `PLAN: READY` or `PLAN: QUESTIONS`."
+                % (feature, plan, "The build stopped on `%s`: read it, its Attempt notes and its findings, to see what "
+                   "the plan missed. " % repair if repair else ""))
+        return "\n\n".join([role_text, "---", "The re-plan guide follows. Follow it exactly.", guide, "---", task]) + "\n"
     listing = "\n".join("- `%s`" % path for path in open_tickets)
     if brainstorm:
         task += ("\nThe user chose how to build this feature in `%s/brainstorm.md`: the folded tickets still build its "

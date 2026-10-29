@@ -7,6 +7,8 @@ the gate only with the gate on (a batch leaves it out: its gate runs once at HEA
 first only with the gate on.
 """
 
+import re
+
 from feature_flow import checks, git, lanes, proof, tickets
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.store import NOTE_SEP
@@ -30,6 +32,8 @@ class Gate:
         c.log("GATE-PASS" if result.ok else "GATE-FAIL")
         if not result.ok:
             return "gate (quick)" if quick else "gate (full)", result.out, []
+        # what passed, so a Done when check that only runs one of these again is not run a second time
+        c.gate_passed = (git.head(cwd=_folder(c)), set(re.findall(r"^gate: \w+: (.+)$", result.out, re.MULTILINE)))
         return None, "", []
 
 
@@ -43,9 +47,14 @@ class FloorGuard:
         return None, "", warnings[:1]
 
 
+EXTRA = re.compile(r"^Extra file:[ \t]*`?([^`\s]+)`?[ \t]*[-—:][ \t]*(\S.*)$", re.MULTILINE)
+
+
 class Footprint:
     """The paths the build changed outside the ticket's `Touches:` line (read at base), as a report for the
-    builder. Passes when they are all inside it or the ticket has no such line."""
+    builder. Passes when they are all inside it or the ticket has no such line. One ticket at a time (no lane, no
+    batch), it also passes one path outside that the builder named in the Answer with a reason, `Extra file: <path>
+    - <why>`; the reviewer is told to judge it."""
 
     def run(self, c):
         patterns = lanes.touches(c.ticket_at_base())
@@ -53,13 +62,27 @@ class Footprint:
             return None, "", []
         changed = git.diff_names(c.get("base"), "HEAD", c.plan.as_posix(), cwd=_folder(c))
         outside = [p for p in changed if not tickets.matches_sensitive(p, patterns)]
+        declared = {}
+        if len(outside) == 1 and not getattr(c, "lane", 0) and not c.fast():
+            try:
+                answer = c.at(c.ticket()).read_text(encoding="utf-8").split("\n## Answer", 1)[1:]
+            except OSError:
+                answer = []
+            declared = {path: why for path, why in EXTRA.findall("".join(answer))}
+        if len(outside) == 1 and outside[0] in declared:
+            c.log("FOOTPRINT-EXTRA")
+            return None, "", ["the build changed one file outside the ticket's Touches line, and the builder named it "
+                              "with a reason: `%s` (%s). judge whether the ticket really needed it; if not, that is a "
+                              "finding" % (outside[0], declared[outside[0]].strip())]
         c.log("FOOTPRINT-FAIL" if outside else "FOOTPRINT-PASS")
         if not outside:
             return None, "", []
         return "footprint check", (
             "the build changed paths outside the ticket's `Touches:` line (%s): %s. tickets run side by side "
             "because their Touches do not overlap, so change only what Touches names. if the ticket cannot be done "
-            "inside it, say so in the Answer and stop: the plan has to change, not the footprint"
+            "inside it, say so in the Answer and stop: the plan has to change, not the footprint. one file the ticket truly needs "
+            "(a test that pins the old behaviour, a generator) may be named in the Answer as `Extra file: <path> - "
+            "<why>`, when it is the only one"
             % (" ".join(patterns) or "empty", ", ".join(outside[:20]))), []
 
 
@@ -75,6 +98,18 @@ class DoneWhen:
         if not found:
             c.log("DONEWHEN-SKIP")
             return None, "", ["the conductor ran no Done when checks: the ticket has no check block"]
+        head, passed = getattr(c, "gate_passed", ("", set()))
+        same = []
+        if passed and head == git.head(cwd=_folder(c)):
+            same = [x for x in found if x.command.strip() in passed and x.exit == 0 and not x.prints and not x.needs]
+        found = [x for x in found if x not in same]
+        if same:
+            c.log("DONEWHEN-GATE %d" % len(same))
+        met = (["%d Done when check(s) only run what the gate just passed at this commit, so the conductor did not run "
+                "them again: %s. count them as MET (conductor)" % (len(same), "; ".join("`%s`" % x.command for x in same))]
+               if same else [])
+        if not found:
+            return None, "", met
         deferred = []
         ok, report = proof.run_checks(found, c.gate_timeout, deferred, cwd=_folder(c))
         dirty = git.changes(cwd=_folder(c))
@@ -85,21 +120,22 @@ class DoneWhen:
         if not ok:
             return "done when", report, []
         if not deferred:
-            return None, "", ["the conductor ran %d Done when check(s) and all passed" % len(found)]
+            return None, "", met + ["the conductor ran %d Done when check(s) and all passed" % len(found)]
         c.log("DONEWHEN-DEFERRED %d" % len(deferred))
         c.st["due_checks"] = NOTE_SEP.join("deferred check, needs %s: `%s` (here: %s)" % (d.needs, d.command, got)
                                            for d, got in deferred)
-        return None, "", [
+        return None, "", met + [
             "the conductor ran %d Done when check(s): %d passed, and %d that need what this host lacks did "
             "not pass and are deferred, not met: %s. they go to the plan's followups.md. judge only what "
-            "can be checked here, and do not count a deferred check as MET"
+            "can be checked here, and mark each deferred check DEFERRED (conductor), never NOT MET"
             % (len(found), len(found) - len(deferred), len(deferred),
                "; ".join("`%s` (needs %s)" % (d.command, d.needs) for d, _ in deferred))]
 
 
 class TestFirst:
     """For a `Test first: yes` ticket, prove a test-only commit failed the Test command. The branch to go
-    back to is saved under the restore key while HEAD is detached."""
+    back to is saved under the restore key while HEAD is detached. With a `Quick:` line it tries Quick first,
+    which only has to see the new test fail, and runs the whole Test command only when Quick does not."""
 
     def run(self, c):
         if not proof.wants_test_first(c.ticket_at_base()):
@@ -112,8 +148,15 @@ class TestFirst:
         def remember(value):
             c.st["restore"] = value
             c.save()
+        quick = tickets.commands_value(_at(c, c.commands), "Quick")
         try:
-            ok, text = proof.test_first(c.get("base"), test, _at(c, c.plan), c.gate_timeout, remember)
+            ok, text = False, ""
+            if quick:
+                ok, text = proof.test_first(c.get("base"), quick, _at(c, c.plan), c.gate_timeout, remember)
+                if ok:
+                    text = text.replace("the Test command", "the Quick command")
+            if not ok:
+                ok, text = proof.test_first(c.get("base"), test, _at(c, c.plan), c.gate_timeout, remember)
         except proof.GitError as err:
             raise Stop("test first check of %s: %s" % (c.ticket_name(), err))
         c.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")

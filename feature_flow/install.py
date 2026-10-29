@@ -543,6 +543,24 @@ def parse(argv):
     return opts
 
 
+def open_runs(target):
+    """The features with a run open in target: a state file in its .feature-flow/state that a session owns."""
+    found = []
+    folder = os.path.join(target, ".feature-flow", "state")
+    if not os.path.isdir(folder):
+        return found
+    for name in sorted(os.listdir(folder)):
+        if not (name.startswith("flow-") and name.endswith(".state")):
+            continue
+        try:
+            text = _read_text(os.path.join(folder, name))
+        except OSError:
+            continue
+        if re.search(r"^owner=[0-9a-f]+\r?$", text, re.MULTILINE):
+            found.append(name[len("flow-"):-len(".state")])
+    return found
+
+
 def run(argv, here, out, err):
     """Run the installer. out and err take one line of text each. Returns the exit code."""
     try:
@@ -560,6 +578,13 @@ def run(argv, here, out, err):
         err("no such directory: " + target)
         return 2
     target = os.path.normpath(os.path.join(_logical_cwd(), target))
+    if not opts["user"] and not opts["force"] and not opts["dry"]:
+        running = open_runs(target)
+        if running:
+            err("a feature-flow run is open in %s (%s): an install now changes the code the conductor pinned when it "
+                "started, and the run stops. finish the run (or hand off and run reset) first, or pass --force"
+                % (target, ", ".join(running)))
+            return 2
     installer = Installer(os.path.abspath(str(here)), target, opts["agent"], opts["user"],
                           opts["force"], opts["dry"], out, opts["private"])
     return installer.run()

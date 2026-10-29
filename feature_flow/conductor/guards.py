@@ -1,6 +1,6 @@
 """The checks around a ticket. BEFORE_TICKET: what both schedulers run before a ticket starts, in order, the first
 that stops or hands off winning (the session handoff, the re-plan check, the budget; then, once start_ticket has
-snapshotted the code, the smoke test). AFTER_PHASE: the relay, a handoff after each phase handed out, checked by
+snapshotted the code, the smoke test), with the whole gate once per run at the base before the first ticket. AFTER_PHASE: the relay, a handoff after each phase handed out, checked by
 next before it judges anything. Also the owner check every command makes, the handoff, and the re-plan prompt."""
 
 import hashlib
@@ -63,13 +63,33 @@ def handoff(c):
     return c.emit("HANDOFF %s %s" % (c.invoke, c.feature))
 
 
-def replan_prompt(c):
-    """The feature-planner's prompt to fold the open tickets into fewer. Only between tickets."""
+def replan_prompt(c, mode=None):
+    """The feature-planner's prompt to fold the open tickets into fewer, only between tickets; or with mode `repair`,
+    to repair the plan around the ticket in progress (its Touches, a missing ticket, commands.md), which `next`
+    then builds again from the repaired plan."""
     c.check_owner()
     if not c.plan.is_dir():
         raise Stop("no plan folder %s" % c.plan)
-    if c.all.get("phase") or c.lane_sched().busy_lanes():
-        raise Stop("a ticket is in progress. run replan-prompt between tickets, when next would start a new one")
+    if mode not in (None, "repair"):
+        raise Stop("replan-prompt takes nothing, or repair, not %s" % mode)
+    if c.lane_sched().busy_lanes():
+        raise Stop("lanes hold tickets. run replan-prompt once no lane is busy")
+    if mode == "repair":
+        if c.all.get("phase") not in ("", "build", "ask"):
+            raise Stop("a %s is pending. run replan-prompt repair when next stops on a ticket, or between tickets"
+                       % c.all.get("phase"))
+        c.all["repair_sha"] = git.head()
+        c.all["repair_num"] = c.get("num") if c.all.get("phase") else ""
+        c.save()
+        c.log("REPAIR-PROMPT")
+        try:
+            return prompts.replan(c.scripts, c.feature, c.plan.as_posix(), [], (c.plan / planning.BRAINSTORM).is_file(),
+                                  repair=c.ticket() if c.all.get("phase") else "")
+        except FileNotFoundError as err:
+            raise Stop(str(err))
+    if c.all.get("phase"):
+        raise Stop("a ticket is in progress. run replan-prompt between tickets, when next would start a new one, "
+                   "or replan-prompt repair to repair the plan around it")
     folder = c.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
     paths = tickets.ticket_files(str(folder))
     open_ones = [p for p in paths if tickets.status(p) not in tickets.DONE + ("parked", "wontfix")]
@@ -85,9 +105,9 @@ def replan_prompt(c):
         raise Stop(str(err))
 
 
-def check_replan(c):
+def check_replan(c, key="replan_sha"):
     """After a re-plan was handed out: the resolved tickets must be as they were, and the plan committed."""
-    sha = c.all.get("replan_sha")
+    sha = c.all.get(key)
     if not sha:
         return
     folder = (c.plan / (os.environ.get("FLOW_TICKETS") or "tasks")).as_posix()
@@ -100,9 +120,33 @@ def check_replan(c):
         if re.search(r"^Status:[ \t]*(resolved|done|closed)\b", before, re.MULTILINE | re.IGNORECASE):
             raise Stop("the re-plan changed %s, which was resolved before it. put it back with `git checkout %s "
                        "-- %s` and commit" % (path, sha[:12], path))
-    c.all["replan_sha"] = ""
+    c.all[key] = ""
     if changed:
         c.log("REPLAN")
+
+
+def after_repair(c):
+    """After `replan-prompt repair`: once the repaired plan is committed, the ticket that stopped is started again
+    from it (its base moves to HEAD, so its new Touches and Done when count) and handed out. None: nothing to do."""
+    sha, num = c.all.get("repair_sha"), c.all.get("repair_num")
+    if not sha or git.head() == sha:
+        return None
+    if num and c.get("num") == num and c.all.get("phase") in ("build", "ask"):
+        code = git.diff_names(c.get("base"), git.head(), c.plan.as_posix())
+        if code:
+            raise Stop("%s has code commits (%s), which no review would see once its base "
+                       "moves. run reset %s, then next" % (c.ticket_name(), ", ".join(code[:5]), num))
+    check_replan(c, "repair_sha")
+    c.all["repair_num"] = ""
+    c.log("REPAIR")
+    if not num or c.get("num") != num or c.all.get("phase") not in ("build", "ask"):
+        c.save()
+        return None
+    from feature_flow.conductor.phases.build import Build  # the phases import the guards
+    tickets.set_open(c.ticket())
+    git.commit_file(c.ticket(), "chore(%s): %s open again after the plan repair" % (c.feature, num))
+    c.scheduler().start_ticket(c.ticket())
+    return Build.hand_out(c)
 
 
 def smoke_command(c):
@@ -173,6 +217,30 @@ class Budget(Guard):
         return None
 
 
+class BaseGate(Guard):
+    """The whole gate once per run, at the base, before the first ticket: a red Lint or Test there would fail
+    the first ticket's gate for something no builder may touch. Only with FLOW_BASE_GATE on (the standard and
+    careful profiles), the gate on and no lane busy."""
+
+    name = "base"
+
+    def run(self, c, busy):
+        if busy or not c.settings.base_gate or not c.gate_on or c.all.get("base_gate"):
+            return None
+        result = checks.gate(c.scripts, c.feature, c.gate_timeout)
+        c.log("BASE-GATE-PASS" if result.ok else "BASE-GATE-FAIL")
+        if not result.ok:
+            log = c.state_file.with_name("%s.base-gate.log" % c.feature)
+            log.write_text(gate.tail(result.out), encoding="utf-8")
+            raise Stop("the gate fails before any ticket of %s is built: the base is already red, and no builder may "
+                       "fix what it names. fix it first (or re-plan with a ticket that fixes it), commit, and run next. "
+                       "the last %d lines are in %s: %s"
+                       % (c.feature, gate.TAIL, log, " ".join(gate.tail(result.out, 6).split())[:400]))
+        c.all["base_gate"] = git.head()
+        c.save()
+        return None
+
+
 class Smoke(Guard):
     """The smoke test, after the code snapshot of start_ticket."""
 
@@ -184,7 +252,7 @@ class Smoke(Guard):
         return None
 
 
-BEFORE_TICKET = (SessionHandoff(), Replan(), Budget(), Smoke())
+BEFORE_TICKET = (SessionHandoff(), Replan(), Budget(), BaseGate(), Smoke())
 
 
 def before_ticket(c, busy=(), stage="pick", only=None):

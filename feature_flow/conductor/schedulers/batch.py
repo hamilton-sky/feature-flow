@@ -7,6 +7,7 @@ import re
 from feature_flow import checks, git, lanes, proof, tickets
 from feature_flow.conductor import buildchecks
 from feature_flow.conductor.errors import Stop
+from feature_flow.conductor.phases.ask import Ask
 from feature_flow.conductor.phases.build import Build
 from feature_flow.conductor.schedulers.serial import SerialScheduler
 from feature_flow.conductor.settings import mode_ok
@@ -26,7 +27,8 @@ class BatchScheduler(SerialScheduler):
     def batch_for(self, first):
         """The ready tickets the builder of first also builds, in order, or [] for none. Only in fast mode
         with the gate on, no lanes and no relay. Each one is level 1 or 2 (never raised), has a `Touches:`
-        line, and touches nothing another ticket of the batch or a `Sensitive:` path touches."""
+        line, and touches nothing another ticket of the batch, a `Sensitive:` path or a `Shared:` path touches:
+        a ticket on a Shared path is built alone, as in lanes."""
         c = self.c
         size = c.batch_size
         if c.per_session > 0:
@@ -35,13 +37,14 @@ class BatchScheduler(SerialScheduler):
                        lanes=c.num("lanes")):
             return []
         sensitive = tickets.sensitive_patterns(c.show_head(c.commands))
+        shared = lanes.touches("Touches: " + tickets.commands_text_value(c.show_head(c.commands), "Shared")) or []
         chosen = []
         alone = c.all.get("no_batch", "").split()
         for path in [first] + [p for p in checks.flow_status(c.scripts, c.feature, "--ready").out.split()
                                if p != first]:
             touched, level = self.footprint(path)
             if (touched is None or level not in (1, 2) or not lanes.disjoint(touched, sensitive)
-                    or tickets.number(path) in alone):
+                    or lanes.touches_shared(touched, shared) or tickets.number(path) in alone):
                 if path == first:
                     return []
                 continue
@@ -159,4 +162,22 @@ class BatchScheduler(SerialScheduler):
                              % (c.feature, ", ".join(tickets.number(p) for p in left)))
         c.st["phase"] = ""
         c.save()
+        if left:  # the builder stopped on a question: ask it now, then build that ticket alone
+            line = self.route_ask(left[0])
+            if line is not None:
+                return line
         return self.resume()
+
+    def route_ask(self, path):
+        """The ASK line for a `## Ask: <role>` the builder of a batch left in the ticket it stopped on, with that
+        ticket started fresh at HEAD; None when it left no question."""
+        c = self.c
+        c.st.update({"ticket": path, "num": tickets.number(path)})
+        role, _ = Ask.open_ask(c)
+        if not role:
+            return None
+        self.start_ticket(path)
+        role, question = Ask.open_ask(c)
+        c.st["attempt"] = 1  # as if its own build had been handed out: the question is not a failed attempt
+        c.log("BATCH-ASK")
+        return Ask.hand_out(c, "build", role, question)

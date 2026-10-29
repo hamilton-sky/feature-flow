@@ -70,11 +70,18 @@ def note(role, repo=".", base=None):
     ops = "; ".join("`%s` (%s engine)" % (OPS[e].replace(", ", "`, `"), e) for e in engines)
     if role == "reviewer" and "graph" in engines:
         ask = ("`codeintel query --op changed --target %s` lists each function this change removed, re-signed or "
-               "rewrote, with the callers it did not update: check those callers." % (base or "<base commit>"))
+               "rewrote, with the callers it did not update: check those callers. `--op callers` and `--op impact` "
+               "with `--target <name>` answer who else relies on a function the change touched."
+               % (base or "<base commit>"))
+    elif role == "builder":
+        ask = ("Before you change a function's behaviour or signature, ask who calls it (`--op callers --target "
+               "<name>`) or what the change would break (`--op impact`), so you update every caller and the tests "
+               "that pin it. `--op search` is a hint only: check what it finds with grep.")
     else:
         ask = ("Ask it who calls a function or what a change would break (`--op callers` or `--op impact` with "
                "`--target <name>`), or where the code that does something lives (`--op search --target \"<what it "
-               "does>\"`).")
+               "does>\"`). Trust callers and impact more than search: search often ranks the wrong files first, so "
+               "check what it finds with grep.")
     return ("\n## codeintel\n\ncodeintel, a code-intelligence tool, is installed for this repository. Where grep "
             "would take several tries, ask it once with `codeintel query --op <op> --target <name>`, a read only "
             "command. Ready here: %s. %s Its answers can be wrong, empty or older than the code: check one before you "
@@ -125,3 +132,50 @@ def _asked(block):
         return str(args.get("op") or name.rsplit("__", 1)[-1])
     found = QUERY.search(str(args.get("command") or ""))
     return found.group(1) if found else ""
+
+
+def keep_lines(path, key, text):
+    """Append the `codeintel:` lines in text (the scouts' replies for the phase named key) to path, once each, so eval
+    can count them after the scout files are cleared."""
+    found = ["%s\t%s" % (key, line.strip()) for line in text.splitlines() if LINE.match(line)]
+    if not found:
+        return
+    try:
+        have = set(path.read_text(encoding="utf-8").splitlines())
+    except OSError:
+        have = set()
+    new = [line for line in found if line not in have]
+    if new:
+        with open(str(path), "a", encoding="utf-8") as handle:
+            handle.write("\n".join(new) + "\n")
+
+
+def kept(path):
+    """{"queries": {op: n}, "said": {verdict: n}, "wrong": [...]} from the lines keep_lines kept, or None."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    queries, said, wrong = {}, {}, []
+    for line in lines:
+        found = LINE.match(line.split("\t", 1)[-1])
+        if not found:
+            continue
+        op, target, verdict, why = found.groups()
+        queries[op] = queries.get(op, 0) + 1
+        said[verdict] = said.get(verdict, 0) + 1
+        if verdict == "wrong" and len(wrong) < 20:
+            wrong.append({"op": op, "target": target.strip("`"), "why": why.strip()})
+    return {"queries": queries, "said": said, "wrong": wrong} if said else None
+
+
+def merge(first, second):
+    """Two use() results as one; the scout lines kept in state count where the transcripts missed them."""
+    if not first or not second:
+        return first or second
+    out = {"queries": dict(first["queries"]), "said": dict(first["said"]), "wrong": list(first["wrong"])}
+    for key in ("queries", "said"):
+        for name, n in second[key].items():
+            out[key][name] = max(out[key].get(name, 0), n)
+    out["wrong"] += [w for w in second["wrong"] if w not in out["wrong"]][:20 - len(out["wrong"])]
+    return out

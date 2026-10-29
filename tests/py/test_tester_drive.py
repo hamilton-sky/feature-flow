@@ -181,7 +181,8 @@ class TesterDrive(unittest.TestCase):
         self.assertIn("RULING-TEST", repo.log())
         repo.set_status(fix, "resolved")
         repo.commit("feat: nothing to fix in the code")
-        self.assertTrue(self.flow("next")[1].startswith("REVIEW "))
+        line = self.flow("next")[1]
+        self.assertTrue(line.startswith("REVIEW "), (line, repo.log()[-1500:]))
         rc, line = self.review_passes()
         self.assertTrue(line.startswith("TEST plans/f "), line)
         prompt = self.flow("prompt")[1]
