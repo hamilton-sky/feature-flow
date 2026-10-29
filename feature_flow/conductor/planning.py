@@ -31,7 +31,7 @@ def one_scout(c, found, k, workdir=None, top="."):
         raise Stop(str(err))
     if workdir is not None:  # a lane's scout: its role text as prompts gave it from the lane's folder
         role_text = lane_runner(role_text, c.scripts)
-    return scouts.prompt(role_text, role, question, workdir)
+    return scouts.prompt(role_text, role, question, workdir, codeintel=agent == "flow-scout", top=top)
 
 
 class Planner:
@@ -98,7 +98,7 @@ class Planner:
         about = ("The user's session is brainstorming how to build the feature `%s`, before it is planned: no brief "
                  "and no plan exist yet." % self.feature)
         if group in ("scout", "web"):
-            out = scouts.prompt(role_text, "planner", about + "\n\n" + question)
+            out = scouts.prompt(role_text, "planner", about + "\n\n" + question, codeintel=group == "scout")
         elif group == "lens":
             out = ("%s\n\n---\n\nYour lens is `%s`. Its guide follows.\n\n%s\n\n---\n\n%s The options it drafted "
                    "follow. Read the repository.\n\n%s\n\nDo not edit any file. Your final reply must end with exactly "

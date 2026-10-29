@@ -21,6 +21,10 @@ classifiers = [
     "Topic :: Software Development",
 ]
 
+[project.optional-dependencies]
+# a separate tool the scouts and reviewers ask when it is installed (feature_flow/codeintel.py); never imported
+codeintel = ["codecortex>=0.29"]
+
 [project.urls]
 Homepage = "https://github.com/hamilton-sky/feature-flow"
 Source = "https://github.com/hamilton-sky/feature-flow"
@@ -38,6 +42,7 @@ packages = [
     "feature_flow.conductor.policy",
     "feature_flow.conductor.phases",
     "feature_flow.conductor.schedulers",
+    "feature_flow._forkboard",
     "feature_flow._bundle.skills",
     "feature_flow._bundle.agents",
     "feature_flow._bundle.guides",
@@ -47,6 +52,7 @@ packages = [
 include-package-data = false
 
 [tool.setuptools.package-dir]
+"feature_flow._forkboard" = "packages/forkboard/forkboard"  # the brainstorm's review page, its own package
 "feature_flow._bundle.skills" = "skills"
 "feature_flow._bundle.agents" = "agents"
 "feature_flow._bundle.guides" = "guides"
@@ -54,6 +60,7 @@ include-package-data = false
 "feature_flow._bundle.scripts" = "scripts"
 
 [tool.setuptools.package-data]
+"feature_flow._forkboard" = ["assets/*", "themes/*"]
 "feature_flow._bundle.skills" = ["**/*"]
 "feature_flow._bundle.agents" = ["*.md"]
 "feature_flow._bundle.guides" = ["**/*"]

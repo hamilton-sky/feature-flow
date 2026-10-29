@@ -21,6 +21,7 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]
        feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]
        feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]
+       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version>
        feature-flow --version
 install copies the skill, its roles, scripts and guides into a repo; --user installs them once for every repo, in ~/.claude, ~/.agents and ~/.feature-flow, and writes nothing into a repo. feature-flow install --help says more.
 uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude, ~/.agents and ~/.feature-flow.
@@ -28,7 +29,7 @@ status and view read plans/<feature>/ in the current directory, like scripts/flo
 reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.
 report prints what a run did (builds, reviews, failed checks, stops) from its log in .feature-flow/state/. Read-only.
 given a Spec Kit or OpenSpec task list, `import` starts plans/<feature>/ with one ticket per phase or section.
-brainstorm-page writes the feature's brainstorm as a review page beside it: a section sidebar, a theme switch, diagrams you can drag.
+brainstorm-page writes the feature's brainstorm as a review page beside it: a section sidebar, a theme switch, diagrams you can edit. --live writes a page and its state.json to publish as an artifact that people save versions in and ask Claude through; --asks, --answer and --apply are the session's side of it.
 eval records a field run in plans/<feature>/eval.json: cost, tokens, what each check caught, where it needed you, and your verdict from eval-verdict.md.
 """
 

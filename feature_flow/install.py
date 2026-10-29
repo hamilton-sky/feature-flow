@@ -205,6 +205,10 @@ class Installer:
         if not os.path.isfile(package + "/__init__.py"):
             package = os.path.dirname(os.path.abspath(__file__))
         self.package = package
+        # Forkboard, the brainstorm's review page: packages/forkboard/ in a checkout; an installed package has it
+        # inside already, as feature_flow/_forkboard/, and copies it with the rest
+        forkboard = here + "/packages/forkboard/forkboard"
+        self.forkboard = forkboard if os.path.isfile(forkboard + "/__init__.py") else None
         self.added = self.updated = self.same = self.kept = 0
         self.written = {}
         # each folder this installs into, with its hash record; the conductor's own folder comes first
@@ -469,11 +473,15 @@ class Installer:
             self.copy_tree(here + "/guides", self.flow_dir + "/guides")
             self.copy_tree(here + "/agents", self.flow_dir + "/agents")
             self.copy_tree(self.package, self.flow_dir + "/feature_flow", skip=BUNDLE)
+            if self.forkboard:
+                self.copy_tree(self.forkboard, self.flow_dir + "/feature_flow" + "/_forkboard")
         else:
             self.copy_tree(here + "/scripts", self.target + "/scripts")
             self.copy_tree(here + "/guides", self.target + "/.feature-flow/guides")
             self.copy_tree(here + "/agents", self.target + "/.feature-flow/agents")
             self.copy_tree(self.package, self.target + "/.feature-flow/feature_flow", skip=BUNDLE)
+            if self.forkboard:
+                self.copy_tree(self.forkboard, self.target + "/.feature-flow/feature_flow" + "/_forkboard")
         listed = not self.dry and self.write_installed()
 
         self.out("")

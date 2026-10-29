@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forkboard"
+dynamic = ["version"]
+description = "Review a design on its diagrams before the code is written: a page people edit, compare and ask questions on, and a coding agent reads back"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["design-review", "diagrams", "mermaid", "coding-agents", "claude-code"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development",
+]
+
+[project.urls]
+Homepage = "https://github.com/hamilton-sky/feature-flow/tree/main/packages/forkboard"
+Source = "https://github.com/hamilton-sky/feature-flow"
+
+[project.scripts]
+forkboard = "forkboard.cli:main_exit"
+
+[tool.setuptools]
+packages = ["forkboard"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+forkboard = ["assets/*", "themes/*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "forkboard.__version__" }

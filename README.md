@@ -23,7 +23,7 @@ One skill, 12 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-t
 [docs/releases.md](docs/releases.md) lists what each release added.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets) · [See the graph](#see-the-graph)
-- [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
+- [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [codeintel](#codeintel-optional) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
 - [Long features and handoff](#long-features-and-handoff) · [Commands and settings](#commands-and-settings) · [What is tested](#what-is-tested) · [Limits](#limits) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
@@ -313,6 +313,17 @@ Before a planner, builder or reviewer starts, the session can spawn cheap helper
 
 `scouts [lane]` lists `SCOUT <k> <agent> <reply file>` lines (or `NONE`) and clears the last ones' replies; `scout-prompt <k> [lane]` prints one scout's prompt. The session saves each reply into its file, and the phase's `prompt` adds them under `## Scout findings (unverified)`, cut to 60 lines each. A reply saved for one phase never reaches another. Retries and later rounds get no scouts. `FLOW_SCOUTS=off` turns them off.
 
+## codeintel (optional)
+
+[codeintel](https://github.com/hamilton-sky/codeintel) is a separate code-intelligence tool: one command answers who calls a function, what a change would break, or where the code that does something lives, from a call graph, a language server and semantic search. feature-flow never needs it. When it is installed and has the repository indexed, two roles get a short `## codeintel` section in their prompt:
+
+- **Scouts** (`flow-scout`, not `flow-web`) are told to ask it `callers`, `impact` or `search` where grep would take several tries.
+- **Reviewers** (every ticket review and the feature review) are told to run `codeintel query --op changed --target <base>`, which lists each function the change removed, re-signed or rewrote with the callers it did not update.
+
+Each of them ends its reply with one line per question, `codeintel: <op> <target>: helped | no answer | wrong: <why>`, and is told to check an answer before relying on it and to fall back to grep. `eval` counts the queries and those lines, and the verdict form asks whether codeintel helped, made no difference or misled the run, with a line for an answer it got wrong: material for a codeintel issue.
+
+To set it up: `pip install "feature-flow-cli[codeintel]"` (or `pip install codecortex`), then `codeintel setup --all .` in the repository. feature-flow asks `codeintel doctor --json` which engines are ready and keeps the answer for an hour in `.feature-flow/state/codeintel.json`; with nothing ready, or no `codeintel` on PATH, the prompts are as before. `FLOW_CODEINTEL=off` leaves it out. In a lane, the agents run it in the lane's worktree, where codeintel may not have an index, and then fall back to grep. The two tools are released on their own and neither imports the other.
+
 ## Questions for the architect, designer or product owner
 
 A builder, reviewer or planner that hits a question it should not decide alone asks it instead of guessing, and the flow pauses that job until the right role answers.
@@ -358,6 +369,7 @@ Every finished run can leave a record of what it cost and what it caught, so a t
 - **`plans/<feature>/eval.json`**: tickets, builds, reviews and rework; tickets settled when the plan was approved and never built; every catch by the check that made it (gate, floor guard, Done when, test first, footprint, reviewer, feature review); the follow-ups in `followups.md` and the deferred checks; who drove the run (`driver`: `person` or `agent`); where the run needed its driver (stops, questions, handoffs, resets); active minutes; and tokens.
 - **`plans/<feature>/followups.md`**: what the run left for later, committed as it goes: the `minor` findings of every passing review, the findings a level 2 ticket passed with after its full rounds, and each `needs` check (below) that could not pass on this host.
 - **Tokens** come from Claude Code's own session transcripts (`~/.claude/projects/`, or `CLAUDE_CONFIG_DIR`), never from the agent: every message of the sessions and subagents that worked in this repo during the run, each counted once, by model and, without lanes, split per ticket by time. Codex sessions are not read yet.
+- **codeintel**: when an agent asked [codeintel](#codeintel-optional), `codeintel` in `eval.json` counts the queries by op and what the agents said of the answers (helped, no answer, wrong, and why), and the form below asks whether it helped.
 - **`plans/<feature>/eval-verdict.md`**: a form for you. Was the plan right, how many fixes you made by hand, would you use it again, and for each catch whether it was real or a false alarm. Run `--eval` again and your answers land in `eval.json`. The false-alarm count is the only way to tell whether the checks are worth their cost.
 - **Later:** `feature-flow eval <feature> --later`, a week or two on, lists the commits since the run whose subject says fix, revert, bug or regression on the paths each ticket's `Touches:` names: the defects the run let through.
 
@@ -383,7 +395,23 @@ When an idea is still fuzzy, the session can brainstorm it with you before it wr
 
 Read only helpers work for the session during a brainstorm: a code scout, a web scout, the architect, designer and product owner, `flow-skeptic`, who attacks each finished option so the session that wrote the options is not the one that judges them, and `flow-lens`, who looks at the options through one lens the session picks for the idea: `positive`, `researcher`, `open-minded`, `artistic`, `ux` or `security` ([guides/lenses/](guides/lenses/)). Each gets its prompt from `brainstorm-prompt <helper> <question file>`, which counts them: `normal` allows 2 scouts, 1 web, 2 consultants, 1 skeptic and 2 lenses per brainstorm, `careful` 3, 2, 3, 1 and 3, and `FLOW_SCOUTS=off` no scouts. Helpers never write the brainstorm and never ask you anything; the session does both.
 
-Before you pick, the session shows the brainstorm as a review page: `feature-flow brainstorm-page <feature>` (or `flow-status.py <feature> --brainstorm-page`) writes it beside the brainstorm as one HTML file. It has a sidebar that routes between the sections and shows how far you read, a system, light or dark switch, flowchart diagrams you can edit (drag, add boxes of seven kinds, colour them from 12 colours, rename and delete them, connect them with arrows, undo and redo, with the keyboard too), reset, and copy back as mermaid (the edited diagram once you change it; edits are kept only in that browser), and an arrow animation that stays off until you turn it on. Its look is a style from [guides/styles/](guides/styles/): `route` (the default) or `blueprint`, picked with `--style`, the brainstorm's `Style:` line or `FLOW_STYLE`. A style is one CSS file of colour and font tokens, so adding one is adding a file. `--fragment` leaves out the html and body tags, for publishing the page as an artifact.
+Before you pick, the session shows the brainstorm as a review page: `feature-flow brainstorm-page <feature>` (or `flow-status.py <feature> --brainstorm-page`) writes it beside the brainstorm as one HTML file. It has a sidebar that routes between the sections and shows how far you read, a system, light or dark switch, flowchart diagrams you can edit (arrange them left to right, top to bottom, radial or as a grid, drag, add boxes of seven kinds, colour them from 12 colours, rename and delete them, connect them with arrows, undo and redo, with the keyboard too), reset, and copy back as mermaid (the edited diagram once you change it; edits are kept only in that browser), and an arrow animation that stays off until you turn it on. Its look is a style: `route` (the default), `blueprint`, `sketch`, `paper`, `terminal` or `bright`, picked with `--style`, the brainstorm's `Style:` line or `FLOW_STYLE`; the session picks the one that fits the subject unless you name one, and colours boxes by role. A style is one CSS file of colour, font and box tokens in Forkboard's [themes/](packages/forkboard/forkboard/themes/), so adding one is adding a file. `--fragment` leaves out the html and body tags, for publishing the page as an artifact.
+
+![A Forkboard review page for a rate-limits brainstorm: a sidebar with the sections and options, option A's diagram with the API gateway box selected and the editing tools above it, and its pros, cons, size and risky areas below](docs/forkboard.png)
+
+What the page is good at:
+
+- **You review the design, not a wall of text.** Each option is a diagram you can see at once, with its pros, cons, size and risky areas right under it, and the sidebar jumps between options.
+- **You answer by editing the diagram itself.** Drag, add, rename, connect or delete boxes, then Copy as mermaid and paste it into the chat. Your change reaches the session as a diagram, not a paraphrase.
+- **More than one person can review it.** On the live page each reviewer keeps their own version of a diagram, compare with original marks what they added, removed or renamed, and their questions wake the session, which answers on the page.
+- **One file, nothing to install or host.** The plain page is a single HTML file that needs no server and no account: open it from disk, or publish it as an artifact. It sends nothing anywhere (it only loads its fonts, and mermaid for a diagram that is not a flowchart), and the brainstorm's text is escaped, so a label cannot run a script.
+- **Its own package, tested in a browser.** The page's editor, its phone layout and the live page's saves are driven in Chromium in CI, apart from the harness.
+
+The page itself is **Forkboard** ([packages/forkboard/](packages/forkboard/)), a separate package in this repository with its own version and tests. feature-flow turns the brainstorm into a review document and Forkboard makes the page from it; Forkboard never reads or writes the brainstorm file. Every install of feature-flow carries its copy of Forkboard (as `feature_flow/_forkboard/`), so nothing extra needs installing.
+
+**The live page (Claude only).** When the session can publish artifacts, it publishes the page live instead (`--live <folder>` writes `index.html` and a `state.json` beside it). Everyone you share it with (a claude.ai sign-in and edit access, no Claude Code needed) can save their own version of each diagram, pick between the original and anyone's version, turn on **Compare with original** to see added, removed and renamed boxes and arrows marked, ask Claude in the page to change a diagram (it uses that person's own Claude), and send the session questions from **Talk to Claude**. A save wakes the session: it reads the page's `state.json`, lists the open asks (`--asks`), answers each one (`--answer`), puts a version into the brainstorm when asked (`--apply <folder> <figure> <version>`), and publishes the next round to the same link. `/feature-flow <feature> brainstorm sketch` starts from your own drawing: the page opens with a small sketch of the idea, you draw yours and send it, and the options build on it. Without an Artifact tool (or on Codex) you get the plain page.
+
+[docs/brainstorm.md](docs/brainstorm.md) walks through a brainstorm step by step, how to use the page, and Forkboard's own commands.
 
 The result is `brainstorm.md` ([template](guides/templates/brainstorm.md)), committed with the plan. The planner follows its chosen option and copies its diagram into `spec.md`, the plan reviewer fails a plan that builds a rejected option or leaves a risky area below level 3, and a re-plan keeps the choice. It is skipped in `fast`, for an import, and with `auto`; with `agent`, the driving agent picks, the file says `Picked by: agent`, and the eval records it.
 
@@ -436,6 +464,7 @@ feature-flow eval <feature> [--later]                     record the run in plan
 python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
 python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser
+feature-flow brainstorm-page <feature> [--style NAME] [--fragment]   the brainstorm as a review page (Forkboard); --live DIR, --asks, --answer, --apply for the live page
 python3 scripts/gate.py <feature>                         run Build, Test and Lint from commands.md
 python3 scripts/floor-guard.py <feature> <NN> [base]      check a ticket's diff, run from the repo root
 ```
@@ -457,6 +486,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_BUDGET` | unset | read by `start`: minutes of active work before fast mode turns on, then a re-plan offer; `off` drops it |
 | `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off |
 | `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase |
+| `FLOW_CODEINTEL` | `auto` | `off` keeps codeintel out of the scout's and reviewer's prompts; `auto` adds it when `codeintel doctor` reports an engine ready |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |
@@ -469,6 +499,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_DIR`, `FLOW_TICKETS` | `plans`, `tasks` | where the plans and the ticket folder live |
 | `FLOW_NO_OPEN` | unset | `1` makes `flow-view.py` never open a browser |
 | `FLOW_WATCH_SECONDS` | `3` | how often `flow-view.py --watch` rewrites the page |
+| `FLOW_STYLE` | `route` | the brainstorm page's look when the brainstorm has no `Style:` line: `route`, `blueprint`, `sketch`, `paper`, `terminal` or `bright` (Forkboard's themes) |
 
 The run also stops on its own after a number of phases (`BUILD` and `REVIEW` hand-outs, the spec review and the quality review each counting as one, a single review counting as one) that grows with the ticket count, recomputed at every pick, so a loop of failures cannot go on forever.
 
@@ -496,11 +527,15 @@ Then `cd` into it, start the agent and type `/feature-flow hello` (Codex: `$feat
 ```bash
 bash tests/run.sh
 python3 -m unittest discover -s tests/py
+python3 -m unittest discover -s packages/forkboard/tests            # Forkboard, the brainstorm page
+(cd packages/forkboard/tests/browser && npm install && npm test)    # the page in Chromium
 ```
 
 Offline and free: no model is called. The suite covers the conductor's every answer and how a run stops, sessions, handoff and takeover, a `.git` the agent cannot write, the gate, the floor guard, plan protection, the prompts and guides, both skills, the installer for both agents, the graph page and its data, the Done when checks, the test-first check, the two reviews and the debugging guide on a send-back, and the acceptance harness. `tests/run.sh` also drives a prepared demo with no model through both checks and both reviews. The page's layout and replay logic are also tested under Node (`tests/viewer-logic.test.js`, skipped when Node is absent). `.github/workflows/tests.yml` runs it on every push to `main` and every pull request, on Ubuntu and on macOS. A fourth job runs the Python unit tests on Windows, including a fixture drive that takes a two-ticket plan through `python scripts/flow.py f start` and `next` to `BUILD` and then `REVIEW`, with `FLOW_TRUSTED=1` set as the runner sets it. `tests/run.sh` itself is a bash harness and does not run on Windows. Windows is tested this way only: no real agent run has been done there.
 
 A `package` job builds the wheel and the sdist and runs `tests/package_smoke.py` on Ubuntu (Python 3.9 and the latest), macOS and Windows: it installs the wheel in a fresh virtual environment, runs `feature-flow install`, and checks that the repo gets the same files as from `install.py` in a clone. Run it locally with `python3 -m pip install build && python3 tests/package_smoke.py`.
+
+Two jobs test Forkboard ([packages/forkboard/](packages/forkboard/)) on its own: its unit tests and a build-and-install smoke test on Ubuntu, macOS and Windows, and the page driven in Chromium through Playwright (the diagram editor, no sideways scroll at phone width, and a live-page save that clashes with someone else's, reloads and saves again).
 
 `RUN_REAL=1 bash tests/smoke-real.sh --interactive` is the acceptance run with Claude Code. It runs real sessions on the demo project and spends money, which is why it asks for `RUN_REAL=1`.
 

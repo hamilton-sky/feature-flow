@@ -4,6 +4,31 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.29: debugging before fixing
+
+| Version | Added |
+|---|---|
+| 0.29.0 | **A fuller debugging guide.** The guide a builder gets after a send-back now also has it look at its own diff first, compare with similar code that works, rerun a flaky test to see how often it fails and wait on a condition instead of a fixed time, read the last Attempt note so it does not repeat a failed fix, and write a failing test for the cause before a logic fix. An Attempt note now lists each hypothesis tried and what it showed. When each fix moves the failure somewhere else, the builder asks the architect instead of patching a third time. The build guide's own failure handling asks for the cause first too. |
+
+## 0.28: arranging and styling the review page
+
+| Version | Added |
+|---|---|
+| 0.28.0 | **Forkboard 0.2.0.** An **Arrange** button on each diagram lays the boxes out left to right, top to bottom, radial (the most joined box in the middle) or as a grid; it is an edit like any other, so Undo puts the boxes back and a saved version keeps it. Four new styles beside `route` and `blueprint`: `sketch` (hand drawn, for early ideas), `paper` (editorial, prints cleanly), `terminal` (for infra and dev tools) and `bright` (for UI and consumer features). A style can now shape the boxes too: corners, line weight, shadow, font. `forkboard themes` says what each style suits, and the brainstorm guide has the agent pick the style from the subject unless you name one, and colour boxes by role (people, screens, services, data, outside systems, risk). |
+
+## 0.27: codeintel for the agents
+
+| Version | Added |
+|---|---|
+| 0.27.0 | **codeintel, optional** ([README](../README.md#codeintel-optional)): when [codeintel](https://github.com/hamilton-sky/codeintel) is installed and has the repository indexed, scouts are told to ask it who calls what and where code lives, and reviewers to ask it which callers the change left behind (`--op changed`). Each ends its reply with a line per question saying whether the answer helped, and `eval` counts them; the verdict form asks whether codeintel helped. `pip install "feature-flow-cli[codeintel]"` installs both; `FLOW_CODEINTEL=off` leaves it out. Nothing changes without it. |
+
+## 0.25: reviewing the brainstorm together
+
+| Version | Added |
+|---|---|
+| 0.26.0 | **Forkboard**: the review page is now its own package, [packages/forkboard/](../packages/forkboard/) (Forkboard 0.1.0), with its own tests, browser tests in CI and its own PyPI build. feature-flow turns the brainstorm into a review document (`bundle/1`) and Forkboard renders it; `brainstorm-page`, its flags and the pages it writes are unchanged. The page's script and CSS are now real files instead of Python strings. Every install carries Forkboard inside the package. Styles moved from `guides/styles/` to Forkboard's themes. A walkthrough of the brainstorm and the page: [docs/brainstorm.md](brainstorm.md). |
+| 0.25.0 | **Live brainstorm page** (Claude only; `brainstorm-page <feature> --live <folder>`, published as an artifact that saves itself). Everyone it is shared with can save their own version of each diagram, switch between the original and anyone's version, and **compare with original** (added, removed and renamed boxes and arrows marked). **Ask Claude** in the page redraws a diagram with that person's own Claude. **Talk to Claude** sends the session questions; the session answers on the page (`--asks`, `--answer`) and can put a version into the brainstorm (`--apply`). **Sketch first** (`/feature-flow <feature> brainstorm sketch`): you draw the idea, and the options build on it. |
+
 ## 0.24: seeing the brainstorm
 
 | Version | Added |

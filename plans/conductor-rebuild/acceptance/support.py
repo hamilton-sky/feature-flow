@@ -48,14 +48,17 @@ def old_code():
     if (ROOT / "feature_flow" / "conductor.py").exists():
         raise NoOldCode("feature_flow/conductor.py still exists, so there is no old code to compare with: the "
                         "rebuild replaces it with the package feature_flow/conductor/")
-    sha = git_root("log", "-1", "--format=%H", "--diff-filter=D", "--", "feature_flow/conductor.py")
+    # the newest commit behind HEAD that still has feature_flow/conductor.py: the commit before the one that removed
+    # it, or, once the default branch is merged in, that branch's head, so its own changes are on both sides
+    sha = next((c for c in git_root("rev-list", "HEAD").split()
+                if subprocess.run(["git", "cat-file", "-e", "%s:feature_flow/conductor.py" % c], cwd=str(ROOT),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode == 0), "")
     if not sha:
-        raise NoOldCode("no commit removed feature_flow/conductor.py "
-                        "(git log -1 --format=%H --diff-filter=D -- feature_flow/conductor.py is empty)")
-    tar = subprocess.run(["git", "archive", "%s^" % sha, "feature_flow", "scripts/flow.py"], cwd=str(ROOT),
+        raise NoOldCode("no commit behind HEAD has feature_flow/conductor.py")
+    tar = subprocess.run(["git", "archive", sha, "feature_flow", "scripts/flow.py"], cwd=str(ROOT),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if tar.returncode != 0:
-        raise NoOldCode("git archive %s^ failed: %s" % (sha, tar.stderr.decode("utf-8", "replace")))
+        raise NoOldCode("git archive %s failed: %s" % (sha, tar.stderr.decode("utf-8", "replace")))
     tmp = tempfile.TemporaryDirectory()
     atexit.register(tmp.cleanup)
     with tarfile.open(fileobj=io.BytesIO(tar.stdout)) as archive:
@@ -64,7 +67,7 @@ def old_code():
         else:
             archive.extractall(tmp.name)
     if not (Path(tmp.name) / "feature_flow" / "conductor.py").is_file():
-        raise NoOldCode("the tree before %s has no feature_flow/conductor.py" % sha)
+        raise NoOldCode("the tree of %s has no feature_flow/conductor.py" % sha)
     _OLD["dir"] = Path(tmp.name)
     return _OLD["dir"]
 

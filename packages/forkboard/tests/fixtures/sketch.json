@@ -1,0 +1,35 @@
+{
+ "schema": "bundle/1",
+ "id": "csv",
+ "kind": "Brainstorm",
+ "title": "Brainstorm: csv",
+ "meta": {},
+ "intro": "",
+ "sections": [
+  {
+   "title": "Sketch",
+   "kind": "text",
+   "markdown": "\n```mermaid\nflowchart LR\n  Admin([Admin]) -->|clicks Export| Api[Export endpoint]\n  Api --> Db[(Tasks table)]\n```\n",
+   "items": []
+  },
+  {
+   "title": "Options",
+   "kind": "text",
+   "markdown": "",
+   "items": [
+    {
+     "title": "A. Stream it",
+     "label": "A",
+     "chosen": false,
+     "markdown": "\n```mermaid\nsequenceDiagram\n  Admin->>Api: export\n```\n"
+    },
+    {
+     "title": "B. In the background",
+     "label": "B",
+     "chosen": false,
+     "markdown": "\n```mermaid\nflowchart TD\n  Api[Api] --> Queue{{Queue}}\n  class Queue amber\n```"
+    }
+   ]
+  }
+ ]
+}
