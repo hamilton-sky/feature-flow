@@ -8,6 +8,7 @@ Upgrade between features, not in the middle of a run (see [Upgrading](../README.
 
 | Version | Added |
 |---|---|
+| 0.29.1 | The debugging guide now also comes with a rebuild after an attempt that left the ticket unresolved, not only after a send-back. |
 | 0.29.0 | **A fuller debugging guide.** The guide a builder gets after a send-back now also has it look at its own diff first, compare with similar code that works, rerun a flaky test to see how often it fails and wait on a condition instead of a fixed time, read the last Attempt note so it does not repeat a failed fix, and write a failing test for the cause before a logic fix. An Attempt note now lists each hypothesis tried and what it showed. When each fix moves the failure somewhere else, the builder asks the architect instead of patching a third time. The build guide's own failure handling asks for the cause first too. |
 
 ## 0.28: arranging and styling the review page

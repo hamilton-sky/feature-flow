@@ -40,6 +40,14 @@ class DebugGuide(unittest.TestCase):
         for word in ("reproduce", "isolate", "fix", "prove"):
             self.assertIn(word, prompt.split(INTRO, 1)[1].lower())
 
+    def test_debug_build_prompt_after_an_unresolved_attempt_carries_the_guide(self):
+        self.repo.flow("next")
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        prompt = self.repo.flow("prompt")[1]
+        self.assertIn(INTRO, prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
