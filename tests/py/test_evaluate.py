@@ -152,7 +152,8 @@ class EvalCommandTests(unittest.TestCase):
             code, out, err = self.run_eval("f")
             self.assertEqual(code, 0, err)
             record = json.loads((plan / "eval.json").read_text(encoding="utf-8"))
-            self.assertEqual(record["brainstorm"], {"picked_by": expect, "helpers": {}, "type": "standard"})
+            self.assertEqual(record["brainstorm"], {"picked_by": expect, "helpers": {}, "type": "standard",
+                                                    "credit": {"ideas": {}, "chosen": {}}})
             self.assertIn("brainstorm: yes, the option picked by %s, no helpers" % expect, out)
         (plan / "brainstorm.md").write_text("# Brainstorm: f\n\nPicked by: agent\nType: explore\n", encoding="utf-8")
         code, out, err = self.run_eval("f")
@@ -166,6 +167,25 @@ class EvalCommandTests(unittest.TestCase):
         self.assertEqual(record["brainstorm"]["helpers"], {"scout": 2, "skeptic": 1})
         self.assertIn("scout x2, skeptic x1", out)
         self.assertIn("needed you: 1 stop(s)", out)
+
+    def test_it_counts_the_guided_stops_and_credits_the_helpers(self):
+        plan = self.repo.dir / "plans" / "f"
+        (plan / "brainstorm.md").write_text(
+            "# Brainstorm: f\n\nPicked by: person\n\n## Options\n\n### A. Stream it\n\n- Pros: no memory spike [architect]\n"
+            "- Cons: see [the docs](https://example.com) [skeptic]\n\n### B. Batch it\n\n- Pros: simple [po]\n\n"
+            "## Chosen\n\nA, with B's limit [po]\n", encoding="utf-8")
+        folder = state.state_dir(self.repo.dir)
+        (folder / "flow-f.log").write_text("2026-10-23T09:40:00Z,-,GUIDED-SETUP\n2026-10-23T09:50:00Z,-,BRAINSTORM-ARCHITECT\n"
+                                           "2026-10-23T09:52:00Z,-,GUIDED-OPTIONS\n2026-10-23T09:54:00Z,-,GUIDED-PLAN\n" + LOG,
+                                           encoding="utf-8")
+        code, out, err = self.run_eval("f")
+        self.assertEqual(code, 0, err)
+        record = json.loads((plan / "eval.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["you"]["guided_stops"], ["setup", "options", "plan"])
+        self.assertEqual(record["brainstorm"]["credit"], {"ideas": {"architect": 1, "skeptic": 1, "po": 1},
+                                                          "chosen": {"architect": 1, "skeptic": 1, "po": 1}})
+        self.assertIn("guided stops: 3 (setup, options, plan; the aim is 3 or fewer)", out)
+        self.assertIn("architect 1/1/1, po 0/1/1, skeptic 0/1/1", out)
 
     def test_a_filled_form_lands_in_the_record(self):
         self.run_eval("f")

@@ -13,7 +13,7 @@ from feature_flow.conductor.phases.base import lane_runner
 
 
 BRAINSTORM = "brainstorm.md"  # the user's chosen approach, copied from the state folder into the draft and the plan
-LENSES = ("positive", "researcher", "open-minded", "artistic", "ux", "security")  # guides/lenses/<name>.md
+LENSES = brainstorm_mode.LENSES  # guides/lenses/<name>.md
 HELPERS = dict({"scout": "scout", "web": "scout", "architect": "consult", "designer": "consult", "po": "consult",
                 "skeptic": "skeptic"}, **{lens: "lens" for lens in LENSES})  # a brainstorm helper and its limit's group
 
@@ -73,6 +73,13 @@ class Planner:
             raise Stop(str(err))
         self.log("CONSULT-%s" % role.upper())
         return "%s\n\n---\n\n%s\n" % (role_text, task)
+
+    def asked(self, stop):
+        """Logs that the session stopped to ask the user at one of the guided flow's three stops, for eval."""
+        if stop not in brainstorm_mode.STOPS:
+            raise Stop("asked takes %s, not %s" % (", ".join(brainstorm_mode.STOPS), stop))
+        self.log("GUIDED-%s" % stop.upper())
+        return "OK asked %s" % stop
 
     def brainstorm_prompt(self, helper, question_file):
         """A brainstorm helper's prompt. The script counts the helpers per brainstorm and refuses past the limit."""

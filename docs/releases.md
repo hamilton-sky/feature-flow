@@ -8,6 +8,7 @@ Upgrade between features, not in the middle of a run (see [Upgrading](../README.
 
 | Version | Added |
 |---|---|
+| 0.31.1 | **Measure the guided stops and the helpers** ([README](../README.md#brainstorm-before-planning)): the session runs `asked setup`, `asked options` and `asked plan` before each of the three stops (the start card, the brainstorm's pick, the plan's yes), and eval prints `guided stops: N`. Each idea in a brainstorm ends with the helper it came from in brackets (`[architect]`, `[ux]`), and eval prints, per helper, how often it was asked, how many of its ideas went in and how many reached the pick. |
 | 0.31.0 | **Brainstorm types** ([README](../README.md#brainstorm-before-planning)): `brainstorm learn` (new to the domain: ideas explained as they come, a cited Glossary, deep web scouts), `brainstorm map` (new to the code: a Repo map first, deep code scouts), `brainstorm quick` (one or two options, few helpers) and `brainstorm explore` (ends in a Go or No-go). **Scout levels**: `code=` and `web=` take `off`, `light`, `normal` or `deep`. Both are header lines of the brainstorm (`Type:`, `Scouts:`), so the plan's and the build's scouts follow them. `FLOW_SCOUTS=off` still turns every scout off, and a brainstorm with no type works as before. |
 
 ## 0.30: the standard profile
