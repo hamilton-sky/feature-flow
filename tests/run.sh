@@ -4,7 +4,16 @@
 # exit code is the number of failed checks, capped at 1.
 
 set -uo pipefail
-unset FLOW_INVOKE FLOW_TRUSTED
+# The gate can run this suite from a live flow, whose profile exports FLOW_ settings.
+# Fixtures choose their own settings: inherited base gates, reviews or session tokens
+# must not change what they exercise. Keep only CI's separate unit-test shard switch.
+for flow_test_env in "${!FLOW_@}"; do
+  case "$flow_test_env" in
+    FLOW_UNIT_IN_SHARDS) ;;
+    *) unset "$flow_test_env" ;;
+  esac
+done
+unset flow_test_env
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
