@@ -27,7 +27,8 @@ def _at(c, path):
 class Gate:
     def run(self, c):
         quick = c.gate_quick()
-        result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=_folder(c))
+        changed = git.diff_names(c.get("base"), "HEAD", c.plan.as_posix(), cwd=_folder(c)) if c.get("base") else None
+        result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=_folder(c), changed=changed)
         c.log("GATE-QUICK" if quick else "GATE-FULL")
         c.log("GATE-PASS" if result.ok else "GATE-FAIL")
         if not result.ok:

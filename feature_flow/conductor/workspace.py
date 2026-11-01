@@ -175,15 +175,19 @@ class Workspace:
         """The send-back rounds this ticket may have: 1 at level 1, else FLOW_MAX_REVIEW_ROUNDS."""
         return limits.round_cap(self.num("level"), self.max_rounds)
 
-    def send_back(self, source, findings):
-        """Write the findings into the ticket, reopen it, commit, and build again."""
-        round_no = self.num("round") + 1
-        cap = self.round_cap()
-        if round_no > cap:
+    def send_back(self, source, findings, kind="review"):
+        """Write the findings into the ticket, reopen it, commit, and build again. kind is review or check: each
+        has its own count of rounds (policy.limits.cap_of), and `round` counts both."""
+        key = "check_rounds" if kind == "check" else "review_rounds"
+        used = self.num(key) + 1
+        cap = limits.cap_of(kind, self.num("level"), self.max_rounds)
+        if used > cap:
             level = self.num("level")
             raise Stop("%s still fails the %s after %d round(s)%s" % (
                 self.ticket_name(), source, cap,
                 " at level %d. the user decides what happens next" % level if level else ""))
+        round_no = self.num("round") + 1
+        self.st[key] = used
         self.st["round"] = round_no
         self.st["due_minors"] = ""  # the next round's reviews list them again if they are still there
         tickets.append_findings(self.at(self.ticket()), round_no, source, findings)

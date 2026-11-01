@@ -1,8 +1,10 @@
 """The gate.
 
 usage: python3 scripts/gate.py <feature>
-runs the Build, Test and Lint commands from plans/<feature>/commands.md in that order and
-stops at the first one that fails. empty values and placeholders in angle brackets are skipped.
+runs the Build, Test, Lint, Typecheck and Security commands from plans/<feature>/commands.md in that order,
+then each `Check <path>:` command, and stops at the first one that fails. A `Check <path>:` line (`Check web/: npm
+run e2e`) runs only for a build that changed a path it names (a folder ends with /, a * glob crosses folders);
+run by hand, every one runs. empty values and placeholders in angle brackets are skipped.
 the commands run from the current directory and must exit non zero on failure.
 exit 0 everything passed or nothing to run, 1 a command failed, 2 usage error.
 
@@ -10,13 +12,15 @@ Text is str (UTF-8 with errors="surrogateescape", so any byte comes back out unc
 """
 
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
 
 from feature_flow import proc
 
-KEYS = ("Build", "Test", "Lint")
+KEYS = ("Build", "Test", "Lint", "Typecheck", "Security")
+PATH_CHECK = re.compile(r"^Check[ \t]+([^:\s]+):[ \t]*(.*)$")
 TAIL = 40
 DEFAULT_TIMEOUT = 30
 
@@ -42,6 +46,20 @@ def command(path, key):
     return ""
 
 
+def path_checks(path):
+    """[(path pattern, command)] of the `Check <path>:` lines of commands.md, placeholders left out."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="surrogateescape")
+    except OSError:
+        return []
+    found = []
+    for line in text.split("\n"):
+        m = PATH_CHECK.match(line.rstrip("\r"))
+        if m and m.group(2).replace("`", "").strip() and not m.group(2).replace("`", "").strip().startswith("<"):
+            found.append((m.group(1).replace("`", ""), m.group(2).replace("`", "").strip()))
+    return found
+
+
 def tail(text, n=TAIL):
     """The last n lines of text (a last line without a newline counts)."""
     if not text:
@@ -60,10 +78,11 @@ def timeout_minutes():
         raise ValueError("FLOW_GATE_TIMEOUT must be a whole number, not %s" % value)
 
 
-def run(feature, out, err, timeout=None, quick=False, cwd=None):
+def run(feature, out, err, timeout=None, quick=False, cwd=None, changed=None):
     """Run the gate for feature. out and err take text. timeout is minutes (a float is fine), 0 for none;
     None reads FLOW_GATE_TIMEOUT. With quick, a usable Quick: value runs in the place of Test. cwd is the folder
-    commands.md is read under and the commands run in, None for the working folder. Returns the exit code."""
+    commands.md is read under and the commands run in, None for the working folder. changed is the paths the build
+    changed, which pick the `Check <path>:` commands to run; None runs them all. Returns the exit code."""
     if not feature:
         err("usage: python3 scripts/gate.py <feature>\n")
         return 2
@@ -79,12 +98,19 @@ def run(feature, out, err, timeout=None, quick=False, cwd=None):
     if not path.is_file():
         out("gate: no commands.md for " + feature + ", nothing to run\n")
         return 0
+    from feature_flow import tickets  # here, so scripts/gate.py stays quick to load
     ran = 0
     quick_cmd = command(path, "Quick") if quick else ""
+    todo = []
     for key in KEYS:
         cmd = command(path, key)
         if key == "Test" and quick_cmd != "" and not quick_cmd.startswith("<"):
             key, cmd = "Quick", quick_cmd
+        todo.append((key, cmd))
+    for pattern, cmd in path_checks(path):
+        if changed is None or any(tickets.matches_sensitive(p, [pattern]) for p in changed):
+            todo.append(("Check " + pattern, cmd))
+    for key, cmd in todo:
         if cmd == "" or cmd.startswith("<"):
             continue
         ran += 1

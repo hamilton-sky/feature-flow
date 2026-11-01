@@ -66,6 +66,7 @@ ask_role
 asks
 attempt
 base
+check_rounds
 code_files
 code_sha
 done
@@ -85,6 +86,7 @@ reply_minors
 review_attempt
 review_notes
 review_pass
+review_rounds
 review_sha
 round
 runs

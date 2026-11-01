@@ -1,0 +1,197 @@
+"""The Plan and Build steps of the guided flow's page (feature_flow/flow_page.py), and the plan-yes card's choices.
+
+The Plan step shows the drafted plan: its tickets and their order, the build flow (each ticket's level and review),
+how many tickets can build at once (lanes.plan_width) and the checks every ticket must pass. Its choices are the
+profile, the lanes and which tickets get a full review. While the plan is a draft (.feature-flow/state/draft/), the
+page's picks are written into the draft's commands.md (`Profile:`, `Lanes:`) and tickets (`Review: full`), so one
+yes approves the plan and its build flow together and they are frozen with it. An accepted plan only shows: change
+it with a re-plan. The Build step shows how far the run is.
+"""
+
+import re
+from pathlib import Path
+
+from feature_flow import gate, lanes, profiles, status, tickets
+
+PLAN_KEYS = ("profile", "lanes", "full_review")
+PROFILE_NOTES = {"fast": "one builder takes small tickets in batches, and one review of the whole feature at the end",
+                 "standard": "two reviewers side by side on each ticket, and one review of the whole round",
+                 "careful": "the full gate and two reviewers on every ticket, and at most 2 lanes",
+                 "normal": "one review per ticket"}
+LANE_CAPS = {"careful": 2, "fast": 1}  # as conductor.guards.LANE_CAPS, and fast batches instead of lanes
+CHECKS = ("gate", "floor guard", "footprint", "done when", "test first")
+
+
+class Plan:
+    """A plan folder (the draft, or the accepted plan) read for the page."""
+
+    def __init__(self, folder):
+        self.folder = Path(folder)
+        self.commands = self.folder / "commands.md"
+        self.graph = tickets.Graph(tickets.ticket_files(self.folder / "tasks"))
+
+    def value(self, key):
+        return tickets.commands_value(self.commands, key).strip()
+
+    def profile(self):
+        return (self.value("Profile") or "normal").lower()
+
+    def width(self):
+        return status.width_of(self.graph, str(self.commands))
+
+    def lanes_cap(self, profile=None):
+        return LANE_CAPS.get(profile or self.profile(), lanes.MAX_LANES_PLAN)
+
+    def full_review(self):
+        g = self.graph
+        return [g.lab[t] for t in g.order if g.review.get(t) == "full"]
+
+
+def flowchart(plan):
+    g = plan.graph
+    lines = ["flowchart TD"]
+    for t in g.order:
+        title = re.sub(r"[\[\]\"|{}()<>]", " ", g.title[t]).strip() or g.lab[t]
+        lines.append('  T%s["%s"]' % (g.lab[t], title[:60]))
+    for t in g.order:
+        for b in g.blk[t]:
+            if b in g.seen:
+                lines.append("  T%s --> T%s" % (g.lab[b], g.lab[t]))
+    return "\n".join(lines)
+
+
+def checks_text(plan):
+    """The checks every ticket must pass, as markdown: the gate's commands, and what the plan relaxed or turned off."""
+    from feature_flow import floorguard
+    gate_cmds = [k for k in gate.KEYS + ("Quick",) if plan.value(k)] + ["Check %s" % p for p, _ in
+                                                                      gate.path_checks(plan.commands)]
+    off = " ".join(plan.value("Gate").lower().split()) == "off unsafe"
+    cats, why, problem = floorguard.plan_allow(plan.commands.read_text(encoding="utf-8") if plan.commands.is_file() else "")
+    out = ["- **Gate**: %s" % ("**off (unsafe)**: no command runs after a build" if off else
+                                ", ".join("`%s`" % c for c in gate_cmds) or "no commands")]
+    out.append("- **Floor guard**: %s" % (problem if problem else "relaxed for %s, because %s" % (cats, why) if cats
+                                          else "skipped or deleted tests, silenced checks and edited config fail"))
+    out.append("- **Footprint**: a build may change only its ticket's `Touches:` paths")
+    first = [plan.graph.lab[t] for t in plan.graph.order if plan.graph.tf.get(t) == "yes"]
+    out.append("- **Done when**: each ticket's check block%s" % ("" if not off else ", off with the gate"))
+    out.append("- **Test first**: %s" % ("tickets %s prove a failing test first" % ", ".join(first) if first else "no ticket asks for it"))
+    return "\n".join(out)
+
+
+def sections(folder, draft, environ=None):
+    """(the Plan step's summary, its sections) for the plan in folder; draft says whether its picks can be written."""
+    plan = Plan(folder)
+    g = plan.graph
+    profile = plan.profile()
+    wide, waits = plan.width()
+    lanes_value = (plan.value("Lanes") or "1").lower()
+    rows = ["| Ticket | Level | Review | Touches |", "|---|---|---|---|"]
+    for t in g.order:
+        review = "full: spec, then quality" if g.review.get(t) == "full" else profile
+        rows.append("| %s %s | %s | %s | %s |" % (g.lab[t], g.title[t].replace("|", "/"), g.level.get(t, "-"), review,
+                                                ", ".join("`%s`" % p for p in g.touches.get(t, [])) or "none"))
+    width_md = "Up to %d ticket%s can build at once." % (wide, "" if wide == 1 else "s")
+    if waits:
+        width_md += " " + "; ".join("%s waits for %s: %s" % (g.lab[t], g.lab[o], why) for t, o, why in waits[:6]) + "."
+    plan_md = "%d tickets. %s\n\n```mermaid\n%s\n```\n\n%s" % (len(g.order), width_md, flowchart(plan), "\n".join(rows))
+    cap = min(wide or 1, plan.lanes_cap())
+    lanes_options = [{"value": "auto", "label": "Auto (%d)" % max(1, cap)}] + [
+        {"value": str(n), "label": str(n)} for n in range(1, lanes.MAX_LANES_PLAN + 1)]
+    choices = [
+        {"key": "profile", "label": "Profile", "kind": "one", "value": profile if profile in profiles.PROFILES else "normal",
+         "options": [{"value": p, "label": p.capitalize(), "note": PROFILE_NOTES.get(p, "")} for p in
+                     ("fast", "standard", "careful", "normal")],
+         "note": PROFILE_NOTES.get(profile, "").capitalize() + "."},
+        {"key": "lanes", "label": "Tickets building at once", "kind": "one",
+         "value": lanes_value if lanes_value in ("auto", "1", "2", "3", "4") else "1", "options": lanes_options,
+         "note": "Auto takes the plan's width, at most %d with this profile. FLOW_LANES still overrides it." % plan.lanes_cap()},
+        {"key": "full_review", "label": "Tickets with a full review (spec, then quality)", "kind": "some",
+         "value": plan.full_review(), "options": [{"value": g.lab[t], "label": "%s %s" % (g.lab[t], g.title[t])}
+                                                  for t in g.order]},
+    ]
+    build_md = checks_text(plan) + ("\n\nAdd a check by asking in the chat: a `Typecheck:`, `Security:` or `Check <path>:` "
+                                    "line goes into commands.md. Relaxing one needs a reason, and turning the gate off is "
+                                    "marked unsafe." if draft else "")
+    out = [{"title": "Plan", "kind": "text", "markdown": plan_md, "items": [], "step": "Plan"},
+           {"title": "Build flow", "kind": "text", "markdown": build_md, "items": [], "step": "Plan",
+            "choices": choices if draft else []}]
+    lanes_said = "lanes auto (%d)" % max(1, cap) if lanes_value == "auto" else "%s lane%s" % (lanes_value, "" if lanes_value == "1" else "s")
+    return "%d tickets, %s, %s" % (len(g.order), profile, lanes_said), out
+
+
+def build_section(folder):
+    """(the Build step's state and summary, its section) from the accepted plan's ticket statuses."""
+    g = Plan(folder).graph
+    done = sum(1 for t in g.order if g.stat[t] in ("resolved", "parked"))
+    state = "done" if g.order and done == len(g.order) else "current"
+    summary = "%d of %d tickets done" % (done, len(g.order))
+    rows = ["| Ticket | Status |", "|---|---|"] + ["| %s %s | %s |" % (g.lab[t], g.title[t].replace("|", "/"), g.stat[t])
+                                                   for t in g.order]
+    return state, summary, {"title": "Build", "kind": "text", "markdown": "\n".join(rows), "items": [], "step": "Build"}
+
+
+def set_header(text, key, value):
+    """A ticket's or commands.md's `Key: value` line set (added after the title block when missing), or removed
+    when value is None."""
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith("## "):
+            break
+        if line.startswith(key + ":"):
+            if value is None:
+                del lines[i]
+            else:
+                lines[i] = "%s: %s" % (key, value)
+            return "\n".join(lines)
+    if value is None:
+        return text
+    at = next((i for i, l in enumerate(lines) if l.startswith("Status:")), None)
+    if at is None:
+        at = next((i for i, l in enumerate(lines) if l.startswith("## ")), len(lines)) - 1
+        while at > 0 and lines[at] == "":
+            at -= 1
+    lines.insert(at + 1, "%s: %s" % (key, value))
+    return "\n".join(lines)
+
+
+def apply_picks(folder, picks):
+    """Write the Plan step's picks into the draft in folder: [what it wrote]. ValueError, and nothing written, for a
+    pick it does not know or one the plan cannot take."""
+    plan = Plan(folder)
+    g = plan.graph
+    writes = {}
+    text = plan.commands.read_text(encoding="utf-8") if plan.commands.is_file() else ""
+    said = []
+    if "profile" in picks:
+        if picks["profile"] not in profiles.PROFILES:
+            raise ValueError("the profile must be %s, not %s" % (", ".join(sorted(profiles.PROFILES)), picks["profile"]))
+        text = set_header(text, "Profile", "`%s`" % picks["profile"])
+        said.append("Profile: %s" % picks["profile"])
+    if "lanes" in picks:
+        value = str(picks["lanes"])
+        wide = plan.width()[0]
+        if value != "auto" and (not value.isdigit() or not 1 <= int(value) <= lanes.MAX_LANES_PLAN):
+            raise ValueError("lanes must be auto or 1 to %d, not %s" % (lanes.MAX_LANES_PLAN, value))
+        if value != "auto" and int(value) > max(1, wide):
+            raise ValueError("the plan can build only %d ticket(s) at once, so %s lanes would wait" % (wide, value))
+        text = set_header(text, "Lanes", "`%s`" % value)
+        said.append("Lanes: %s" % value)
+    writes[plan.commands] = text
+    if "full_review" in picks:
+        wanted = picks["full_review"]
+        labels = {g.lab[t]: t for t in g.order}
+        if not isinstance(wanted, list) or not all(isinstance(w, str) and w in labels for w in wanted):
+            raise ValueError("full_review must be a list of the plan's tickets (%s), not %r" % (", ".join(labels), wanted))
+        for label, t in labels.items():
+            path = Path(g.path[t])
+            old = path.read_text(encoding="utf-8")
+            if label in wanted:
+                new = set_header(old, "Review", "full")
+            else:
+                new = set_header(old, "Review", None) if g.review.get(t) == "full" else old
+            if new != old:
+                writes[path] = new
+        said.append("Review: full on %s" % (", ".join(wanted) or "no ticket"))
+    for path, text in writes.items():
+        path.write_text(text, encoding="utf-8")
+    return said

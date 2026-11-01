@@ -20,6 +20,7 @@ HELPER_LABELS = {"architect": "Architect", "designer": "Designer", "po": "Produc
                  "artistic": "Artistic", "ux": "UX", "security": "Security"}
 CONSULT = ("architect", "designer", "po")
 PICK_KEYS = ("type", "code", "web", "consult", "skeptic", "lens")
+PLAN_KEYS = ("profile", "lanes", "full_review")  # flow_plan.PLAN_KEYS
 
 
 def profile(environ=None):
@@ -70,9 +71,19 @@ def setup_section(text, environ=None):
     return {"title": "Setup", "kind": "text", "markdown": md, "items": [], "step": "Setup", "choices": choices}
 
 
-def document(base, text, environ=None):
+def folders(top, feature, environ=None):
+    """(the draft plan's folder or None, the accepted plan's folder or None)."""
+    environ = os.environ if environ is None else environ
+    from pathlib import Path
+    draft = Path(top) / ".feature-flow" / "state" / "draft" / feature
+    plan = Path(top) / (environ.get("FLOW_DIR") or "plans") / feature
+    return (draft if (draft / "tasks").is_dir() else None), (plan if (plan / "tasks").is_dir() else None)
+
+
+def document(base, text, environ=None, top=None, feature=None):
     """The brainstorm page's document (brainstorm_page.document) as the guided flow's page: the Setup section and
-    the four steps, with each of the brainstorm's sections under Setup or Options."""
+    the four steps, with each of the brainstorm's sections under Setup or Options, and once there is a plan (a
+    draft, then the accepted one) its Plan and Build steps (feature_flow/flow_plan.py)."""
     mode, levels, helpers, _ = setup_of(text, environ)
     kind = mode.get("type") or "standard"
     sections = base.get("sections") or []
@@ -93,16 +104,29 @@ def document(base, text, environ=None):
         {"name": "Plan", "state": "later", "summary": ""},
         {"name": "Build", "state": "later", "summary": ""},
     ]
+    extra = []
+    draft, plan = folders(top, feature, environ) if top and feature else (None, None)
+    if plan or draft:
+        from feature_flow import flow_plan
+        said, extra = flow_plan.sections(plan or draft, draft=plan is None, environ=environ)
+        steps[2].update(state="done" if plan else "current", summary=("approved: " if plan else "") + said)
+        if plan:
+            state_, summary_, section = flow_plan.build_section(plan)
+            steps[3].update(state=state_, summary=summary_)
+            extra.append(section)
+        for step in steps[:2]:
+            step["state"] = "done"
     if kind == "explore" and verdict is not None:
         steps = steps[:2]  # explore ends at its Go or No-go
     base["steps"] = steps
-    base["sections"] = [setup_section(text, environ)] + sections
+    base["sections"] = [setup_section(text, environ)] + sections + extra
     return base
 
 
 def apply_picks(text, picks, environ=None):
     """The brainstorm with the picks written into its header lines, and the lines written. ValueError, and nothing
     written, for a pick it does not know or one past the limits."""
+    picks = {k: v for k, v in picks.items() if k not in PLAN_KEYS}  # the Plan step's, written by flow_plan
     unknown = sorted(set(picks) - set(PICK_KEYS))
     if unknown:
         raise ValueError("the page picked %s, which the brainstorm has no line for" % ", ".join(unknown))

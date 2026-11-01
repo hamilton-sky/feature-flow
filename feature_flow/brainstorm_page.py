@@ -137,7 +137,7 @@ def main(argv, out=None, err=None):
         return 1
     text = path.read_text(encoding="utf-8", errors="replace")
     if tool in ("asks", "answer", "apply", "picks"):
-        return live_tool(fb, tool, path, text, Path(live), extra, out, err)
+        return live_tool(fb, tool, path, text, Path(live), extra, out, err, flow_page.folders(top, feature))
     names = fb.page.themes()
     _, meta, _, _ = parse(text)
     name = (style or meta.get("style") or os.environ.get("FLOW_STYLE") or DEFAULT_STYLE).strip().lower()
@@ -146,7 +146,7 @@ def main(argv, out=None, err=None):
         return 1
     css = fb.page.theme_css(name)
     try:
-        doc = flow_page.document(document(text, feature), text)
+        doc = flow_page.document(document(text, feature), text, top=top, feature=feature)
     except brainstorm_mode.BadMode as e:
         err.write("%s. fix the header of %s\n" % (e, path.as_posix()))
         return 1
@@ -166,7 +166,7 @@ def main(argv, out=None, err=None):
     return 0
 
 
-def live_tool(fb, tool, path, text, state_path, extra, out, err):
+def live_tool(fb, tool, path, text, state_path, extra, out, err, plans=(None, None)):
     if state_path.is_dir():
         state_path = state_path / "state.json"
     st = fb.live.load(state_path)
@@ -186,15 +186,29 @@ def live_tool(fb, tool, path, text, state_path, extra, out, err):
             if not hasattr(fb.live, "picks"):
                 raise ValueError("this Forkboard has no picks: reinstall feature-flow")
             picks = fb.live.picks(st)
+            draft, plan = plans
+            plan_picks = {k: v for k, v in picks.items() if k in flow_page.PLAN_KEYS}
+            setup_picks = {k: v for k, v in picks.items() if k not in flow_page.PLAN_KEYS}
             if not picks:
                 out.write("no picks on the page: %s is as it was\n" % path.as_posix())
                 return 0
-            try:
-                new, lines = flow_page.apply_picks(text, picks)
-            except brainstorm_mode.BadMode as e:
-                raise ValueError(str(e))
-            path.write_text(new, encoding="utf-8")
-            out.write("wrote %s into %s\n" % (", ".join("%s: %s" % kv for kv in lines.items()), path.as_posix()))
+            if setup_picks and not (draft or plan):  # once the plan is drafted, Setup is done
+                try:
+                    new, lines = flow_page.apply_picks(text, setup_picks)
+                except brainstorm_mode.BadMode as e:
+                    raise ValueError(str(e))
+                path.write_text(new, encoding="utf-8")
+                out.write("wrote %s into %s\n" % (", ".join("%s: %s" % kv for kv in lines.items()), path.as_posix()))
+            if plan_picks:
+                if plan:
+                    out.write("the plan is accepted, so the Plan step's picks are kept as approved: change its build "
+                              "flow with a re-plan\n")
+                    return 0
+                if not draft:
+                    raise ValueError("there is no draft plan yet for the Plan step's picks")
+                from feature_flow import flow_plan
+                said = flow_plan.apply_picks(draft, plan_picks)
+                out.write("wrote %s into the draft %s\n" % ("; ".join(said), draft.as_posix()))
         else:
             new, dropped = apply(text, fb, st, extra[0], extra[1])
             path.write_text(new, encoding="utf-8")

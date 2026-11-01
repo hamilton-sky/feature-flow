@@ -68,6 +68,7 @@ attempt
 base
 batch
 batch_restore
+check_rounds
 code_files
 code_sha
 deferred
@@ -92,6 +93,7 @@ reply_minors
 review_attempt
 review_notes
 review_pass
+review_rounds
 review_sha
 reviewed
 round

@@ -18,6 +18,7 @@ INTEGRATE = "integrate"
 # plan files a builder (or the conductor) only appends to: two lanes appending is resolved by keeping both
 APPEND_ONLY = ("map.md", "learnings.md", "followups.md", "decisions.md")
 WILD = re.compile(r"[*?\[]")
+MAX_LANES_PLAN = 4  # the most lanes a plan's width asks for (the conductor's MAX_LANES)
 
 
 def branch(feature, num):
@@ -100,6 +101,56 @@ def side_by_side(ticket, running, shared):
 
 def touches_shared(patterns, shared):
     return any(overlap(p, s) for p in patterns for s in shared)
+
+
+def why_apart(ticket, other, shared):
+    """Why ticket cannot run beside other (each (touches or None, level)), in a few words; "" when it can."""
+    mine, level = ticket
+    theirs, their_level = other
+    if not mine:
+        return "it has no Touches: line"
+    if touches_shared(mine, shared):
+        return "it touches a Shared: path"
+    if not theirs:
+        return "the other has no Touches: line"
+    if touches_shared(theirs, shared):
+        return "the other touches a Shared: path"
+    for p in mine:
+        for q in theirs:
+            if overlap(p, q):
+                return "both touch %s" % (p if len(literal(p)) >= len(literal(q)) else q)
+    if 3 in (level, their_level) and same_folder(mine, theirs):
+        folders = sorted({top_folder(p) for p in mine} & {top_folder(p) for p in theirs} - {""})
+        return "level 3 shares %s" % ("the folder %s/" % folders[0] if folders else "a folder")
+    return ""
+
+
+def plan_width(items, shared=(), cap=MAX_LANES_PLAN):
+    """How many of the plan's open tickets can build at once, worked out the way the lanes lease them.
+
+    items: [(number, touches or None, level or 0, [blocking numbers], done)]. Tickets are taken in waves: each
+    wave is the tickets whose blockers are done, leased in number order beside the ones already in the wave when
+    side_by_side allows. Returns (the widest wave, at most cap; [(number, the number it waited for, why)])."""
+    info = {n: (t, lvl) for n, t, lvl, _, _ in items}
+    blocked = {n: [b for b in bl if b in info] for n, _, _, bl, _ in items}
+    done = {n for n, _, _, _, d in items if d}
+    left = sorted(n for n in info if n not in done)
+    widest, waits = 0, []
+    while left:
+        ready = [n for n in left if all(b in done for b in blocked[n])]
+        if not ready:
+            break  # a cycle or a missing blocker: the ticket check reports it
+        wave = []
+        for n in ready:
+            if len(wave) < cap and side_by_side(info[n], [info[m] for m in wave], shared):
+                wave.append(n)
+            elif len(wave) < cap:
+                other = next(m for m in wave if not side_by_side(info[n], [info[m]], shared))
+                waits.append((n, other, why_apart(info[n], info[other], shared)))
+        widest = max(widest, len(wave))
+        done.update(wave)
+        left = [n for n in left if n not in wave]
+    return widest, waits
 
 
 # ---- git in another folder -------------------------------------------------

@@ -72,6 +72,9 @@ class Settings:
         except profiles.UnknownProfile as err:
             raise Stop(str(err))
         filled = profiles.apply(environ, profile)
+        plan_gate = " ".join(tickets.commands_value(root / feature / "commands.md", "Gate").lower().split())
+        if plan_gate not in ("", "on", "off unsafe"):
+            raise Stop("commands.md's Gate: line turns the gate off only as `Gate: off unsafe`, not %s" % plan_gate)
         try:
             mode = brainstorm_mode.read(root, state.STATE_DIR, feature)
             code, web = (brainstorm_mode.level(kind, environ, filled, mode) for kind in brainstorm_mode.KINDS)
@@ -84,7 +87,7 @@ class Settings:
             max_retries=_env_int("FLOW_MAX_RETRIES", 2, environ),
             max_rounds=_env_int("FLOW_MAX_REVIEW_ROUNDS", 3, environ),
             gate_timeout=_env_int("FLOW_GATE_TIMEOUT", 30, environ),
-            gate_on=environ.get("FLOW_GATE", "on") != "off",
+            gate_on=environ.get("FLOW_GATE", "on") != "off" and plan_gate != "off unsafe",
             per_session=_env_int("FLOW_TICKETS_PER_SESSION", 4, environ),
             per_session_given=bool(environ.get("FLOW_TICKETS_PER_SESSION"))
             and "FLOW_TICKETS_PER_SESSION" not in filled,
