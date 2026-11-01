@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="330" viewBox="0 0 960 330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>The guided flow: Setup, Options, Plan and Build on one page, with three stops you can skip</title>
+  <style>
+    .bg { fill: #f6f8fa; stroke: #d0d7de; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .stop { fill: #0f766e; }
+    .build { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; stroke-dasharray: 5 4; }
+    .name { font-size: 18px; font-weight: 600; fill: #1f2328; }
+    .badge { font-size: 12px; font-weight: 600; fill: #ffffff; }
+    .note { font-size: 12.5px; fill: #57606a; }
+    .file { font-size: 12px; fill: #0f766e; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .verb { font-size: 13px; font-weight: 600; fill: #0f766e; }
+    .line { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .page { stroke: #8c959f; stroke-width: 1.2; fill: none; }
+    .pagetext { font-size: 12.5px; fill: #57606a; font-style: italic; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #161b22; stroke: #30363d; }
+      .box, .build { fill: #0d1117; stroke: #8b949e; }
+      .name { fill: #e6edf3; }
+      .note, .pagetext { fill: #8b949e; }
+      .file, .verb { fill: #2dd4bf; }
+      .stop { fill: #0f766e; }
+      .line { stroke: #8b949e; }
+      .page { stroke: #6e7681; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0.5" y="0.5" width="959" height="329" rx="12"/>
+
+  <!-- stop badges -->
+  <rect class="stop" x="40" y="24" width="170" height="24" rx="12"/>
+  <text class="badge" x="125" y="40" text-anchor="middle">stop 1 · the start card</text>
+  <rect class="stop" x="275" y="24" width="170" height="24" rx="12"/>
+  <text class="badge" x="360" y="40" text-anchor="middle">stop 2 · the pick</text>
+  <rect class="stop" x="510" y="24" width="170" height="24" rx="12"/>
+  <text class="badge" x="595" y="40" text-anchor="middle">stop 3 · the plan's yes</text>
+  <text class="note" x="830" y="40" text-anchor="middle">no stop: it runs</text>
+
+  <!-- steps -->
+  <rect class="box" x="40" y="62" width="170" height="56" rx="10"/>
+  <text class="name" x="125" y="96" text-anchor="middle">1  Setup</text>
+  <rect class="box" x="275" y="62" width="170" height="56" rx="10"/>
+  <text class="name" x="360" y="96" text-anchor="middle">2  Options</text>
+  <rect class="box" x="510" y="62" width="170" height="56" rx="10"/>
+  <text class="name" x="595" y="96" text-anchor="middle">3  Plan</text>
+  <rect class="build" x="745" y="62" width="170" height="56" rx="10"/>
+  <text class="name" x="830" y="96" text-anchor="middle">4  Build</text>
+
+  <!-- arrows -->
+  <path class="line" d="M212,90 L272,90" marker-end="url(#arrow)"/>
+  <text class="verb" x="242" y="82" text-anchor="middle">ok</text>
+  <path class="line" d="M447,90 L507,90" marker-end="url(#arrow)"/>
+  <text class="verb" x="477" y="82" text-anchor="middle">pick</text>
+  <path class="line" d="M682,90 L742,90" marker-end="url(#arrow)"/>
+  <text class="verb" x="712" y="82" text-anchor="middle">yes</text>
+
+  <!-- what you pick -->
+  <text class="note" x="40" y="146">the brainstorm type,</text>
+  <text class="note" x="40" y="164">code and web scout levels,</text>
+  <text class="note" x="40" y="182">the helpers</text>
+  <text class="note" x="275" y="146">2 or 3 options, each with</text>
+  <text class="note" x="275" y="164">a diagram, pros, cons, size</text>
+  <text class="note" x="275" y="182">and risks; pick, mix or edit</text>
+  <text class="note" x="510" y="146">tickets and their order, the</text>
+  <text class="note" x="510" y="164">width; profile, lanes, full</text>
+  <text class="note" x="510" y="182">reviews, builder notes, checks</text>
+  <text class="note" x="745" y="146">each ticket's status;</text>
+  <text class="note" x="745" y="164">nothing to pick, the yes</text>
+  <text class="note" x="745" y="182">froze the build setup</text>
+
+  <!-- what gets written -->
+  <text class="file" x="40" y="214">Type: Scouts: Helpers:</text>
+  <text class="file" x="275" y="214">Chosen, then the brief</text>
+  <text class="file" x="510" y="214">Profile: Lanes: Review:</text>
+  <text class="file" x="510" y="230">Builder: Typecheck: …</text>
+  <text class="file" x="745" y="214">the run's log and state</text>
+
+  <!-- one page -->
+  <path class="page" d="M40,256 L40,266 L915,266 L915,256"/>
+  <text class="pagetext" x="477" y="290" text-anchor="middle">one page that grows step by step, published to the same link at every stop</text>
+  <text class="pagetext" x="477" y="310" text-anchor="middle">say "ok" to skip a stop · auto, agent and fast ask nothing · no stop has a timer</text>
+</svg>

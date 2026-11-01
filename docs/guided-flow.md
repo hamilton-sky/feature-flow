@@ -2,6 +2,10 @@
 
 This page walks through the guided flow: the path from an idea to a running build with three stops. The rules the session follows are in [guides/brainstorm.md](../guides/brainstorm.md) and [guides/brief.md](../guides/brief.md); the [README](../README.md#the-guided-flow) has the summary.
 
+![The guided flow: Setup, Options, Plan and Build on one page, with a stop before each of the first three steps](images/guided-flow.svg)
+
+The pictures below are the page for a sample `csv-export` feature, taken at each stop.
+
 Every stop is skippable. Say "ok" and the session takes its pick. With `auto`, `agent` or `fast` it asks nothing and takes the defaults. No stop has a timer, so a stop waits for you.
 
 ## Stop 1: the start card
@@ -29,11 +33,15 @@ Then it shows the setup in one line, for example:
 
 "ok" takes it. To change it, say so ("no skeptic", "code=deep"), or, on the live page, click the Setup step's buttons. The setup is written into the brainstorm's header (`Type:`, `Scouts:`, `Helpers:`), and later the plan's scouts and the build's scouts follow the same levels.
 
+![The page at stop 1: the steps bar with Setup current, and the Setup step's choices for the type, the code scouts and the web scouts](images/guided-setup.png)
+
 To skip the card, name the type yourself: `/feature-flow rate-limits brainstorm map code=deep`.
 
 ## Stop 2: the brainstorm's pick
 
 The session asks its helpers, then shows two or three options on the page, each with a diagram you can edit, its pros, cons, size and risky areas, and the option it recommends. Each idea that came from a helper says so in brackets (`[architect]`, `[ux]`).
+
+![Option B of three on the page at stop 2: its editable diagram (Admin, Export endpoint, Job queue, Export job, Tasks table, File store), and its pros, cons, size and risky areas, with the architect's and the skeptic's ideas tagged](images/guided-options.png)
 
 Pick one, mix two, change one (edit its diagram and copy it back as mermaid), or drop the brainstorm. The same yes approves the brief that follows. [brainstorm.md](brainstorm.md) shows how to use the page.
 
@@ -49,6 +57,8 @@ What the Plan step shows:
 - **The width**: how many tickets can build at once, and why each waiting ticket waits (`04 waits for 03: level 3 shares the folder app/`). The same comes from `python3 scripts/flow-status.py <feature> --width`.
 - **The checks** every ticket must pass: the gate's commands, the floor guard, the footprint, Done when and test first.
 
+![The page at stop 3: the Plan step's ticket graph, the width line (up to 3 at once, 04 waits for 03) and the table of each ticket's level, review and paths](images/guided-plan.png)
+
 What you can change before you say yes:
 
 | Choice | Options | Written to the draft |
@@ -60,6 +70,8 @@ What you can change before you say yes:
 | Add a check | ask in the chat: a type check, a security scan, or a command for one part of the repo | `Typecheck:`, `Security:` or `Check <path>:` in `commands.md` |
 | Relax a check | ask in the chat, and give the reason | `Floor: allow <category>, reason: <why>` in `commands.md`, and the reason in `decisions.md` |
 
+![The Plan step's Build flow: the gate's checks, the floor guard and the footprint, then the choices for the profile, tickets building at once, full reviews and builder notes](images/guided-plan-choices.png)
+
 Turning the gate off is possible only as `Gate: off unsafe`. The session says plainly that the run is then unsafe, and the report and eval say so in their first line.
 
 One yes approves the plan and its build setup together. Both are frozen with the plan, so nothing on the page can change them once the build starts. To change them later, ask for a re-plan.
@@ -67,6 +79,8 @@ One yes approves the plan and its build setup together. Both are frozen with the
 ## The build
 
 The page's Build step shows each ticket's status as the run goes. Nothing on it is a choice. A ticket is built, gated and reviewed as [How a ticket flows](../README.md#how-a-ticket-flows) says, in as many [lanes](../README.md#tickets-side-by-side-lanes) as the plan's yes allowed. `FLOW_LANES` on `start` still overrides the plan's `Lanes:` line.
+
+![The page during the build: Setup, Options and Plan folded into one-line summaries, and the Build step with 3 of 6 tickets done](images/guided-build.png)
 
 After the plan is accepted, the session offers to clean up the brainstorm's spent files: `python3 scripts/flow-status.py <feature> --clean` lists them, and `--clean --yes` deletes them.
 
