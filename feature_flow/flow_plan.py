@@ -11,9 +11,14 @@ it with a re-plan. The Build step shows how far the run is.
 import re
 from pathlib import Path
 
-from feature_flow import gate, lanes, profiles, status, tickets
+from feature_flow import builders, gate, lanes, profiles, status, tickets
 
 PLAN_KEYS = ("profile", "lanes", "full_review")
+BUILDER_KEY = "builder-"  # builder-<NN>: one pick per ticket, its Builder: line
+
+
+def is_plan_key(key):
+    return key in PLAN_KEYS or key.startswith(BUILDER_KEY)
 PROFILE_NOTES = {"fast": "one builder takes small tickets in batches, and one review of the whole feature at the end",
                  "standard": "two reviewers side by side on each ticket, and one review of the whole round",
                  "careful": "the full gate and two reviewers on every ticket, and at most 2 lanes",
@@ -109,6 +114,13 @@ def sections(folder, draft, environ=None):
          "value": plan.full_review(), "options": [{"value": g.lab[t], "label": "%s %s" % (g.lab[t], g.title[t])}
                                                   for t in g.order]},
     ]
+    for t in g.order:
+        hint = builders.suggest(g.touches.get(t))
+        choices.append({"key": BUILDER_KEY + g.lab[t], "label": "Builder notes for %s %s" % (g.lab[t], g.title[t]),
+                        "kind": "one", "value": g.builder.get(t, "none") if g.builder.get(t) in builders.NAMES else "none",
+                        "options": [{"value": "none", "label": "None"}] + [
+                            {"value": n, "label": n.capitalize()} for n in builders.NAMES],
+                        "note": "Its paths suggest %s." % hint if hint else "Its paths suggest none."})
     build_md = checks_text(plan) + ("\n\nAdd a check by asking in the chat: a `Typecheck:`, `Security:` or `Check <path>:` "
                                     "line goes into commands.md. Relaxing one needs a reason, and turning the gate off is "
                                     "marked unsafe." if draft else "")
@@ -192,6 +204,22 @@ def apply_picks(folder, picks):
             if new != old:
                 writes[path] = new
         said.append("Review: full on %s" % (", ".join(wanted) or "no ticket"))
+    labels = {g.lab[t]: t for t in g.order}
+    for key in sorted(k for k in picks if k.startswith(BUILDER_KEY)):
+        label, name = key[len(BUILDER_KEY):], picks[key]
+        if label not in labels:
+            raise ValueError("the plan has no ticket %s for %s" % (label, key))
+        if name not in builders.NAMES + ("none",):
+            raise ValueError("a builder must be none or %s, not %r" % (", ".join(builders.NAMES), name))
+        path = Path(g.path[labels[label]])
+        old = writes.get(path, path.read_text(encoding="utf-8"))
+        new = set_header(old, "Builder", None if name == "none" else name)
+        if new != old:
+            writes[path] = new
+        said.append("Builder: %s on %s" % (name, label))
+    unknown = sorted(k for k in picks if not is_plan_key(k))
+    if unknown:
+        raise ValueError("the Plan step has no pick %s" % ", ".join(unknown))
     for path, text in writes.items():
         path.write_text(text, encoding="utf-8")
     return said

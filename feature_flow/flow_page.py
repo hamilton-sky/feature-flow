@@ -23,6 +23,10 @@ PICK_KEYS = ("type", "code", "web", "consult", "skeptic", "lens")
 PLAN_KEYS = ("profile", "lanes", "full_review")  # flow_plan.PLAN_KEYS
 
 
+def is_plan_key(key):  # flow_plan.is_plan_key: builder-<NN> is the Plan step's too
+    return key in PLAN_KEYS or key.startswith("builder-")
+
+
 def profile(environ=None):
     environ = os.environ if environ is None else environ
     return "careful" if environ.get("FLOW_PROFILE", "").strip().lower() == "careful" else "normal"
@@ -126,7 +130,7 @@ def document(base, text, environ=None, top=None, feature=None):
 def apply_picks(text, picks, environ=None):
     """The brainstorm with the picks written into its header lines, and the lines written. ValueError, and nothing
     written, for a pick it does not know or one past the limits."""
-    picks = {k: v for k, v in picks.items() if k not in PLAN_KEYS}  # the Plan step's, written by flow_plan
+    picks = {k: v for k, v in picks.items() if not is_plan_key(k)}  # the Plan step's, written by flow_plan
     unknown = sorted(set(picks) - set(PICK_KEYS))
     if unknown:
         raise ValueError("the page picked %s, which the brainstorm has no line for" % ", ".join(unknown))

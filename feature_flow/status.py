@@ -11,7 +11,7 @@ import shlex
 import shutil
 import sys
 
-from feature_flow import suggest, tickets
+from feature_flow import builders, suggest, tickets
 
 USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]"
 
@@ -222,6 +222,8 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
             errors.append(lab + ": Test first must be yes or no")
         if t in g.hasreview and g.review[t] not in ("full", "auto"):
             errors.append(lab + ": Review must be full or auto")
+        if t in g.hasbuilder and g.builder[t] not in builders.NAMES:
+            errors.append(lab + ": Builder must be %s" % ", ".join(builders.NAMES))
         if t in g.haslevel and g.level[t] not in ("1", "2", "3"):
             errors.append(lab + ": Level must be 1, 2 or 3")
         if t in g.hastouches and not g.touches[t]:

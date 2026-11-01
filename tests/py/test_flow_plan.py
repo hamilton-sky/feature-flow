@@ -59,7 +59,8 @@ class Draft(unittest.TestCase):
         self.assertIn("Up to 4 tickets can build at once. 04 waits for 03: level 3 shares the folder app/", plan["markdown"])
         self.assertIn('T01["01 model"]', plan["markdown"])
         self.assertIn("- **Gate**: `Test`, `Typecheck`", flow["markdown"])
-        self.assertEqual([c["key"] for c in flow["choices"]], ["profile", "lanes", "full_review"])
+        self.assertEqual([c["key"] for c in flow["choices"]], ["profile", "lanes", "full_review"] +
+                         ["builder-%02d" % n for n in range(1, 7)])
         self.assertEqual(fb.doc.check(doc), doc)
 
     def test_the_plan_yes_picks_go_into_the_draft(self):

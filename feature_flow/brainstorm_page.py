@@ -187,8 +187,8 @@ def live_tool(fb, tool, path, text, state_path, extra, out, err, plans=(None, No
                 raise ValueError("this Forkboard has no picks: reinstall feature-flow")
             picks = fb.live.picks(st)
             draft, plan = plans
-            plan_picks = {k: v for k, v in picks.items() if k in flow_page.PLAN_KEYS}
-            setup_picks = {k: v for k, v in picks.items() if k not in flow_page.PLAN_KEYS}
+            plan_picks = {k: v for k, v in picks.items() if flow_page.is_plan_key(k)}
+            setup_picks = {k: v for k, v in picks.items() if not flow_page.is_plan_key(k)}
             if not picks:
                 out.write("no picks on the page: %s is as it was\n" % path.as_posix())
                 return 0

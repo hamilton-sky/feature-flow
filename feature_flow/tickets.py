@@ -146,6 +146,7 @@ class Graph:
         self.hasblk, self.hastype, self.hastf, self.hastitle = set(), set(), set(), set()
         self.typ, self.tf = {}, {}
         self.hasreview, self.review = set(), {}
+        self.hasbuilder, self.builder = set(), {}
         self.haslevel, self.level = set(), {}
         self.hastouches, self.touches = set(), {}
         self.mentions = {}
@@ -189,6 +190,9 @@ class Graph:
             if head and line.startswith("Review:") and cur not in self.hasreview:
                 self.hasreview.add(cur)
                 self.review[cur] = _first_word(line.lower(), "review:")
+            if head and line.startswith("Builder:") and cur not in self.hasbuilder:
+                self.hasbuilder.add(cur)
+                self.builder[cur] = _first_word(line.lower(), "builder:").strip("`")
             if head and line.startswith("Level:") and cur not in self.haslevel:
                 self.haslevel.add(cur)
                 self.level[cur] = _first_word(line.lower(), "level:")
