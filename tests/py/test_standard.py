@@ -36,7 +36,7 @@ class StandardDrive(unittest.TestCase):
         for folder in ("agents", "guides"):
             shutil.copytree(str(ROOT / folder), str(repo.path(folder)))
         repo.path("plans/f/commands.md").write_text(
-            "# Commands: f\n\nSmoke: `%s -c \"pass\"`\nTest: `%s -c \"%s\"`\n" % (PYTHON, PYTHON, test),
+            "# Commands: f\n\nSmoke: `%s -c \"pass\"`\nTest: `%s -c \"%s\"`\nGate: `each`\n" % (PYTHON, PYTHON, test),
             encoding="utf-8")
         repo.path(T1).write_text(ticket("T1", "—"), encoding="utf-8")
         if two:

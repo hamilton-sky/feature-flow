@@ -13,7 +13,11 @@ from pathlib import Path
 
 from feature_flow import builders, gate, lanes, profiles, status, tickets
 
-PLAN_KEYS = ("profile", "lanes", "full_review")
+PLAN_KEYS = ("profile", "lanes", "gate", "full_review")
+GATE_CHOICES = ("each", "batch 2", "batch 3", "batch 5", "end")
+GATE_NOTES = {"each": "the full gate, Done when and a review after every ticket",
+              "end": "cheap checks after each ticket; the full gate, Done when and one review at the end",
+              "batch": "cheap checks after each ticket; the full gate, Done when and one review every %s tickets"}
 BUILDER_KEY = "builder-"  # builder-<NN>: one pick per ticket, its Builder: line
 
 
@@ -44,6 +48,15 @@ class Plan:
     def width(self):
         return status.width_of(self.graph, str(self.commands))
 
+    def gate(self):
+        """The plan's gate cadence (each, batch N, end), with the profile's default; "off unsafe" when it is off."""
+        from feature_flow.conductor.settings import gate_every
+        try:
+            on, every = gate_every(self.value("Gate"), self.profile())
+        except ValueError:
+            return "each"
+        return "off unsafe" if not on else "each" if every == 1 else "end" if every == 0 else "batch %d" % every
+
     def lanes_cap(self, profile=None):
         return LANE_CAPS.get(profile or self.profile(), lanes.MAX_LANES_PLAN)
 
@@ -65,20 +78,35 @@ def flowchart(plan):
     return "\n".join(lines)
 
 
+def plan_gate_default(profile):
+    from feature_flow.conductor.settings import GATE_DEFAULTS
+    return GATE_DEFAULTS.get(profile, "each")
+
+
+def gate_note(cadence):
+    if cadence.startswith("batch "):
+        return GATE_NOTES["batch"] % cadence.split()[1]
+    return GATE_NOTES.get(cadence, "")
+
+
 def checks_text(plan):
     """The checks every ticket must pass, as markdown: the gate's commands, and what the plan relaxed or turned off."""
     from feature_flow import floorguard
     gate_cmds = [k for k in gate.KEYS + ("Quick",) if plan.value(k)] + ["Check %s" % p for p, _ in
                                                                       gate.path_checks(plan.commands)]
-    off = " ".join(plan.value("Gate").lower().split()) == "off unsafe"
+    cadence = plan.gate()
+    off = cadence == "off unsafe"
     cats, why, problem = floorguard.plan_allow(plan.commands.read_text(encoding="utf-8") if plan.commands.is_file() else "")
     out = ["- **Gate**: %s" % ("**off (unsafe)**: no command runs after a build" if off else
                                 ", ".join("`%s`" % c for c in gate_cmds) or "no commands")]
+    if not off:
+        out.append("- **When**: `Gate: %s`, %s" % (cadence, gate_note(cadence)))
     out.append("- **Floor guard**: %s" % (problem if problem else "relaxed for %s, because %s" % (cats, why) if cats
                                           else "skipped or deleted tests, silenced checks and edited config fail"))
     out.append("- **Footprint**: a build may change only its ticket's `Touches:` paths")
     first = [plan.graph.lab[t] for t in plan.graph.order if plan.graph.tf.get(t) == "yes"]
-    out.append("- **Done when**: each ticket's check block%s" % ("" if not off else ", off with the gate"))
+    out.append("- **Done when**: each ticket's check block%s" % (
+        ", off with the gate" if off else "" if cadence == "each" else ", run at the checkpoint"))
     out.append("- **Test first**: %s" % ("tickets %s prove a failing test first" % ", ".join(first) if first else "no ticket asks for it"))
     return "\n".join(out)
 
@@ -110,6 +138,15 @@ def sections(folder, draft, environ=None):
         {"key": "lanes", "label": "Tickets building at once", "kind": "one",
          "value": lanes_value if lanes_value in ("auto", "1", "2", "3", "4") else "1", "options": lanes_options,
          "note": "Auto takes the plan's width, at most %d with this profile. FLOW_LANES still overrides it." % plan.lanes_cap()},
+    ]
+    cadence = plan.gate()
+    if cadence != "off unsafe":
+        choices.append({"key": "gate", "label": "When the full gate and review run", "kind": "one",
+                        "value": cadence, "options": [{"value": v, "label": v.capitalize(), "note": gate_note(v)} for v in
+                                                      GATE_CHOICES + (() if cadence in GATE_CHOICES else (cadence,))],
+                        "note": "The %s profile's default is %s. A level 3 ticket keeps its own review either way."
+                                % (profile, plan_gate_default(profile))})
+    choices += [
         {"key": "full_review", "label": "Tickets with a full review (spec, then quality)", "kind": "some",
          "value": plan.full_review(), "options": [{"value": g.lab[t], "label": "%s %s" % (g.lab[t], g.title[t])}
                                                   for t in g.order]},
@@ -188,6 +225,25 @@ def apply_picks(folder, picks):
             raise ValueError("the plan can build only %d ticket(s) at once, so %s lanes would wait" % (wide, value))
         text = set_header(text, "Lanes", "`%s`" % value)
         said.append("Lanes: %s" % value)
+    if "gate" in picks:
+        from feature_flow.conductor.settings import gate_every
+        value = " ".join(str(picks["gate"]).lower().split())
+        if plan.gate() == "off unsafe":
+            raise ValueError("the plan turns the gate off (`Gate: off unsafe`): turn it on by asking in the chat first")
+        if value == "off unsafe":
+            raise ValueError("the gate is turned off only by asking in the chat, never from the card")
+        try:
+            gate_every(value, plan.profile())
+        except ValueError as err:
+            raise ValueError(str(err).replace("commands.md's Gate: line", "the gate"))
+        old_profile, new_profile = plan.profile(), str(picks.get("profile", plan.profile())).lower()
+        shown = not plan.value("Gate") and value == plan_gate_default(old_profile)  # the card's default, not a pick
+        if value == plan_gate_default(new_profile) or (shown and new_profile != old_profile):
+            text = set_header(text, "Gate", None)  # the profile's default: it follows the profile
+            said.append("Gate: %s (the %s default)" % (plan_gate_default(new_profile), new_profile))
+        else:
+            text = set_header(text, "Gate", "`%s`" % value)
+            said.append("Gate: %s" % value)
     writes[plan.commands] = text
     if "full_review" in picks:
         wanted = picks["full_review"]

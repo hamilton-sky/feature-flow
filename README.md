@@ -24,7 +24,7 @@ One skill, 12 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-t
 [docs/releases.md](docs/releases.md) lists what each release added.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets) · [See the graph](#see-the-graph)
-- [The guided flow](#the-guided-flow) · [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [codeintel](#codeintel-optional) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
+- [The guided flow](#the-guided-flow) · [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [codeintel](#codeintel-optional) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Checkpoints](#when-the-gate-runs-checkpoints) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
 - [Long features and handoff](#long-features-and-handoff) · [Commands and settings](#commands-and-settings) · [What is tested](#what-is-tested) · [Limits](#limits) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
@@ -151,7 +151,7 @@ The Claude Code skill is `skills/feature-flow/`. The Codex skill is written by h
 
 **What the script checks and what it trusts.** The conductor verifies the build from the repo: the ticket file must say `resolved`, the tree must be clean and committed, and it runs the gate and the floor guard itself. It also runs the `check` block under each ticket's Done when and compares the exit code and printed text (a check with a `needs <what>` line, such as `needs network`, that fails is deferred instead: the reviewer is told it is not met, and it goes to `followups.md`), and for a `Test first: yes` ticket it proves the red test commit itself: it checks out the test-only commit, runs Test, and requires it to fail before the code. A failure of either goes back to the builder before any reviewer is started. It also checks that the reviewer changed no tracked file and made no commit (an edit is put back and the review given to a fresh reviewer, see Read only roles below). The review verdicts are different: each reviewer's reply is relayed by the session, which saves it to a file and hands it to `flow.py verdict`. The script reads `REVIEW: PASS` or `REVIEW: FAIL` from that reply; it cannot prove the session passed it on unedited. A ticket with a `Level:` line moves on after one PASS verdict. A ticket with no level (a plan from before 0.9.0) needs two, a spec review and then a quality review, unless the conductor judged it small. The size is measured from the repo (`git diff` against the commit the ticket started from), never taken from the builder.
 
-**The gate: full or quick.** The gate runs Build, Test and Lint after every ticket. With an optional `Quick:` line in `commands.md` (a faster subset of `Test`), it runs Build, Quick and Lint after the tickets in the middle of a plan, and the full Build, Test and Lint after the last ticket, before a handoff, and under `FLOW_GATE_FULL=1`. A plan without `Quick:` runs the full gate every time. The test-first proof still runs the full `Test` command.
+**The gate: full or quick.** The gate runs Build, Test and Lint after every ticket. With an optional `Quick:` line in `commands.md` (a faster subset of `Test`), it runs Build, Quick and Lint after the tickets in the middle of a plan, and the full Build, Test and Lint after the last ticket, before a handoff, and under `FLOW_GATE_FULL=1`. A plan without `Quick:` runs the full gate every time. The test-first proof still runs the full `Test` command. A `Gate: batch N` or `Gate: end` line moves the full gate to checkpoints instead (see [When the gate runs](#when-the-gate-runs-checkpoints)).
 
 **Ticket levels.** The planner writes `Level: 1`, `2` or `3` in each ticket, the plan reviewer checks it against written rules, and you approve it with the plan.
 
@@ -222,6 +222,7 @@ The lines `commands.md` can hold ([template](guides/templates/commands.md)); del
 | `Sensitive:` | no | paths that make any ticket touching them level 3 |
 | `Shared:`, `Setup:` | no | for [lanes](#tickets-side-by-side-lanes): paths that keep a ticket alone, and what a fresh worktree needs |
 | `Profile:` | no | `careful`, `standard`, `normal` or `fast` for this plan ([profiles](#profiles)); a new plan's template says `standard` |
+| `Gate:` | no | when the full gate and the review run: `each`, `batch N` or `end` ([checkpoints](#when-the-gate-runs-checkpoints)); without it the profile picks; `off unsafe` turns the gate off |
 
 One markdown file per ticket in `plans/<feature>/tasks/NN-slug.md`:
 
@@ -359,6 +360,23 @@ A builder writes its own tests, so they tend to check what it built rather than 
 - **Mid-run.** `fast on` and `fast off` (through the runner, like `next`) switch it between phases. Asking the session to go faster runs `fast on`. Asking again while fast is on offers the re-plan below. Tickets already passed without a review still get the feature review, whichever way it is switched.
 - **The cost.** A mistake in an early ticket is found at the end, when later tickets may have built on it. Use it for small or low-risk features. `reset` keeps the list of deferred tickets, so they still get the feature review.
 
+## When the gate runs (checkpoints)
+
+A `Gate:` line in `commands.md` says when the expensive checks run. The cheap ones are scripts that take seconds, so they still run after every ticket and catch a cheating build at once. The full gate and the reviewer are what cost time and money, so they can wait for a few tickets.
+
+| `Gate:` | After each ticket | At a checkpoint |
+|---|---|---|
+| `each` | the gate (Quick mid-plan), the floor guard, the footprint, Done when, test first, and the ticket's own review | nothing: there is none |
+| `batch N` | `Quick` with Build and Lint (nothing when the plan has no `Quick:`), the floor guard, the footprint and test first; no review below level 3 | every N tickets and at the end: the full gate at HEAD, each ticket's Done when checks, then one reviewer reads the tickets' combined diff |
+| `end` | as `batch N` | once, when every ticket is resolved |
+
+The defaults come from the profile: `fast` is `end`, `standard` is `batch 3`, `careful` and `normal` are `each`. The plan-yes card shows the choice, and a line in `commands.md` overrides the profile. `Gate: off unsafe` and `FLOW_GATE=off` still turn the gate off, and then every ticket keeps its own review. A level 3 or `Sensitive:` ticket, or one with `Review: full`, keeps its own reviews at any setting.
+
+- **A failure points at one ticket.** A failing Done when check reopens its own ticket. A red full gate is traced to the first ticket at whose last commit the gate fails, by halving the list of tickets since the last checkpoint, so 8 tickets take at most 3 more gate runs. Only that ticket is reopened, with the gate's output in it, and built again on top of the code as it is now; the others wait for the next checkpoint (`CHECKPOINT-FAIL` in the log). After `FLOW_MAX_REVIEW_ROUNDS` failed checkpoints in a row the run stops for you.
+- **The review.** A passing checkpoint (`CHECKPOINT-PASS`) hands out the feature review (`REVIEW <plan folder> all <sha>`) for the tickets since the last checkpoint. Its reviewer is told the full gate and the Done when checks just passed at HEAD, and, before the end, that tickets not built yet are not part of it. A failed review becomes a fix ticket as in [the fast path](#the-fast-path), and the next checkpoint waits for that fix.
+- **With lanes**, no new ticket is leased once a checkpoint is due: the busy lanes finish and merge, then the checkpoint runs. A merge runs `Quick` when the plan has one, and leaves the full gate to the checkpoint. **With fast batches**, the batch's own gate at the end runs only `Quick`.
+- **The cost.** Between checkpoints a ticket can build on a mistake in the one before it that only the full Test would catch. That is why `batch 3` is the everyday default and `end` is for small, low-risk features.
+
 ## A time budget
 
 `FLOW_BUDGET=<minutes>` on `start` gives the feature a budget of active minutes. The conductor counts the time between its steps, at most an hour for one step, so a session left open overnight does not eat the budget, and the time between two sessions does not count. `budget` (through the runner) reports it, and `budget <minutes>`, `budget +<minutes>` or `budget off` change it between phases.
@@ -388,11 +406,11 @@ Most settings below never need touching. One word picks a sensible set:
 | Profile | Sets | For |
 |---|---|---|
 | `careful` | `FLOW_GATE_FULL=1`, `FLOW_REVIEWERS=2`, `FLOW_ROUND_REVIEW=on`, `FLOW_BASE_GATE=on`, `FLOW_FAST=0`, `FLOW_SMALL_LINES=0`, `FLOW_TICKETS_PER_SESSION=3` | code where a wrong "done" is expensive: the full gate and an own review for every ticket |
-| `standard` | `FLOW_REVIEWERS=2`, `FLOW_ROUND_REVIEW=on`, `FLOW_BASE_GATE=on` | everyday features, and what a new plan's `commands.md` names: slower than `fast`, faster than `careful` |
+| `standard` | `FLOW_REVIEWERS=2`, `FLOW_ROUND_REVIEW=on`, `FLOW_BASE_GATE=on`, and `Gate: batch 3` unless the plan says otherwise | everyday features, and what a new plan's `commands.md` names: slower than `fast`, faster than `careful` |
 | `normal` | nothing: the defaults | plans written before 0.30.0 |
-| `fast` | `FLOW_FAST=1`, `FLOW_SCOUTS=off`, `FLOW_TICKETS_PER_SESSION=6` | small, low-risk features: one feature review at the end |
+| `fast` | `FLOW_FAST=1`, `FLOW_SCOUTS=off`, `FLOW_TICKETS_PER_SESSION=6`, and `Gate: end` unless the plan says otherwise | small, low-risk features: one feature review at the end |
 
-**What `standard` does.** The gate runs once at the base before the first ticket, so a red base stops the run before a builder is blamed for it. Where one review would run, a quality reviewer and a ticket reviewer read the ticket side by side, both read only, in one subagent call each (`REVIEW <ticket> ... pair`); the session sends both replies to `verdict` and the conductor keeps the worse. On a level 1 or 2 ticket only a blocker sends the ticket back to its own builder; smaller findings go to `followups.md`, which later tickets' builders read. With an `Acceptance:` line the tester's tests run after each ticket and their output goes to the reviewers. Once every ticket is done, one more reviewer reads the whole round's diff against the plan. Level 3 and `Sensitive:` tickets keep their full own reviews.
+**What `standard` does.** The gate runs once at the base before the first ticket, so a red base stops the run before a builder is blamed for it. Where one review would run, a quality reviewer and a ticket reviewer read the ticket side by side, both read only, in one subagent call each (`REVIEW <ticket> ... pair`); the session sends both replies to `verdict` and the conductor keeps the worse. On a level 1 or 2 ticket only a blocker sends the ticket back to its own builder; smaller findings go to `followups.md`, which later tickets' builders read. With an `Acceptance:` line the tester's tests run after each ticket and their output goes to the reviewers. Once every ticket is done, one more reviewer reads the whole round's diff against the plan. Level 3 and `Sensitive:` tickets keep their full own reviews. Since 0.34.0 `standard` also checkpoints the gate every 3 tickets (`Gate: batch 3`): the pair of reviewers then reads only the tickets that keep their own review, and one reviewer reads each checkpoint's tickets together. Write `Gate: each` in `commands.md` for a review of every ticket.
 
 Pick one with `/feature-flow <feature> careful` (or `standard`, `fast`), `FLOW_PROFILE=<name>` on `start`, or a `Profile:` line in the plan's `commands.md`, approved with the plan. A profile fills only settings you did not set: `FLOW_PROFILE=fast FLOW_SCOUTS=on` keeps the scouts. The log records `PROFILE-<NAME>` at the start. A level 3 or `Sensitive:` ticket keeps its own reviews in every profile.
 

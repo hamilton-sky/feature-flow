@@ -18,6 +18,31 @@ from feature_flow.conductor.errors import Stop
 
 MAX_LANES = 4
 MAX_BATCH = 5  # most tickets one builder takes at once in fast mode
+EACH, END = 1, 0  # gate_every: the full gate and a review after each ticket, or one checkpoint at the end
+GATE_DEFAULTS = {"fast": "end", "standard": "batch 3", "careful": "each"}  # a profile's Gate: when the plan names none
+MAX_GATE_BATCH = 20
+
+
+def gate_every(value, profile):
+    """commands.md's Gate: line as (gate on, gate_every): gate_every is EACH (1), N for `batch N`, or END (0).
+    "" and `on` take the profile's default (each without one); `off unsafe` turns the gate off. A ValueError
+    names the forms for any other value."""
+    value = " ".join(value.lower().split())
+    if value == "off unsafe":
+        return False, EACH
+    if value in ("", "on"):
+        value = GATE_DEFAULTS.get(profile, "each")
+    if value == "each":
+        return True, EACH
+    if value == "end":
+        return True, END
+    if value.startswith("off"):
+        raise ValueError("commands.md's Gate: line turns the gate off only as `Gate: off unsafe`, not %s" % value)
+    words = value.split()
+    if len(words) == 2 and words[0] == "batch" and words[1].isdigit() and 1 <= int(words[1]) <= MAX_GATE_BATCH:
+        return True, int(words[1])
+    raise ValueError("commands.md's Gate: line must be each, batch N (N from 1 to %d), end, or off unsafe to turn "
+                     "the gate off, not %s" % (MAX_GATE_BATCH, value))
 
 
 def _env_int(name, default, environ=None):
@@ -45,6 +70,7 @@ class Settings:
     max_rounds: int
     gate_timeout: int
     gate_on: bool
+    gate_every: int  # EACH: checks and a review after each ticket; N: a checkpoint every N tickets; END: at the end
     per_session: int  # FLOW_TICKETS_PER_SESSION as read; session_limit applies the agent-driver rule
     per_session_given: bool  # FLOW_TICKETS_PER_SESSION was set, and not by the profile
     small_files: int
@@ -72,9 +98,10 @@ class Settings:
         except profiles.UnknownProfile as err:
             raise Stop(str(err))
         filled = profiles.apply(environ, profile)
-        plan_gate = " ".join(tickets.commands_value(root / feature / "commands.md", "Gate").lower().split())
-        if plan_gate not in ("", "on", "off unsafe"):
-            raise Stop("commands.md's Gate: line turns the gate off only as `Gate: off unsafe`, not %s" % plan_gate)
+        try:
+            plan_gate, every = gate_every(tickets.commands_value(root / feature / "commands.md", "Gate"), profile)
+        except ValueError as err:
+            raise Stop(str(err))
         try:
             mode = brainstorm_mode.read(root, state.STATE_DIR, feature)
             code, web = (brainstorm_mode.level(kind, environ, filled, mode) for kind in brainstorm_mode.KINDS)
@@ -87,7 +114,8 @@ class Settings:
             max_retries=_env_int("FLOW_MAX_RETRIES", 2, environ),
             max_rounds=_env_int("FLOW_MAX_REVIEW_ROUNDS", 3, environ),
             gate_timeout=_env_int("FLOW_GATE_TIMEOUT", 30, environ),
-            gate_on=environ.get("FLOW_GATE", "on") != "off" and plan_gate != "off unsafe",
+            gate_on=environ.get("FLOW_GATE", "on") != "off" and plan_gate,
+            gate_every=every,
             per_session=_env_int("FLOW_TICKETS_PER_SESSION", 4, environ),
             per_session_given=bool(environ.get("FLOW_TICKETS_PER_SESSION"))
             and "FLOW_TICKETS_PER_SESSION" not in filled,

@@ -44,10 +44,15 @@ class Build(Phase):
         if source:
             return Outcome(ws.send_back(source, report, kind="check"))
         level = ws.measure_level()
+        if ws.checkpointing() and level >= 3:  # it keeps its own review, so the full gate and Done when run now too
+            source, report, own = buildchecks.run(ws, [buildchecks.Gate(quick=False), buildchecks.DoneWhen()])
+            if source:
+                return Outcome(ws.send_back(source, report, kind="check"))
+            notes += own
         decision, review_pass, more, events = review.after_checks(
             level, ws.fast(), ws.gate_on, ws.checks_ran, ws.small_note() if level == 0 else "",
             proof.review_mode(ws.ticket_at_base()), ws.get("spec_ok"), ws.num("round"), ws.get("level_note"),
-            pair=ws.reviewers == 2 and not ws.lane)
+            pair=ws.reviewers == 2 and not ws.lane, checkpoint=ws.checkpointing())
         if decision == "defer":
             return Outcome(ws.defer_review(), True)
         ws.st["review_pass"] = review_pass

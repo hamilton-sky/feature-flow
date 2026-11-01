@@ -2,10 +2,11 @@
 the feature branch, in the integration worktree, before a new ticket is leased."""
 
 from feature_flow import checks, gate, git, lanes, state, tickets
-from feature_flow.conductor import guards
+from feature_flow.conductor import checkpoint, guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases import REGISTRY
 from feature_flow.conductor.phases.build import Build
+from feature_flow.conductor.phases.final import Final
 from feature_flow.conductor.phases.merge import Merge
 from feature_flow.conductor.phases.review import Review
 from feature_flow.conductor.phases.test import Test
@@ -105,6 +106,11 @@ class LaneScheduler(SerialScheduler):
             raise Stop("the main worktree is not clean, and only merges may change it while lanes run: %s"
                        % " ".join(dirty[:5]))
         busy = self.busy_lanes()
+        if checkpoint.due(c):  # every N tickets: no new lease until the busy lanes are merged, then the checkpoint
+            if busy:
+                return c.emit("WAIT %s" % ",".join(map(str, busy)))
+            if checkpoint.run(c) == checkpoint.PASSED:
+                return Final.hand_out(c)
         if not busy and self.end.tests_due():
             guards.before_ticket(c, busy, only=("base",))
             return Test.hand_out(c)
@@ -172,6 +178,11 @@ class LaneScheduler(SerialScheduler):
                            % (name, path, cmd, " ".join(gate.tail(result.out, 5).split())[:300]))
         marker.write_text("set up\n", encoding="utf-8")
 
+    def merge_gate(self, ws):
+        """True when a merge is gated: with the gate on, and at a checkpointed gate only when there is a Quick
+        command to run (the full gate is the checkpoint's)."""
+        return self.c.gate_on and (ws.has_quick() or not self.c.checkpointing())
+
     def integrate(self, k):
         """Merge lane k's passed ticket into the feature head in the integration worktree, gate the merge, and
         fast-forward the feature branch to it. A conflict or a red gate rebuilds the ticket on the new head."""
@@ -187,8 +198,8 @@ class LaneScheduler(SerialScheduler):
             problem, report = self.merge_in_place(ws, name, head, "merge(%s): %s %s" % (
                 c.feature, num, tickets.title(ws.at(path)) or tickets.name(path)))
             merged = git.head(cwd=ws.folder)
-            if problem is None and c.gate_on:
-                quick = ws.gate_quick()
+            if problem is None and self.merge_gate(ws):
+                quick = True if c.checkpointing() else ws.gate_quick()
                 result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=ws.folder)
                 ws.log("MERGE-GATE-%s-%s" % ("QUICK" if quick else "FULL", "PASS" if result.ok else "FAIL"))
                 if not result.ok:
@@ -245,8 +256,8 @@ class LaneScheduler(SerialScheduler):
                                                   "review" % (c.feature, ws.get("num")))
             if problem is None:
                 lanes.git_in(ws.folder, "checkout", "-q", "-B", name, "HEAD")
-                if c.gate_on:
-                    quick = ws.gate_quick()
+                if self.merge_gate(ws):
+                    quick = True if c.checkpointing() else ws.gate_quick()
                     result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=ws.folder)
                     ws.log("REFRESH-GATE-%s-%s" % ("QUICK" if quick else "FULL", "PASS" if result.ok else "FAIL"))
                     if not result.ok:

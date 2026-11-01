@@ -4,7 +4,7 @@ Each check's `run(c)` takes the conductor (for its paths, settings, state and lo
 (failure source, report, notes): source is None when it passes, and the notes are for the reviewer.
 `run` stops at the first failure. `pipeline` picks the checks of a build as the conductor always has:
 the gate only with the gate on (a batch leaves it out: its gate runs once at HEAD), Done when and test
-first only with the gate on.
+first only with the gate on. A checkpointed gate leaves the full gate and Done when to the checkpoint.
 """
 
 import re
@@ -25,8 +25,11 @@ def _at(c, path):
 
 
 class Gate:
+    def __init__(self, quick=None):
+        self.quick = quick  # None: as c.gate_quick() says; True or False: always that
+
     def run(self, c):
-        quick = c.gate_quick()
+        quick = c.gate_quick() if self.quick is None else self.quick
         changed = git.diff_names(c.get("base"), "HEAD", c.plan.as_posix(), cwd=_folder(c)) if c.get("base") else None
         result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick, cwd=_folder(c), changed=changed)
         c.log("GATE-QUICK" if quick else "GATE-FULL")
@@ -167,7 +170,13 @@ class TestFirst:
 
 
 def pipeline(c, gate=True):
-    """The checks of a build, in order. gate=False leaves the gate out, as a batch does."""
+    """The checks of a build, in order. gate=False leaves the gate out, as a batch does. At a checkpointed gate
+    (`Gate: batch N` or `end`) a ticket gets only the cheap ones: the gate with Quick in the place of Test (none
+    without a Quick command), the floor guard, the footprint and test first. The full gate and the Done when checks
+    run at the checkpoint."""
+    if c.checkpointing():
+        found = [Gate(quick=True)] if gate and c.has_quick() else []
+        return found + [FloorGuard(), Footprint(), TestFirst()]
     found = [Gate()] if gate and c.gate_on else []
     found += [FloorGuard(), Footprint()]
     if c.gate_on:

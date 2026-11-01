@@ -20,7 +20,7 @@ HELPER_LABELS = {"architect": "Architect", "designer": "Designer", "po": "Produc
                  "artistic": "Artistic", "ux": "UX", "security": "Security"}
 CONSULT = ("architect", "designer", "po")
 PICK_KEYS = ("type", "code", "web", "consult", "skeptic", "lens")
-PLAN_KEYS = ("profile", "lanes", "full_review")  # flow_plan.PLAN_KEYS
+PLAN_KEYS = ("profile", "lanes", "gate", "full_review")  # flow_plan.PLAN_KEYS
 
 
 def is_plan_key(key):  # flow_plan.is_plan_key: builder-<NN> is the Plan step's too

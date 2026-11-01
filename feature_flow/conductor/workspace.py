@@ -102,6 +102,17 @@ class Workspace:
                 total = int(word[len("total="):])
         return total * 3 * self.max_retries * (self.max_rounds + 1) + 1
 
+    def checkpointing(self):
+        """True when the plan's `Gate:` is `batch N` or `end` with the gate on: each ticket gets only the cheap
+        checks (Quick, the floor guard, the footprint, test first), and the full gate, the Done when checks and one
+        review of the tickets since the last checkpoint run every N tickets (conductor.checkpoint)."""
+        return bool(self.gate_on) and self.settings.gate_every != 1
+
+    def has_quick(self):
+        """True when commands.md has a usable Quick command."""
+        value = tickets.commands_value(self.at(self.commands), "Quick")
+        return bool(value) and not value.startswith("<")
+
     def gate_quick(self):
         """True when this ticket's gate may run Quick in place of Test."""
         if os.environ.get("FLOW_GATE_FULL") == "1":

@@ -4,6 +4,7 @@ feature review for deferred tickets, and the DONE line."""
 import os
 
 from feature_flow import checks, gate, git, lanes, proof, tickets
+from feature_flow.conductor import checkpoint
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases.final import Final
 from feature_flow.conductor.phases.test import Test
@@ -112,10 +113,12 @@ class EndOfRun:
     # ---- no ticket left -------------------------------------------------
 
     def finish(self):
-        """Every ticket is resolved (and, with lanes, merged): the acceptance run, then the feature review for the
-        deferred tickets, then DONE. Serial runs check tests due before they ask for the next ticket, lane runs
+        """Every ticket is resolved (and, with lanes, merged): the last checkpoint of a checkpointed gate, the
+        acceptance run, then the feature review for the deferred tickets, then DONE. Serial runs check tests due before they ask for the next ticket, lane runs
         only when no lane is busy, so the tester is not part of this step."""
         c = self.c
+        if checkpoint.due(c, at_end=True) and checkpoint.run(c) == checkpoint.REOPENED:
+            return self.scheduler.resume()
         line = self.check_acceptance()
         if line is not None:
             return line

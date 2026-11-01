@@ -65,12 +65,15 @@ What you can change before you say yes:
 |---|---|---|
 | Profile | `fast`, `standard`, `careful`, `normal` | `Profile:` in `commands.md` |
 | Tickets building at once | Auto (the plan's width, at most 4, at most 2 with `careful`, 1 with `fast`), or 1 to 4 | `Lanes:` in `commands.md` |
+| When the full gate and review run | `each`, `batch 2`, `batch 3`, `batch 5` or `end`; the profile's default is shown (`fast` end, `standard` batch 3, `careful` each) | `Gate:` in `commands.md`, left out when it is the profile's default |
 | Full review | any tickets, which then get a spec review and a quality review | `Review: full` in the ticket |
 | Builder notes | none, `frontend`, `backend` or `docs` per ticket; the page shows what its paths suggest | `Builder:` in the ticket |
 | Add a check | ask in the chat: a type check, a security scan, or a command for one part of the repo | `Typecheck:`, `Security:` or `Check <path>:` in `commands.md` |
 | Relax a check | ask in the chat, and give the reason | `Floor: allow <category>, reason: <why>` in `commands.md`, and the reason in `decisions.md` |
 
 ![The Plan step's Build flow: the gate's checks, the floor guard and the footprint, then the choices for the profile, tickets building at once, full reviews and builder notes](images/guided-plan-choices.png)
+
+**When the gate runs.** With `each`, every ticket gets the full gate, its Done when checks and its own review. With `batch N` or `end`, each ticket gets only the cheap checks (Quick, the floor guard, the footprint, test first), and every N tickets (or once at the end) the conductor runs the full gate and the Done when checks at HEAD, then one reviewer reads those tickets together. A failure is put on the one ticket that caused it, which alone is built again. The Build flow section says which one the plan uses (`When: Gate: batch 3, ...`). See [When the gate runs](../README.md#when-the-gate-runs-checkpoints).
 
 Turning the gate off is possible only as `Gate: off unsafe`. The session says plainly that the run is then unsafe, and the report and eval say so in their first line.
 

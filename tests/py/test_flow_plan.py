@@ -59,7 +59,7 @@ class Draft(unittest.TestCase):
         self.assertIn("Up to 4 tickets can build at once. 04 waits for 03: level 3 shares the folder app/", plan["markdown"])
         self.assertIn('T01["01 model"]', plan["markdown"])
         self.assertIn("- **Gate**: `Test`, `Typecheck`", flow["markdown"])
-        self.assertEqual([c["key"] for c in flow["choices"]], ["profile", "lanes", "full_review"] +
+        self.assertEqual([c["key"] for c in flow["choices"]], ["profile", "lanes", "gate", "full_review"] +
                          ["builder-%02d" % n for n in range(1, 7)])
         self.assertEqual(fb.doc.check(doc), doc)
 
@@ -75,6 +75,24 @@ class Draft(unittest.TestCase):
                             ({"full_review": ["99"]}, "a list of the plan's tickets")):
             with self.assertRaises(ValueError, msg=says) as caught:
                 flow_plan.apply_picks(self.draft, picks)
+            self.assertIn(says, str(caught.exception))
+
+    def test_the_gate_pick_shows_the_profile_default_and_goes_into_the_draft(self):
+        flow = [s for s in self.doc()["sections"] if s.get("step") == "Plan"][1]
+        gate = next(c for c in flow["choices"] if c["key"] == "gate")
+        self.assertEqual(gate["value"], "batch 3")  # the standard profile's default
+        self.assertEqual([o["value"] for o in gate["options"]], ["each", "batch 2", "batch 3", "batch 5", "end"])
+        self.assertIn("- **When**: `Gate: batch 3`, cheap checks after each ticket", flow["markdown"])
+        self.assertEqual(flow_plan.apply_picks(self.draft, {"gate": "end"}), ["Gate: end"])
+        self.assertIn("Gate: `end`", (self.draft / "commands.md").read_text(encoding="utf-8"))
+        # the shown default follows a new profile; an explicit pick of a profile's default is dropped
+        self.assertEqual(flow_plan.apply_picks(self.draft, {"gate": "batch 3"}), ["Gate: batch 3 (the standard default)"])
+        self.assertNotIn("Gate:", (self.draft / "commands.md").read_text(encoding="utf-8"))
+        self.assertEqual(flow_plan.apply_picks(self.draft, {"profile": "fast", "gate": "batch 3"}),
+                         ["Profile: fast", "Gate: end (the fast default)"])
+        for value, says in (("batch 0", "batch N (N from 1 to 20)"), ("off unsafe", "only by asking in the chat")):
+            with self.assertRaises(ValueError) as caught:
+                flow_plan.apply_picks(self.draft, {"gate": value})
             self.assertIn(says, str(caught.exception))
 
     def test_lanes_past_the_width_are_refused(self):

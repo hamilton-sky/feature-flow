@@ -25,12 +25,13 @@ def followups_only(findings):
     return bool(severities) and "blocker" not in severities
 
 
-def after_checks(level, fast, gate_on, checks_ran, small_note, review_mode, spec_ok, round_no, level_note, pair=False):
-    """(decision, review_pass, notes, events) for a build whose checks passed. decision is "defer" (fast mode below
-    level 3 with the gate on: review it at the end) or "review"; notes are the reviewer notes to add after the
+def after_checks(level, fast, gate_on, checks_ran, small_note, review_mode, spec_ok, round_no, level_note, pair=False,
+                 checkpoint=False):
+    """(decision, review_pass, notes, events) for a build whose checks passed. decision is "defer" (fast mode or a
+    checkpointed gate, below level 3 with the gate on: review it at the end or at the next checkpoint) or "review"; notes are the reviewer notes to add after the
     checks' own, in order; events the log events (REVIEW-SMALL, REVIEW-SINGLE, REVIEW-PAIR). With pair, a level 1 to
     3 ticket's one review becomes two reviewers side by side: quality, and the ticket's spec checklist."""
-    if fast and level < 3 and gate_on:  # with the gate off, nothing but the review checks it
+    if (fast or checkpoint) and level < 3 and gate_on:  # with the gate off, nothing but the review checks it
         return "defer", "", [], []
     review_pass = "spec"
     notes = []
