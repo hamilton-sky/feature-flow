@@ -402,15 +402,7 @@ The long `python3 -I -c ...` line the skill uses to call the conductor stays as 
 
 The guided flow is the path from an idea to a running build with as few questions as possible. It stops **three times**, and you can skip each stop by saying "ok" (or let `auto`, `agent` or `fast` take the defaults and ask nothing). There is no timer: a stop waits for you.
 
-```
- stop 1: start card        stop 2: brainstorm pick        stop 3: plan yes
- ┌─────────┐   ok   ┌─────────┐   pick   ┌─────────┐   yes   ┌─────────┐
- │  Setup  │ ─────► │ Options │ ───────► │  Plan   │ ──────► │  Build  │
- └─────────┘        └─────────┘          └─────────┘         └─────────┘
-  type, scouts,      2-3 options with      tickets, order,      lanes, gate,
-  helpers            diagrams, a pick      width, checks        reviews
- └──────────────────── one page, published to the same link ─────────────┘
-```
+![The guided flow: Setup, Options, Plan and Build on one page. Stop 1, the start card, sets the brainstorm type, scouts and helpers; stop 2 picks an option; stop 3, the plan's yes, sets the profile, lanes, reviews, builder notes and checks; the build then runs with nothing to pick](docs/images/guided-flow.svg)
 
 | Step | What it shows | What you can pick | Written to |
 |---|---|---|---|
@@ -433,7 +425,9 @@ The guided flow is the path from an idea to a running build with as few question
 
 **Cleaning up.** After the plan is accepted, `flow-status.py <feature> --clean` lists the brainstorm's spent files in `.feature-flow/state/` (the helpers' question and reply files, its counts, and the plain page once a live page exists), and `--clean --yes` deletes them. The plan keeps its own copy of the brainstorm.
 
-[docs/guided-flow.md](docs/guided-flow.md) walks through a guided run from your side of the chat.
+![The page at stop 3: the Plan step with the ticket graph, how many tickets can build at once and why 04 waits, and a table of each ticket's level, review and paths](docs/images/guided-plan.png)
+
+[docs/guided-flow.md](docs/guided-flow.md) walks through a guided run from your side of the chat, with a picture of the page at each stop.
 
 ## Brainstorm before planning
 
