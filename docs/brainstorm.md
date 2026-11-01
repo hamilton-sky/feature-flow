@@ -1,6 +1,6 @@
 # Brainstorming a feature, and the review page
 
-This page walks through a brainstorm from your side of the chat, then shows Forkboard, the package that draws the review page. The brainstorm is the first two of the guided flow's three stops; [guided-flow.md](guided-flow.md) walks through the whole run, up to the plan's yes and the build. The rules the session follows are in [guides/brainstorm.md](../guides/brainstorm.md); the [README](../README.md#brainstorm-before-planning) has the summary.
+This page walks through a brainstorm from your side of the chat, then shows Forkboard, the package that draws the review page. The brainstorm is the first two of the guided flow's three stops; [guided-flow.md](guided-flow.md) walks through the whole run, up to the plan's yes and the build. The rules the session follows are in [guides/brainstorm.md](../guides/brainstorm.md); [Brainstorm before planning](#brainstorm-before-planning) below has every detail.
 
 ## When to brainstorm
 
@@ -65,6 +65,44 @@ forkboard version live/ 2 u_dana          # someone's version of figure 2, as me
 ```
 
 The document format and the rest are in [Forkboard's README](../packages/forkboard/README.md).
+
+## Brainstorm before planning
+
+When an idea is still fuzzy, the session can brainstorm it with you before it writes the brief: `/feature-flow <feature> brainstorm`, always in `careful`, and offered on its own when there is no bar yet or there are two real ways to build it. It asks you up to three questions, one at a time, sends a scout to see how the code does the nearest thing today, then lays out two or three options, each with a mermaid diagram, its pros and cons, its size and its risky areas, and recommends one. Your pick and the brief share one yes.
+
+**Brainstorm types.** A word after `brainstorm` says who the brainstorm is for, and the session suggests one when you name none (one question; "ok" takes its pick, and `auto` or `agent` take it without asking):
+
+| Type | For when you | Code scouts | Web scouts | What changes |
+|---|---|---|---|---|
+| `standard` | know the domain and the codebase | normal | normal | nothing |
+| `learn` | are new to the domain | light | deep | each idea is explained as it comes, and the brainstorm keeps a Glossary with a source for every term |
+| `map` | know the domain, not this code | deep | light | up to three scouts map the repository first, each asking something different, into a Repo map |
+| `quick` | know both and want it short | light | light | one or two options, one consultant, no skeptic and no lens |
+| `explore` | are not sure it is worth building | light | normal | it ends in a Go or No-go Verdict; only a Go goes on to the brief |
+
+`code=<level>` and `web=<level>` after the type set the scouts yourself: `off`, `light` (one scout, no codeintel), `normal`, or `deep` (as many as `careful` allows; before a build, the scouts ask as for a ticket one level higher). The type and the levels are header lines of the brainstorm (`Type: map`, `Scouts: web=off`), so the plan's and the build's scouts follow them after the plan is accepted. `FLOW_SCOUTS=off` still turns every scout off.
+
+Read only helpers work for the session during a brainstorm: a code scout, a web scout, the architect, designer and product owner, `flow-skeptic`, who attacks each finished option so the session that wrote the options is not the one that judges them, and `flow-lens`, who looks at the options through one lens the session picks for the idea: `positive`, `researcher`, `open-minded`, `artistic`, `ux` or `security` ([guides/lenses/](../guides/lenses/)). Each gets its prompt from `brainstorm-prompt <helper> <question file>`, which counts them: `normal` allows 2 scouts, 1 web, 2 consultants, 1 skeptic and 2 lenses per brainstorm, `careful` 3, 2, 3, 1 and 3; the type and the scout levels change these as the table says. A `Helpers:` line in the brainstorm (`Helpers: po skeptic lens=ux`, or `none`) limits the helpers to the ones it names; a helper it leaves out is refused, and so is a line that picks more than the limits allow. Helpers never write the brainstorm and never ask you anything; the session does both. Where each pick fits in the run is in [The guided flow](guided-flow.md).
+
+Before you pick, the session shows the brainstorm as a review page: `feature-flow brainstorm-page <feature>` (or `flow-status.py <feature> --brainstorm-page`) writes it beside the brainstorm as one HTML file. It has a sidebar that routes between the sections and shows how far you read, a system, light or dark switch, flowchart diagrams you can edit (arrange them left to right, top to bottom, radial or as a grid, drag, add boxes of seven kinds, colour them from 12 colours, rename and delete them, connect them with arrows, undo and redo, with the keyboard too), reset, and copy back as mermaid (the edited diagram once you change it; edits are kept only in that browser), and an arrow animation that stays off until you turn it on. Its look is a style: `route` (the default), `blueprint`, `sketch`, `paper`, `terminal` or `bright`, picked with `--style`, the brainstorm's `Style:` line or `FLOW_STYLE`; the session picks the one that fits the subject unless you name one, and colours boxes by role. A style is one CSS file of colour, font and box tokens in Forkboard's [themes/](../packages/forkboard/forkboard/themes/), so adding one is adding a file. `--fragment` leaves out the html and body tags, for publishing the page as an artifact.
+
+![A Forkboard review page for a rate-limits brainstorm: a sidebar with the sections and options, option A's diagram with the API gateway box selected and the editing tools above it, and its pros, cons, size and risky areas below](forkboard.png)
+
+What the page is good at:
+
+- **You review the design, not a wall of text.** Each option is a diagram you can see at once, with its pros, cons, size and risky areas right under it, and the sidebar jumps between options.
+- **You answer by editing the diagram itself.** Drag, add, rename, connect or delete boxes, then Copy as mermaid and paste it into the chat. Your change reaches the session as a diagram, not a paraphrase.
+- **More than one person can review it.** On the live page each reviewer keeps their own version of a diagram, compare with original marks what they added, removed or renamed, and their questions wake the session, which answers on the page.
+- **One file, nothing to install or host.** The plain page is a single HTML file that needs no server and no account: open it from disk, or publish it as an artifact. It sends nothing anywhere (it only loads its fonts, and mermaid for a diagram that is not a flowchart), and the brainstorm's text is escaped, so a label cannot run a script.
+- **Its own package, tested in a browser.** The page's editor, its phone layout and the live page's saves are driven in Chromium in CI, apart from the harness.
+
+The page itself is **Forkboard** ([packages/forkboard/](../packages/forkboard/)), a separate package in this repository with its own version and tests. feature-flow turns the brainstorm into a review document and Forkboard makes the page from it; Forkboard never reads or writes the brainstorm file. Every install of feature-flow carries its copy of Forkboard (as `feature_flow/_forkboard/`), so nothing extra needs installing.
+
+**The live page (Claude only).** When the session can publish artifacts, it publishes the page live instead (`--live <folder>` writes `index.html` and a `state.json` beside it). Everyone you share it with (a claude.ai sign-in and edit access, no Claude Code needed) can save their own version of each diagram, pick between the original and anyone's version, turn on **Compare with original** to see added, removed and renamed boxes and arrows marked, ask Claude in the page to change a diagram (it uses that person's own Claude), and send the session questions from **Talk to Claude**. A save wakes the session: it reads the page's `state.json`, lists the open asks (`--asks`), answers each one (`--answer`), puts a version into the brainstorm when asked (`--apply <folder> <figure> <version>`), and publishes the next round to the same link. `/feature-flow <feature> brainstorm sketch` starts from your own drawing: the page opens with a small sketch of the idea, you draw yours and send it, and the options build on it. Without an Artifact tool (or on Codex) you get the plain page.
+
+[docs/brainstorm.md](brainstorm.md) walks through a brainstorm step by step, how to use the page, and Forkboard's own commands.
+
+The result is `brainstorm.md` ([template](../guides/templates/brainstorm.md)), committed with the plan. The planner follows its chosen option and copies its diagram into `spec.md`, the plan reviewer fails a plan that builds a rejected option or leaves a risky area below level 3, and a re-plan keeps the choice. It is skipped in `fast`, for an import, and with `auto`; with `agent`, the driving agent picks, the file says `Picked by: agent`, and the eval records it.
 
 ## What has not been tried yet
 

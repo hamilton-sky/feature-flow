@@ -38,3 +38,17 @@ Fill in `eval-verdict.md`, above all whether each catch was real or a false alar
 6. For a guided run: did it stop more than three times (eval's `guided stops` line), was the start card's setup right, and did the helpers' ideas reach the pick (eval's `helpers' ideas` line)? Did `Lanes: auto` build as many tickets at once as the card said?
 
 Keep `.feature-flow/state/` (the log and state files) and open an issue at https://github.com/hamilton-sky/feature-flow/issues with `eval.json` attached, the report output and your answers.
+
+## Recording a run (eval)
+
+Every finished run can leave a record of what it cost and what it caught, so a trial on your own repo gives an answer, not an impression. On `DONE` the skill runs `python3 scripts/flow-status.py <feature> --eval` (or run `feature-flow eval <feature>` yourself) and asks you a few questions.
+
+- **`plans/<feature>/eval.json`**: tickets, builds, reviews and rework; tickets settled when the plan was approved and never built; every catch by the check that made it (gate, floor guard, Done when, test first, footprint, reviewer, feature review); the follow-ups in `followups.md` and the deferred checks; who drove the run (`driver`: `person` or `agent`); where the run needed its driver (stops, questions, handoffs, resets); active minutes; and tokens.
+- **`plans/<feature>/followups.md`**: what the run left for later, committed as it goes: the `minor` findings of every passing review, the findings a level 2 ticket passed with after its full rounds, and each `needs` check (below) that could not pass on this host.
+- **Tokens** come from Claude Code's own session transcripts (`~/.claude/projects/`, or `CLAUDE_CONFIG_DIR`), never from the agent: every message of the sessions and subagents that worked in this repo during the run, each counted once, by model and, without lanes, split per ticket by time. Codex sessions are not read yet.
+- **codeintel**: when an agent asked [codeintel](helpers.md#codeintel-optional), `codeintel` in `eval.json` counts the queries by op and what the agents said of the answers (helped, no answer, wrong, and why), and the form below asks whether it helped.
+- **`plans/<feature>/eval-verdict.md`**: a form for you. Was the plan right, how many fixes you made by hand, would you use it again, and for each catch whether it was real or a false alarm. Run `--eval` again and your answers land in `eval.json`. The false-alarm count is the only way to tell whether the checks are worth their cost.
+- **Timing**: `timing` in `eval.json` gives the wall clock, the minutes by phase, by ticket and by level, the slowest ticket and how many times the whole `Test` ran. `feature-flow eval <feature> --compare <eval.json> ...` puts several runs side by side.
+- **Later:** `feature-flow eval <feature> --later`, a week or two on, lists the commits since the run whose subject says fix, revert, bug or regression on the paths each ticket's `Touches:` names: the defects the run let through.
+
+Both files sit in the plan folder, so they are committed with it and survive a cloud session. Nothing is sent anywhere; attach `eval.json` to a field-run issue if you want to share it. Run logs from before 0.15.0 have no dates, so they give no tokens.

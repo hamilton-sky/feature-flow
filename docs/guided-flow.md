@@ -1,6 +1,6 @@
 # A guided run, from your side of the chat
 
-This page walks through the guided flow: the path from an idea to a running build with three stops. The rules the session follows are in [guides/brainstorm.md](../guides/brainstorm.md) and [guides/brief.md](../guides/brief.md); the [README](../README.md#the-guided-flow) has the summary.
+This page walks through the guided flow: the path from an idea to a running build with three stops. The rules the session follows are in [guides/brainstorm.md](../guides/brainstorm.md) and [guides/brief.md](../guides/brief.md); the [README](../README.md#what-a-run-looks-like) has the summary and [the guided flow in full](#the-guided-flow-in-full) below has every detail.
 
 ![The guided flow: Setup, Options, Plan and Build on one page, with a stop before each of the first three steps](images/guided-flow.svg)
 
@@ -18,7 +18,7 @@ When you name no type, the session asks one question:
 
 > Do you know the domain, the codebase, both, or are you just exploring?
 
-Your answer picks the [brainstorm type](../README.md#brainstorm-before-planning):
+Your answer picks the [brainstorm type](brainstorm.md#brainstorm-before-planning):
 
 | You say | Type | What changes |
 |---|---|---|
@@ -73,7 +73,7 @@ What you can change before you say yes:
 
 ![The Plan step's Build flow: the gate's checks, the floor guard and the footprint, then the choices for the profile, tickets building at once, full reviews and builder notes](images/guided-plan-choices.png)
 
-**When the gate runs.** With `each`, every ticket gets the full gate, its Done when checks and its own review. With `batch N` or `end`, each ticket gets only the cheap checks (Quick, the floor guard, the footprint, test first), and every N tickets (or once at the end) the conductor runs the full gate and the Done when checks at HEAD, then one reviewer reads those tickets together. A failure is put on the one ticket that caused it, which alone is built again. The Build flow section says which one the plan uses (`When: Gate: batch 3, ...`). See [When the gate runs](../README.md#when-the-gate-runs-checkpoints).
+**When the gate runs.** With `each`, every ticket gets the full gate, its Done when checks and its own review. With `batch N` or `end`, each ticket gets only the cheap checks (Quick, the floor guard, the footprint, test first), and every N tickets (or once at the end) the conductor runs the full gate and the Done when checks at HEAD, then one reviewer reads those tickets together. A failure is put on the one ticket that caused it, which alone is built again. The Build flow section says which one the plan uses (`When: Gate: batch 3, ...`). See [When the gate runs](speed.md#when-the-gate-runs-checkpoints).
 
 Turning the gate off is possible only as `Gate: off unsafe`. The session says plainly that the run is then unsafe, and the report and eval say so in their first line.
 
@@ -81,7 +81,7 @@ One yes approves the plan and its build setup together. Both are frozen with the
 
 ## The build
 
-The page's Build step shows each ticket's status as the run goes. Nothing on it is a choice. A ticket is built, gated and reviewed as [How a ticket flows](../README.md#how-a-ticket-flows) says, in as many [lanes](../README.md#tickets-side-by-side-lanes) as the plan's yes allowed. `FLOW_LANES` on `start` still overrides the plan's `Lanes:` line.
+The page's Build step shows each ticket's status as the run goes. Nothing on it is a choice. A ticket is built, gated and reviewed as [How a ticket flows](how-it-works.md#how-a-ticket-flows) says, in as many [lanes](speed.md#tickets-side-by-side-lanes) as the plan's yes allowed. `FLOW_LANES` on `start` still overrides the plan's `Lanes:` line.
 
 ![The page during the build: Setup, Options and Plan folded into one-line summaries, and the Build step with 3 of 6 tickets done](images/guided-build.png)
 
@@ -101,3 +101,34 @@ A run that stopped more than three times shows where the extra stops came from. 
 ## Without the live page
 
 On Codex, or when the session cannot publish artifacts, the page is a plain HTML file beside the brainstorm (`.feature-flow/state/brainstorm-<feature>.html`), and you answer each stop in the chat. The stops, the choices and what gets written are the same.
+
+## The guided flow in full
+
+The guided flow is the path from an idea to a running build with as few questions as possible. It stops **three times**, and you can skip each stop by saying "ok" (or let `auto`, `agent` or `fast` take the defaults and ask nothing). There is no timer: a stop waits for you.
+
+![The guided flow: Setup, Options, Plan and Build on one page. Stop 1, the start card, sets the brainstorm type, scouts and helpers; stop 2 picks an option; stop 3, the plan's yes, sets the profile, lanes, reviews, builder notes and checks; the build then runs with nothing to pick](images/guided-flow.svg)
+
+| Step | What it shows | What you can pick | Written to |
+|---|---|---|---|
+| **Setup** (stop 1, the start card) | "Do you know the domain, the codebase, both, or are you just exploring?", then one line with the setup | the [brainstorm type](brainstorm.md#brainstorm-before-planning), the code and web scout levels (off, light, normal, deep), the helpers (consultants, the skeptic, lenses), capped by the limits | the brainstorm's `Type:`, `Scouts:` and `Helpers:` lines |
+| **Options** (stop 2) | two or three options, each with an editable diagram, pros, cons, size and risky areas, and the session's pick | an option, a mix, an edited diagram, or drop the brainstorm | the brainstorm's Chosen section, then the brief |
+| **Plan** (stop 3, the plan-yes card) | the drafted tickets, their order, each ticket's level and review, how many can build at once and why the others wait, and the checks | the profile, the lanes, which tickets get a full review, each ticket's builder notes; adding or relaxing checks in the chat | the draft's `commands.md` (`Profile:`, `Lanes:`, check lines) and tickets (`Review: full`, `Builder:`) |
+| **Build** | each ticket's status as the run goes | nothing: the plan's yes froze the build setup | the run's log and state |
+
+**One page.** All four steps are one page: `flow-status.py <feature> --page` (the same as `--brainstorm-page`, or `feature-flow brainstorm-page <feature>`). A finished step folds into a one-line summary with a Change button, the current step is open, and a later one is greyed out. When the session can publish artifacts, it publishes the [live page](brainstorm.md#brainstorm-before-planning) to the same link at each stop, so you keep one page; what you pick there is saved into the page, and `--page --picks <live folder>` writes it into the files in the last column. The page writes nothing else. Anywhere else (Codex, or no Artifact tool) you answer the same one question in the chat.
+
+**The plan-yes card sets up the build.** One yes approves the plan and its build flow together, and both are frozen with the plan, so a picked profile or lane count cannot change mid-run. The card says it in one line, for example "standard, up to 3 at once, gate + typecheck":
+
+- **Width.** `flow-status.py <feature> --width` prints how many tickets can build at once and, for each waiting ticket, what it waits for (a blocker, an overlapping `Touches:`, a `Shared:` path, or a level 3 ticket in the same folder).
+- **Lanes.** A new plan's `Lanes: auto` builds up to the plan's width side by side: at most 4, at most 2 with `careful`, and 1 with `fast` (which batches instead), under `FLOW_RELAY`, or when the session is not at the top of the repo. `Lanes: 1` to `4` sets it yourself, `FLOW_LANES` still overrides both, and a plan with no line keeps one lane. The log records `LANES-AUTO-<n>`. See [Lanes](speed.md#tickets-side-by-side-lanes).
+- **Builder notes.** A ticket's optional `Builder: frontend`, `backend` or `docs` adds that kind of code's notes ([guides/builders/](../guides/builders/)) to its build prompt. It is the same builder agent with a few more things to watch for. The page shows what the ticket's paths suggest and lets you switch it.
+- **Adding checks.** Ask in the chat and the session adds the line to the draft's `commands.md`: `Typecheck:` and `Security:` run after Lint, and `Check <path>: <command>` runs only for a ticket that changes that path. The checks have their own 3 send-backs, so a flaky test does not use up a ticket's review rounds.
+- **Relaxing checks.** `Floor: allow <category>, reason: <why>` relaxes the floor guard for the whole plan, and the reason goes into `decisions.md`; a line without a reason stops the run (`FLOOR-RELAXED-<CAT>` in the log). The gate goes off from the plan only as `Gate: off unsafe`, and the report and eval then say "gate off (unsafe)" in their first line.
+
+**Measuring it.** The session logs each stop (`asked setup`, `asked options`, `asked plan`), and every idea a brainstorm takes from a helper ends with that helper's name in brackets (`[architect]`, `[ux]`). `feature-flow eval` prints how many times the run stopped for you (the aim is 3 or fewer) and, per helper, how often it was asked, how many of its ideas went in and how many reached the option you picked, so a helper that never helps can be dropped.
+
+**Cleaning up.** After the plan is accepted, `flow-status.py <feature> --clean` lists the brainstorm's spent files in `.feature-flow/state/` (the helpers' question and reply files, its counts, and the plain page once a live page exists), and `--clean --yes` deletes them. The plan keeps its own copy of the brainstorm.
+
+![The page at stop 3: the Plan step with the ticket graph, how many tickets can build at once and why 04 waits, and a table of each ticket's level, review and paths](images/guided-plan.png)
+
+[docs/guided-flow.md](guided-flow.md) walks through a guided run from your side of the chat, with a picture of the page at each stop.
