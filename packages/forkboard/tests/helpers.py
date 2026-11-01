@@ -11,5 +11,5 @@ sys.path.insert(0, str(PACKAGE))
 
 
 def fixture(name):
-    """A fresh copy of tests/fixtures/<name>.json: csv (options, a Chosen line, unsafe text), sketch (live figures)."""
+    """A fresh copy of tests/fixtures/<name>.json: csv (options, a Chosen line, unsafe text), sketch (live figures), steps (steps and choices)."""
     return copy.deepcopy(json.loads((HERE / "fixtures" / (name + ".json")).read_text(encoding="utf-8")))

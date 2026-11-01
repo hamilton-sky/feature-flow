@@ -66,6 +66,11 @@ class Command(unittest.TestCase):
         code, _, err = self.run_cli("answer", str(folder), "one", "Yes.")
         self.assertEqual(code, 1)
         self.assertIn("must be a number", err)
+        self.assertEqual(self.run_cli("picks", str(folder))[1], "{}\n")
+        st = live.load(folder / "state.json")
+        st["picks"] = {"web": {"by": "u_me", "at": "t", "value": "deep"}}
+        (folder / "state.json").write_text(live.dump(st), encoding="utf-8")
+        self.assertEqual(self.run_cli("picks", str(folder))[1], '{"web": "deep"}\n')
         code, out, _ = self.run_cli("version", str(folder), "1", "original")
         self.assertEqual(code, 0)
         self.assertTrue(out.startswith("flowchart LR"))

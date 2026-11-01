@@ -4,7 +4,7 @@ Review a design on its diagrams before the code is written.
 
 A coding agent proposes two or three ways to build something, each with a mermaid flowchart. Forkboard turns that into one page people can read, edit and ask questions on, and gives the agent back what they did. It started as the brainstorm review page of [feature-flow](../../README.md), which still uses it, and is now its own package so it can grow without making the harness bigger.
 
-Version 0.1.0 was the extraction: the same page feature-flow 0.25 made, behind a stable document format. 0.2.0 adds the Arrange button and four more themes that shape the boxes as well as the colours. See [Where it is going](#where-it-is-going) for what comes next.
+Version 0.1.0 was the extraction: the same page feature-flow 0.25 made, behind a stable document format. 0.2.0 adds the Arrange button and four more themes that shape the boxes as well as the colours. 0.3.0 adds steps (a page that grows, with each done step folded into its summary and a Change button) and choices (buttons and boxes whose picks the tool reads back). See [Where it is going](#where-it-is-going) for what comes next.
 
 ![A Forkboard review page for a rate-limits brainstorm: the sidebar, option A's editable diagram and its pros, cons, size and risky areas](../../docs/forkboard.png)
 
@@ -36,6 +36,7 @@ forkboard live review.json live/            # live/index.html and live/state.jso
 forkboard asks live/                         # the open questions, with each asker's version of the diagram
 forkboard answer live/ 1 "Yes, for exports over 10k rows."
 forkboard version live/ 2 u_dana             # that person's version of figure 2, as mermaid
+forkboard picks live/                        # what people picked on the choices, as JSON
 forkboard themes                             # each theme and what it suits
 ```
 
@@ -61,6 +62,8 @@ A tool hands Forkboard a JSON document; Forkboard never reads or writes the tool
    {"title": "Chosen", "kind": "chosen", "markdown": "A, because exports are small."}]}
 ```
 
+Two parts are optional. `steps` (`[{"name": "Setup", "state": "done", "summary": "type learn"}]`, with a state of `done`, `current` or `later`) makes a page that grows: each section names its `step`, a done step folds into its summary with a Change button (on a live page, Change sends the tool an ask with its `step`), the current one is open and a later one is greyed. A section's `choices` (`[{"key": "web", "label": "Web scouts", "kind": "one", "options": [{"value": "off", "label": "Off"}], "value": "off"}]`, or `"kind": "some"` with a list as its value and a `max`) are buttons or boxes. On a live page, what someone picks lands in `state.json` under `picks`, and `forkboard picks` prints it; elsewhere they show the tool's value, and people answer in the chat.
+
 A section's `kind` is `text`, `chosen`, `rejected`, `open` or `callout`. Figures are numbered in the page's order from 1. Each figure in `state.json` keeps a fingerprint of the diagram it was built from, so a tool writing a version back can refuse when its own copy changed since. A reader refuses a document whose schema major it does not know. The full description is in [forkboard/doc.py](forkboard/doc.py).
 
 ## How feature-flow uses it
@@ -79,7 +82,7 @@ python3 packages/forkboard/tests/package_smoke.py               # build, install
 
 The [proposal](https://claude.ai/artifact/2tGHswZqdnnq4b6YhADRJw) has the whole plan. In short:
 
-- 0.3: a verdict the agent reads back (`verdict.json`): the pick, each figure's final diagram, and comments pinned to boxes and arrows, typed as question, concern, suggestion or blocker. A round diff with a legend, not colour alone.
+- 0.3: steps and choices (done). Next, a verdict the agent reads back (`verdict.json`): the pick, each figure's final diagram, and comments pinned to boxes and arrows, typed as question, concern, suggestion or blocker. A round diff with a legend, not colour alone.
 - 0.4: MCP tools (`open_review`, `get_verdict`), so any agent can use it.
 - 0.5: the disagreement map (every reviewer's version on one canvas), lens overlays, and a local server host besides the claude.ai one.
 - Then its own repository, once someone outside uses it.

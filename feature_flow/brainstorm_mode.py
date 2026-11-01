@@ -22,15 +22,16 @@ STOPS = ("setup", "options", "plan")  # the guided flow's three stops: the start
 TAG = re.compile(r"\[(%s)\](?!\()" % "|".join(re.escape(n) for n in HELPER_NAMES))
 
 TYPES = {
-    "standard": {"about": "you know the domain and the codebase", "code": "normal", "web": "normal"},
+    "standard": {"about": "you know the domain and the codebase", "code": "normal", "web": "normal",
+                 "helpers": ("architect", "skeptic")},
     "learn": {"about": "you are new to the domain: each idea is explained as it comes, with a cited glossary",
-              "code": "light", "web": "deep"},
+              "code": "light", "web": "deep", "helpers": ("po", "skeptic")},
     "map": {"about": "you know the domain but not this code: the scouts map the repository first",
-            "code": "deep", "web": "light"},
+            "code": "deep", "web": "light", "helpers": ("architect", "skeptic")},
     "quick": {"about": "you know both and want it short: one look, one or two options, then the brief",
-              "code": "light", "web": "light", "consult": 1, "skeptic": 0, "lens": 0},
+              "code": "light", "web": "light", "consult": 1, "skeptic": 0, "lens": 0, "helpers": ("architect",)},
     "explore": {"about": "you are not sure it is worth building: it ends in a go or no-go, not a brief",
-                "code": "light", "web": "normal"},
+                "code": "light", "web": "normal", "helpers": ("po", "skeptic")},
 }
 
 # helpers per brainstorm, by profile; a scout level other than normal replaces the scout and web rows
@@ -53,7 +54,7 @@ def _check(key, value):
 
 
 def parse(text):
-    """{"type"?, "code"?, "web"?} from a brainstorm's header lines (those before the first `## ` heading).
+    """{"type"?, "code"?, "web"?, "helpers"?} from a brainstorm's header lines (those before the first `## ` heading).
     Raises BadMode on a value it does not know."""
     found = {}
     for line in (text or "").splitlines():
@@ -64,6 +65,8 @@ def parse(text):
             continue
         if key.strip() == "Type" and value.strip():
             found["type"] = _check("type", value)
+        elif key.strip() == "Helpers" and value.strip():
+            found["helpers"] = helpers_line(value)
         elif key.strip() == "Scouts":
             for word in value.split():
                 kind, eq, lvl = word.partition("=")
@@ -71,6 +74,44 @@ def parse(text):
                     raise BadMode("Scouts: takes code=<level> and web=<level>, not %s" % word)
                 found[kind.strip().lower()] = _check(kind.strip().lower(), lvl)
     return found
+
+
+PICKABLE = tuple(n for n in HELPER_NAMES if n not in ("scout", "web"))  # the scouts follow the Scouts: levels
+GROUP = dict({"architect": "consult", "designer": "consult", "po": "consult", "skeptic": "skeptic"},
+             **{lens: "lens" for lens in LENSES})
+
+
+def helpers_line(value):
+    """The helpers a `Helpers:` line picks, in its order: `architect po skeptic lens=ux,security`, or `none`."""
+    names = []
+    for word in value.split():
+        word = word.strip().lower()
+        if word == "none":
+            continue
+        listed = word[len("lens="):].split(",") if word.startswith("lens=") else [word]
+        for name in (n.strip() for n in listed if n.strip()):
+            if name not in PICKABLE:
+                raise BadMode("Helpers: takes %s (or lens=<lens>,<lens>, or none), not %s" % (", ".join(PICKABLE), name))
+            if name not in names:
+                names.append(name)
+    return tuple(names)
+
+
+def helpers_text(names):
+    """The `Helpers:` line's value for these helpers: the consultants and the skeptic, then lens=..."""
+    names = [n for n in PICKABLE if n in names]
+    rest = [n for n in names if GROUP[n] != "lens"]
+    lenses = [n for n in names if GROUP[n] == "lens"]
+    return " ".join(rest + (["lens=" + ",".join(lenses)] if lenses else [])) or "none"
+
+
+def over(names, caps):
+    """The first group the helpers pick more of than its cap, as (group, picked, cap), or None."""
+    for group in ("consult", "skeptic", "lens"):
+        picked = sum(1 for n in names if GROUP[n] == group)
+        if picked > caps.get(group, 0):
+            return group, picked, caps.get(group, 0)
+    return None
 
 
 def read(plan_dir, state_dir, feature):

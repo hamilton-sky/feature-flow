@@ -69,6 +69,7 @@
         f.versions = f.versions || {}; f.versions[change.version.by] = change.version.entry;
       }
       if (change.ask) s.asks.push(change.ask);
+      if (change.pick) { s.picks = s.picks || {}; s.picks[change.pick.key] = change.pick.entry; }
     }
     // a change saved just before a reload (a clash) is saved again now
     try {
@@ -145,7 +146,51 @@
       figs.push({ key: key, f: f, pick: pick, save: saveBtn });
     });
 
+    var sets = [];  // the document's choices: what people pick is saved into the page's state for the session
+    document.querySelectorAll('fieldset.choice').forEach(function (set) {
+      var key = set.dataset.key, kind = set.dataset.kind, top = set.dataset.max ? Number(set.dataset.max) : null;
+      var buttons = [].slice.call(set.querySelectorAll('button[data-value]')), boxes = [].slice.call(set.querySelectorAll('input[type=checkbox]'));
+      function show(v) {
+        if (kind === 'some') boxes.forEach(function (b) { b.checked = Array.isArray(v) && v.indexOf(b.value) >= 0; });
+        else buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.value === v)); });
+      }
+      function limit() {
+        var n = boxes.filter(function (b) { return b.checked; }).length;
+        boxes.forEach(function (b) { b.disabled = !writable || (top !== null && !b.checked && n >= top); });
+        buttons.forEach(function (b) { b.disabled = !writable; });
+      }
+      function pick(value, label) {
+        save({ pick: { key: key, entry: { by: me, at: new Date().toISOString(), value: value } } },
+             function () { toast('Saved: ' + label + '. Claude reads it when its session picks it up.'); });
+      }
+      buttons.forEach(function (b) {
+        b.addEventListener('click', function () { if (writable) { show(b.dataset.value); pick(b.dataset.value, b.textContent); } });
+      });
+      boxes.forEach(function (b) {
+        b.addEventListener('change', function () {
+          if (!writable) return;
+          limit();
+          pick(boxes.filter(function (x) { return x.checked; }).map(function (x) { return x.value; }), (set.querySelector('legend') || {}).textContent || key);
+        });
+      });
+      sets.push({ key: key, show: show, limit: limit });
+    });
+    var changes = [].slice.call(document.querySelectorAll('button.change[data-change]'));
+    changes.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!writable) return;
+        btn.disabled = true;
+        save({ ask: { by: me, at: new Date().toISOString(), figure: null, version: null, step: btn.dataset.change, text: 'Change the step ' + btn.dataset.change } },
+             function () { toast('Sent. Claude reopens ' + btn.dataset.change + ' when its session picks it up.'); btn.disabled = false; });
+      });
+    });
+
     function render() {
+      sets.forEach(function (x) { var p = st.picks && st.picks[x.key]; if (p) x.show(p.value); x.limit(); });
+      changes.forEach(function (btn) { btn.hidden = !writable; });
+      document.querySelectorAll('.choice-hint').forEach(function (h) {
+        h.textContent = writable ? 'What you pick here is saved to this page, and Claude reads it. You can also answer in the chat.' : 'Reply ok in the chat to take these, or say what to change.';
+      });
       var ids = [];
       figs.forEach(function (x) { Object.keys(x.f.versions || {}).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); }); });
       st.asks.forEach(function (a) { if (a.by && ids.indexOf(a.by) < 0) ids.push(a.by); });

@@ -4,6 +4,7 @@ Picked by: <person|agent>
 Style: <route|blueprint|sketch|paper|terminal|bright>
 Type: <standard|learn|map|quick|explore>
 Scouts: <code=off|light|normal|deep web=off|light|normal|deep, or leave the line out for the type's levels>
+Helpers: <the helpers you will ask, e.g. architect po skeptic lens=ux,security, or none; leave the line out to ask any, up to the limits>
 
 ## Idea
 
