@@ -32,10 +32,11 @@ class PickTests(unittest.TestCase):
         self.assertEqual(profiles.apply({}, "normal"), [])
 
     def test_every_profile_sets_only_known_settings(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        # every setting a profile sets is in the settings table of docs/commands-and-settings.md
+        doc = (ROOT / "docs" / "commands-and-settings.md").read_text(encoding="utf-8")
         for name, values in profiles.PROFILES.items():
             for key in values:
-                self.assertIn("`%s`" % key, readme, "%s in %s" % (key, name))
+                self.assertIn("`%s`" % key, doc, "%s in %s" % (key, name))
 
 
 class ProfileDriveTests(unittest.TestCase):
