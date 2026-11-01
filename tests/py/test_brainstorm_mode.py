@@ -31,6 +31,20 @@ class Header(unittest.TestCase):
             with self.assertRaises(BadMode, msg=text):
                 brainstorm_mode.parse(text)
 
+    def test_the_helpers_line_reads_names_and_lenses_and_writes_back(self):
+        self.assertEqual(brainstorm_mode.parse("Helpers: architect PO skeptic lens=ux,security\n")["helpers"],
+                         ("architect", "po", "skeptic", "ux", "security"))
+        self.assertEqual(brainstorm_mode.parse("Helpers: none\n")["helpers"], ())
+        self.assertNotIn("helpers", brainstorm_mode.parse("Helpers: <the helpers you will ask>\n"))
+        for bad in ("Helpers: scout\n", "Helpers: lens=pretty\n", "Helpers: wizard\n"):
+            with self.assertRaises(BadMode, msg=bad):
+                brainstorm_mode.parse(bad)
+        self.assertEqual(brainstorm_mode.helpers_text(("ux", "po", "architect")), "architect po lens=ux")
+        self.assertEqual(brainstorm_mode.helpers_text(()), "none")
+        caps = brainstorm_mode.limits("", {"code": "normal", "web": "normal"}, "standard")
+        self.assertIsNone(brainstorm_mode.over(("architect", "po", "skeptic", "ux", "security"), caps))
+        self.assertEqual(brainstorm_mode.over(("architect", "po", "designer"), caps), ("consult", 3, 2))
+
     def test_no_type_is_named_fast(self):
         self.assertNotIn("fast", brainstorm_mode.TYPES)  # fast already means no brainstorm at all
 
@@ -147,6 +161,22 @@ class Brainstorm(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertTrue(out.startswith("STOP Type: must be standard, learn, map, quick, explore, not fast. fix the "
                                        "header of the brainstorm of g"), out)
+
+    def test_a_helpers_line_allows_only_the_helpers_it_picks(self):
+        self.header("Helpers: architect lens=ux\n")
+        rc, out = self.flow("brainstorm-prompt", "architect", "q.md")
+        self.assertEqual(rc, 0, out)
+        rc, out = self.flow("brainstorm-prompt", "po", "q.md")
+        self.assertEqual(rc, 1)
+        self.assertIn("STOP the brainstorm's Helpers: line (architect lens=ux) does not pick po", out)
+        self.assertEqual(self.flow("brainstorm-prompt", "ux", "q.md")[0], 0)
+        self.assertEqual(self.flow("brainstorm-prompt", "scout", "q.md")[0], 0)  # the scouts follow Scouts:
+
+    def test_a_helpers_line_over_the_limits_stops(self):
+        self.header("Type: quick\nHelpers: architect po\n")
+        rc, out = self.flow("brainstorm-prompt", "architect", "q.md")
+        self.assertEqual(rc, 1)
+        self.assertIn("picks 2 consult helper(s), and normal with type quick allows 1", out)
 
     def test_asked_logs_a_guided_stop_and_refuses_another_word(self):
         rc, out = self.flow("asked", "setup")

@@ -1,3 +1,3 @@
 """Feature Flow: a ticket-graph workflow for coding agents."""
 
-__version__ = "0.31.1"
+__version__ = "0.32.0"

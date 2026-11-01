@@ -23,8 +23,10 @@ before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'forkboard-'));
   forkboard('render', path.join(FIXTURES, 'csv.json'), '--out', path.join(dir, 'page.html'));
   forkboard('live', path.join(FIXTURES, 'sketch.json'), path.join(dir, 'live'));
+  forkboard('live', path.join(FIXTURES, 'steps.json'), path.join(dir, 'live', 'steps'));
   server = http.createServer((req, res) => {  // serves the live folder, as the artifact host serves its files
-    const file = path.join(dir, 'live', decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
+    let file = path.join(dir, 'live', decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
+    if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
     if (!file.startsWith(path.join(dir, 'live')) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'content-type': file.endsWith('.json') ? 'application/json' : 'text/html; charset=utf-8' });
     res.end(fs.readFileSync(file));
@@ -183,6 +185,29 @@ test('the live page saves a version, and a clash reloads and saves the change ag
   const last = await page.evaluate(() => window.__saved()[1]);
   assert.deepEqual(last.asks.map((a) => a.text), ['Is a cache worth it?']);
   assert.equal(await page.evaluate(() => sessionStorage.getItem('calls')), '3');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a live page with steps saves picks, keeps a max, and a Change button asks to reopen a step', async () => {
+  const { page, errors, context } = await open(base + 'steps/', { init: runtime });
+  const web = page.locator('fieldset.choice[data-key=web]');
+  await page.locator('details.step-body > summary').click();  // Setup is done, so it is folded
+  await page.waitForFunction(() => !document.querySelector('fieldset.choice[data-key=web] button').disabled);
+  await web.locator('button[data-value=light]').click();  // save 1
+  await page.waitForFunction(() => window.__saved().length === 1);
+  assert.equal((await page.evaluate(() => window.__saved()[0])).picks.web.value, 'light');
+  assert.equal(await web.locator('button[data-value=light]').getAttribute('aria-pressed'), 'true');
+  await page.locator('fieldset.choice[data-key=lens] input[value=security]').check();  // save 2 clashes, the reload saves it again
+  await page.waitForFunction(() => window.__saved().length === 2, null, { timeout: 10000 });
+  assert.deepEqual((await page.evaluate(() => window.__saved()[1])).picks.lens.value, ['ux', 'security']);
+  await page.locator('details.step-body > summary').click();
+  assert.ok(await page.locator('fieldset.choice[data-key=lens] input[value=artistic]').isDisabled());  // up to 2
+  await page.locator('button.change[data-change=Setup]').click();
+  await page.waitForFunction(() => window.__saved().length === 3);
+  const ask = (await page.evaluate(() => window.__saved()[2])).asks.pop();
+  assert.deepEqual([ask.step, ask.text], ['Setup', 'Change the step Setup']);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth) <= 1280, true);
   assert.deepEqual(errors, []);
   await context.close();
 });

@@ -49,6 +49,7 @@ class Planner:
         self.scout_code = conductor.settings.scout_code
         self.scout_web = conductor.settings.scout_web
         self.brainstorm_type = conductor.settings.brainstorm_type
+        self.brainstorm_helpers = conductor.settings.brainstorm_helpers
         self.log = conductor.log
 
     def consult_prompt(self, role, question_file):
@@ -92,7 +93,18 @@ class Planner:
         profile = "careful" if os.environ.get("FLOW_PROFILE", "").strip().lower() == "careful" else "normal"
         group = HELPERS[helper] if helper != "web" else "web"
         kind = self.brainstorm_type or "standard"
-        limit = brainstorm_mode.limits(profile, {"code": self.scout_code, "web": self.scout_web}, kind)[group]
+        caps = brainstorm_mode.limits(profile, {"code": self.scout_code, "web": self.scout_web}, kind)
+        limit = caps[group]
+        picked = self.brainstorm_helpers
+        if picked is not None:
+            too_many = brainstorm_mode.over(picked, caps)
+            if too_many:
+                raise Stop("the brainstorm's Helpers: line picks %d %s helper(s), and %s with type %s allows %d. fix the "
+                           "header of the brainstorm of %s" % (too_many[1], too_many[0], profile, kind, too_many[2],
+                                                               self.feature))
+            if group not in ("scout", "web") and helper not in picked:
+                raise Stop("the brainstorm's Helpers: line (%s) does not pick %s. go on without, or add it to the line"
+                           % (brainstorm_mode.helpers_text(picked), helper))
         counts_file = self.state_file.parent / ("brainstorm-%s.helpers" % self.feature)
         counts = dict(line.split("=", 1) for line in (state.read_text(counts_file) or "").splitlines() if "=" in line)
         used = int(counts.get(group, "0")) if counts.get(group, "0").isdigit() else 0

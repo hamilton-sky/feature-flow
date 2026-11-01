@@ -1,6 +1,6 @@
 """The ticket graph reader, ported from the bash script of the same name.
 
-usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --brainstorm-page [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION]]
+usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]
 Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready.
 --ready prints every ready ticket path, one per line, with the same exit codes.
 """
@@ -13,7 +13,7 @@ import sys
 
 from feature_flow import suggest, tickets
 
-USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --brainstorm-page [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION]]"
+USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]"
 
 
 def _env(name, default):
@@ -294,7 +294,7 @@ def main(argv=None):
     if len(argv) > 1 and argv[1] == "--eval":  # the run's record, written by feature_flow/evaluate.py
         from feature_flow import evaluate
         return evaluate.main(argv[:1] + argv[2:])
-    if len(argv) > 1 and argv[1] == "--brainstorm-page":  # the brainstorm as a review page, feature_flow/brainstorm_page.py
+    if len(argv) > 1 and argv[1] in ("--brainstorm-page", "--page"):  # the brainstorm as a review page, feature_flow/brainstorm_page.py
         from feature_flow import brainstorm_page
         return brainstorm_page.main(argv[:1] + argv[2:])
     if len(argv) > 2 and argv[1] == "--import":  # start the plan from a Spec Kit or OpenSpec task list

@@ -1,14 +1,15 @@
 """feature-flow brainstorm-page <feature>: the brainstorm as a review page, for the user to read before they pick.
 
 usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]
-       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version>
+       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE
 Reads plans/<feature>/brainstorm.md, or .feature-flow/state/brainstorm-<feature>.md before the plan exists, turns
 it into a review document and has Forkboard (packages/forkboard/, found by feature_flow/studio.py) make the page.
 The page goes beside the brainstorm (same name, .html). The look is a Forkboard theme: --style, else the brainstorm's
 `Style:` line, else FLOW_STYLE, else route. --fragment leaves out the doctype, html, head and body tags, for a host
 that adds its own (an Artifact). --live writes DIR/index.html and DIR/state.json to publish as an artifact that
-saves itself; --asks, --answer and --apply are the session's side of it, and --apply is the one part that writes
-the brainstorm: Forkboard never touches it.
+saves itself; --asks, --answer, --apply and --picks are the session's side of it, and --apply and --picks are the
+only parts that write the brainstorm (--picks only its Type:, Scouts: and Helpers: lines): Forkboard never touches it.
+The page is the guided flow's one page (feature_flow/flow_page.py): Setup, Options, Plan and Build, as steps.
 """
 
 import os
@@ -16,10 +17,10 @@ import re
 import sys
 from pathlib import Path
 
-from feature_flow import git, studio
+from feature_flow import brainstorm_mode, flow_page, git, studio
 
 USAGE = ("usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]\n"
-         "       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version>")
+         "       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE")
 DEFAULT_STYLE = "route"
 FENCE = re.compile(r"^```mermaid[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
 KINDS = {"chosen": "chosen", "rejected": "rejected", "open": "open", "risks for the planner": "callout"}
@@ -99,7 +100,7 @@ def main(argv, out=None, err=None):
         a = argv[i]
         if a == "--fragment":
             fragment = True
-        elif a in ("--live", "--asks") and i + 1 < len(argv) and tool is None and live is None:
+        elif a in ("--live", "--asks", "--picks") and i + 1 < len(argv) and tool is None and live is None:
             live, tool = argv[i + 1], a[2:]
             i += 1
         elif a == "--answer" and i + 3 < len(argv) and tool is None:
@@ -135,7 +136,7 @@ def main(argv, out=None, err=None):
         err.write(studio.MISSING)
         return 1
     text = path.read_text(encoding="utf-8", errors="replace")
-    if tool in ("asks", "answer", "apply"):
+    if tool in ("asks", "answer", "apply", "picks"):
         return live_tool(fb, tool, path, text, Path(live), extra, out, err)
     names = fb.page.themes()
     _, meta, _, _ = parse(text)
@@ -144,7 +145,11 @@ def main(argv, out=None, err=None):
         err.write("no style %s: pick one of %s (Forkboard's themes)\n" % (name, ", ".join(names) or "none installed"))
         return 1
     css = fb.page.theme_css(name)
-    doc = document(text, feature)
+    try:
+        doc = flow_page.document(document(text, feature), text)
+    except brainstorm_mode.BadMode as e:
+        err.write("%s. fix the header of %s\n" % (e, path.as_posix()))
+        return 1
     if tool == "live":  # the page and its state, to publish together as an artifact that saves itself
         folder = Path(live)
         folder.mkdir(parents=True, exist_ok=True)
@@ -177,6 +182,19 @@ def live_tool(fb, tool, path, text, state_path, extra, out, err):
                 raise ValueError("the ask number must be a number, not %s" % extra[0])
             state_path.write_text(fb.live.dump(fb.live.answer(st, int(extra[0]), extra[1])), encoding="utf-8")
             out.write("answered ask %s in %s\n" % (extra[0], state_path.as_posix()))
+        elif tool == "picks":
+            if not hasattr(fb.live, "picks"):
+                raise ValueError("this Forkboard has no picks: reinstall feature-flow")
+            picks = fb.live.picks(st)
+            if not picks:
+                out.write("no picks on the page: %s is as it was\n" % path.as_posix())
+                return 0
+            try:
+                new, lines = flow_page.apply_picks(text, picks)
+            except brainstorm_mode.BadMode as e:
+                raise ValueError(str(e))
+            path.write_text(new, encoding="utf-8")
+            out.write("wrote %s into %s\n" % (", ".join("%s: %s" % kv for kv in lines.items()), path.as_posix()))
         else:
             new, dropped = apply(text, fb, st, extra[0], extra[1])
             path.write_text(new, encoding="utf-8")

@@ -5,12 +5,14 @@ usage: forkboard render DOC [--theme NAME] [--fragment] [--out FILE]
        forkboard asks STATE
        forkboard answer STATE <ask number> <text>
        forkboard version STATE <figure> <original or a person id>
+       forkboard picks STATE
        forkboard themes
        forkboard --version
 DOC is a review document (doc.py), or - to read it from stdin. render writes the page beside DOC (same name, .html),
 to --out, or to stdout when DOC is -. live writes DIR/index.html and DIR/state.json, to publish together as an
 artifact that saves itself; it keeps what people saved in a state.json already there. STATE is that state.json, or
-its folder. asks lists the open questions, answer answers one, version prints a version of a figure as mermaid. themes lists
+its folder. asks lists the open questions, answer answers one, version prints a version of a figure as mermaid, picks prints
+what people picked on the page's choices as JSON ({key: value}). themes lists
 the themes and what each one suits.
 """
 
@@ -67,7 +69,7 @@ def main(argv, out=None, err=None):
             args.append(a)
         i += 1
     command, rest = (args[0], args[1:]) if args else ("", [])
-    sizes = {"render": 1, "live": 2, "asks": 1, "answer": 3, "version": 3, "themes": 0}
+    sizes = {"render": 1, "live": 2, "asks": 1, "answer": 3, "version": 3, "picks": 1, "themes": 0}
     if sizes.get(command) != len(rest):
         err.write(USAGE + "\n")
         return 2
@@ -109,6 +111,8 @@ def main(argv, out=None, err=None):
     try:
         if command == "asks":
             out.write(live.asks(st) + "\n")
+        elif command == "picks":
+            out.write(json.dumps(live.picks(st), ensure_ascii=False, sort_keys=True) + "\n")
         elif command == "answer":
             if not rest[1].isdigit():
                 raise ValueError("the ask number must be a number, not %s" % rest[1])

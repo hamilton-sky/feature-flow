@@ -1,0 +1,104 @@
+{
+ "schema": "bundle/1",
+ "id": "steps",
+ "kind": "Brainstorm",
+ "title": "Brainstorm: csv",
+ "meta": {},
+ "intro": "",
+ "sections": [
+  {
+   "title": "Setup",
+   "kind": "text",
+   "markdown": "How far the scouts look, and who helps.",
+   "items": [],
+   "step": "Setup",
+   "choices": [
+    {
+     "key": "web",
+     "label": "Web scouts",
+     "kind": "one",
+     "options": [
+      {
+       "value": "off",
+       "label": "Off"
+      },
+      {
+       "value": "light",
+       "label": "Light"
+      },
+      {
+       "value": "deep",
+       "label": "Deep"
+      }
+     ],
+     "value": "deep"
+    },
+    {
+     "key": "lens",
+     "label": "Lenses",
+     "kind": "some",
+     "max": 2,
+     "options": [
+      {
+       "value": "ux",
+       "label": "UX"
+      },
+      {
+       "value": "security",
+       "label": "Security"
+      },
+      {
+       "value": "artistic",
+       "label": "Artistic"
+      }
+     ],
+     "value": [
+      "ux"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Sketch",
+   "kind": "text",
+   "markdown": "\n```mermaid\nflowchart LR\n  Admin([Admin]) -->|clicks Export| Api[Export endpoint]\n  Api --> Db[(Tasks table)]\n```\n",
+   "items": [],
+   "step": "Options"
+  },
+  {
+   "title": "Options",
+   "kind": "text",
+   "markdown": "",
+   "items": [
+    {
+     "title": "A. Stream it",
+     "label": "A",
+     "chosen": false,
+     "markdown": "\n```mermaid\nsequenceDiagram\n  Admin->>Api: export\n```\n"
+    },
+    {
+     "title": "B. In the background",
+     "label": "B",
+     "chosen": false,
+     "markdown": "\n```mermaid\nflowchart TD\n  Api[Api] --> Queue{{Queue}}\n  class Queue amber\n```"
+    }
+   ],
+   "step": "Options"
+  }
+ ],
+ "steps": [
+  {
+   "name": "Setup",
+   "state": "done",
+   "summary": "type learn, scouts web=deep"
+  },
+  {
+   "name": "Options",
+   "state": "current"
+  },
+  {
+   "name": "Plan",
+   "state": "later"
+  }
+ ]
+}

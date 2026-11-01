@@ -59,6 +59,7 @@ class Settings:
     scout_code: str = "normal"  # off, light, normal or deep: how far the code scouts (flow-scout) look
     scout_web: str = "normal"  # the same for the web scouts (flow-web)
     brainstorm_type: str = ""  # the brainstorm's Type: line, "" without one
+    brainstorm_helpers: tuple = None  # the helpers its Helpers: line picks; None without one: any, up to the caps
 
     @classmethod
     def load(cls, feature, environ=None):
@@ -99,6 +100,7 @@ class Settings:
             scout_code=code,
             scout_web=web,
             brainstorm_type=mode.get("type", ""),
+            brainstorm_helpers=mode.get("helpers"),
         )
 
     def session_limit(self, driver):

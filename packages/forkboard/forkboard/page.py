@@ -239,6 +239,65 @@ FX = ('<svg class="fx" aria-hidden="true" focusable="false"><filter id="fb-rough
 KINDS = {"chosen": "callout good", "rejected": "muted", "open": "callout", "callout": "callout"}
 
 
+def has_choices(doc):
+    return any(section.get("choices") for section in doc.get("sections") or [])
+
+
+def choices(items):
+    """The choices of a section: buttons for one of several, boxes for some. They show the tool's value and stay
+    disabled until the live layer finds people who can save; without it, people answer in the chat."""
+    if not items:
+        return ""
+    out = []
+    for choice in items:
+        kind, key = choice.get("kind") or "one", str(choice["key"])
+        value = choice.get("value")
+        picked = set(str(v) for v in (value or [])) if kind == "some" else {str(value)} if value is not None else set()
+        opts = []
+        for o in choice["options"]:
+            v, label, note = str(o["value"]), o.get("label") or str(o["value"]), o.get("note") or ""
+            title = ' title="%s"' % html.escape(note) if note else ""
+            if kind == "some":
+                opts.append('<label%s><input type="checkbox" value="%s"%s disabled> %s</label>' % (
+                    title, html.escape(v), " checked" if v in picked else "", inline(label)))
+            else:
+                opts.append('<button type="button" data-value="%s" aria-pressed="%s"%s disabled>%s</button>' % (
+                    html.escape(v), str(v in picked).lower(), title, inline(label)))
+        top = choice.get("max")
+        out.append('<fieldset class="choice" data-key="%s" data-kind="%s"%s><legend>%s%s</legend><div class="pick">%s</div>%s'
+                   '</fieldset>' % (html.escape(key), kind, ' data-max="%d"' % top if isinstance(top, int) else "",
+                                    inline(choice.get("label") or key),
+                                    ' <span class="most">up to %d</span>' % top if isinstance(top, int) and kind == "some" else "",
+                                    "".join(opts),
+                                    '<p class="note">%s</p>' % inline(choice["note"]) if choice.get("note") else ""))
+    return ('<div class="choices">%s<p class="choice-hint">Reply ok in the chat to take these, or say what to change.</p>'
+            '</div>' % "".join(out))
+
+
+def stepped(steps, body):
+    """The sections as HTML, grouped under their steps when the document has steps: a done step folds into its
+    summary, the current one is open, a later one is greyed. Sections with no step come last."""
+    if not steps:
+        return "\n".join(h for _, h in body)
+    out = ['<ol class="steps" aria-label="Steps">%s</ol>' % "".join(
+        '<li class="%s"><span class="n">%d</span><b>%s</b>%s</li>' % (
+            s.get("state") or "later", n, html.escape(s["name"]),
+            '<span class="sum">%s</span>' % inline(s["summary"]) if s.get("summary") else "")
+        for n, s in enumerate(steps, 1))]
+    for n, s in enumerate(steps, 1):
+        name, state = s["name"], s.get("state") or "later"
+        inner = "\n".join(h for step, h in body if step == name)
+        head = '<div class="step-head"><span class="n">%d</span><b>%s</b>%s%s</div>' % (
+            n, html.escape(name), '<span class="sum">%s</span>' % inline(s["summary"]) if s.get("summary") else "",
+            '<button type="button" class="change" data-change="%s" hidden>Change</button>' % html.escape(name)
+            if state == "done" else "")
+        if state == "done" and inner:
+            inner = '<details class="step-body"><summary>Show %s</summary>%s</details>' % (html.escape(name), inner)
+        out.append('<div class="step %s" data-step="%s">%s%s</div>' % (state, html.escape(name), head, inner))
+    out += [h for step, h in body if not step]
+    return "\n".join(out)
+
+
 def render(doc, css, theme_name, fragment=False, live=False):
     """The page for a document, in a theme (its CSS and name); fragment leaves out the doctype, html, head and body
     tags for a host that adds its own (an Artifact); live adds the layer a page published as an artifact uses."""
@@ -265,12 +324,15 @@ def render(doc, css, theme_name, fragment=False, live=False):
         cls = KINDS.get(kind, "")
         if cls.startswith("callout"):
             inner = '<div class="%s">%s</div>' % (cls, inner)
-        body.append('<section class="block%s" id="%s"><div class="lvl-head"><div class="eyebrow">%s</div><h2>%s</h2>'
-                    '</div>%s%s</section>' % (" muted" if kind == "rejected" else "", sid,
+        body.append((section.get("step") or "", '<section class="block%s" id="%s"><div class="lvl-head"><div class="eyebrow">%s</div><h2>%s</h2>'
+                    '</div>%s%s%s</section>' % (" muted" if kind == "rejected" else "", sid,
                                               html.escape(ident), inline(heading), inner,
-                                              '<div class="opts">%s</div>' % "".join(sub_html) if sub_html else ""))
+                                              choices(section.get("choices") or []),
+                                              '<div class="opts">%s</div>' % "".join(sub_html) if sub_html else "")))
         nav.append('<li><a href="#%s"><span class="n">%d</span>%s</a>%s</li>' % (
             sid, len(nav) + 1, inline(heading), '<ol class="sub">%s</ol>' % "".join(children) if children else ""))
+    steps = doc.get("steps") or []
+    body = stepped(steps, body)
     fonts = FONT_LINE.search(css)
     meta_html = "".join('<span><b>%s:</b> %s</span>' % (html.escape(k.capitalize()), inline(v))
                         for k, v in (doc.get("meta") or {}).items())
@@ -281,7 +343,8 @@ def render(doc, css, theme_name, fragment=False, live=False):
                ('<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" '
                 'href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="%s">\n'
                 % html.escape(fonts.group(1)) if fonts else ""),
-               asset("base.css") + palette_css() + (asset("live.css") if live else ""), css))
+               asset("base.css") + palette_css() + (asset("steps.css") if steps or has_choices(doc) else "")
+               + (asset("live.css") if live else ""), css))
     content = (
         '<div class="wrap" data-page="%s"%s>\n<nav class="route" aria-label="Sections">'
         '<div class="progress"><div class="bar"><i></i></div><div class="count">0 of %d sections read</div></div>'
@@ -294,9 +357,9 @@ def render(doc, css, theme_name, fragment=False, live=False):
         '<h1>%s</h1>%s<div class="meta">%s</div></header>\n%s\n</main>\n</div>\n%s<script>\n%s\n</script>\n'
         % (html.escape(ident), ' data-live="1"' if live else "", len(nav), html.escape(kind_name), "".join(nav), FX,
            html.escape(kind_name), html.escape(theme_name), inline(doc.get("title") or page_title),
-           intro, meta_html, "\n".join(body),
+           intro, meta_html, body,
            '<script src="%s"></script>\n' % MERMAID if needs_mermaid else "",
-           palette_js() + asset("editor.js") + (asset("live.js") if live else "")))
+           palette_js() + asset("editor.js") + (asset("steps.js") if steps else "") + (asset("live.js") if live else "")))
     if fragment:
         return head + content
     return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" '

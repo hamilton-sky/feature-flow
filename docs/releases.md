@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.32: one page and the helper picker
+
+| Version | Added |
+|---|---|
+| 0.32.0 | **One page for the guided flow** ([README](../README.md#brainstorm-before-planning)): the brainstorm page has four steps, Setup, Options, Plan and Build. A finished step folds into its summary with a Change button, and the session publishes the page to the same link at each stop. **The picker**: Setup shows the type, the code and web scout levels, and the helpers as buttons and boxes capped by the limits. On the live page your picks are saved, and `--page --picks` writes them into the brainstorm's `Type:`, `Scouts:` and `Helpers:` lines. **The start card**: one question ("Do you know the domain, the codebase, both, or are you just exploring?") and one line where "ok" takes the setup. **`Helpers:`**, a new header line, limits the brainstorm to the helpers it names. Forkboard 0.3.0 adds the steps and choices (`steps`, a section's `choices`, `picks` in `state.json`, `forkboard picks`). |
+
 ## 0.31: brainstorm types
 
 | Version | Added |
