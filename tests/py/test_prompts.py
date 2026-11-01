@@ -118,7 +118,11 @@ class SinglePassTests(unittest.TestCase):
         self.assertIn("**Scope**", text)
         self.assertIn("missing handling at boundaries", text)
         self.assertIn("blocker, major or minor", text)
-        self.assertTrue(text.rstrip().endswith("`REVIEW: PASS` or `REVIEW: FAIL`."))
+        # These are the reviewer's instructions, so pass criteria may follow the
+        # final-line rule. Check the protocol itself, not its position in the guide.
+        self.assertIn("The last line of your whole reply must be exactly `REVIEW: PASS` or `REVIEW: FAIL`, flush left", text)
+        self.assertIn("no closing fence, no trailing note, no sign-off, nothing after it", text)
+        self.assertIn("`^REVIEW: (PASS|FAIL)[[:space:]]*$`", text)
 
     def test_flow_code_changes_when_the_single_review_guide_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
