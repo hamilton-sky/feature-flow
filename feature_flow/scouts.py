@@ -121,3 +121,16 @@ def section(folder, feature, slot, count):
 
 def brief_key(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def by_level(found, code, web):
+    """found cut to the scout levels: an off kind asks nothing, a light kind only its first question."""
+    levels = {"flow-scout": code, "flow-web": web}
+    kept, seen = [], set()
+    for item in found:
+        lvl = levels.get(item[0], "normal")
+        if lvl == "off" or (lvl == "light" and item[0] in seen):
+            continue
+        seen.add(item[0])
+        kept.append(item)
+    return kept

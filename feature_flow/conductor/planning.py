@@ -7,7 +7,7 @@ import os
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, prompts, scouts, state
+from feature_flow import brainstorm_mode, checks, prompts, scouts, state
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases.base import lane_runner
 
@@ -16,8 +16,6 @@ BRAINSTORM = "brainstorm.md"  # the user's chosen approach, copied from the stat
 LENSES = ("positive", "researcher", "open-minded", "artistic", "ux", "security")  # guides/lenses/<name>.md
 HELPERS = dict({"scout": "scout", "web": "scout", "architect": "consult", "designer": "consult", "po": "consult",
                 "skeptic": "skeptic"}, **{lens: "lens" for lens in LENSES})  # a brainstorm helper and its limit's group
-HELPER_LIMITS = {"normal": {"scout": 2, "web": 1, "consult": 2, "skeptic": 1, "lens": 2},
-                 "careful": {"scout": 3, "web": 2, "consult": 3, "skeptic": 1, "lens": 3}}  # helpers per brainstorm
 
 
 def one_scout(c, found, k, workdir=None, top="."):
@@ -31,7 +29,8 @@ def one_scout(c, found, k, workdir=None, top="."):
         raise Stop(str(err))
     if workdir is not None:  # a lane's scout: its role text as prompts gave it from the lane's folder
         role_text = lane_runner(role_text, c.scripts)
-    return scouts.prompt(role_text, role, question, workdir, codeintel=agent == "flow-scout", top=top)
+    return scouts.prompt(role_text, role, question, workdir, codeintel=agent == "flow-scout" and c.settings.scout_code != "light",
+                         top=top)
 
 
 class Planner:
@@ -46,6 +45,10 @@ class Planner:
         self.brainstorm_file = conductor.brainstorm_file
         self.state_file = conductor.state_file
         self.scouts_on = conductor.scouts_on
+        self.settings = conductor.settings
+        self.scout_code = conductor.settings.scout_code
+        self.scout_web = conductor.settings.scout_web
+        self.brainstorm_type = conductor.settings.brainstorm_type
         self.log = conductor.log
 
     def consult_prompt(self, role, question_file):
@@ -81,14 +84,16 @@ class Planner:
             raise Stop("the question %s is empty" % question_file)
         profile = "careful" if os.environ.get("FLOW_PROFILE", "").strip().lower() == "careful" else "normal"
         group = HELPERS[helper] if helper != "web" else "web"
-        limit = HELPER_LIMITS[profile][group] if self.scouts_on or group not in ("scout", "web") else 0
+        kind = self.brainstorm_type or "standard"
+        limit = brainstorm_mode.limits(profile, {"code": self.scout_code, "web": self.scout_web}, kind)[group]
         counts_file = self.state_file.parent / ("brainstorm-%s.helpers" % self.feature)
         counts = dict(line.split("=", 1) for line in (state.read_text(counts_file) or "").splitlines() if "=" in line)
         used = int(counts.get(group, "0")) if counts.get(group, "0").isdigit() else 0
         if used >= limit:
-            raise Stop("the brainstorm of %s has used its %d %s helper(s) (%s; FLOW_SCOUTS=off allows no scouts). go "
+            raise Stop("the brainstorm of %s has used its %d %s helper(s) (%s; type %s, scouts code=%s web=%s). go "
                        "on without, or delete %s to start a new brainstorm"
-                       % (self.feature, limit, group, profile, counts_file.as_posix()))
+                       % (self.feature, limit, group, profile, kind, self.scout_code, self.scout_web,
+                          counts_file.as_posix()))
         try:
             role_text = prompts.role(self.scripts, prompts.ROLES[group if group in ("skeptic", "lens") else
                                                                helper if group in ("scout", "web") else "ask-" + helper])
@@ -98,7 +103,8 @@ class Planner:
         about = ("The user's session is brainstorming how to build the feature `%s`, before it is planned: no brief "
                  "and no plan exist yet." % self.feature)
         if group in ("scout", "web"):
-            out = scouts.prompt(role_text, "planner", about + "\n\n" + question, codeintel=group == "scout")
+            out = scouts.prompt(role_text, "planner", about + "\n\n" + question,
+                                codeintel=group == "scout" and self.scout_code != "light")
         elif group == "lens":
             out = ("%s\n\n---\n\nYour lens is `%s`. Its guide follows.\n\n%s\n\n---\n\n%s The options it drafted "
                    "follow. Read the repository.\n\n%s\n\nDo not edit any file. Your final reply must end with exactly "
@@ -133,7 +139,7 @@ class Planner:
         text = self.save_brief(brief)
         folder = self.state_file.parent
         scouts.clear(folder, self.feature, "plan")
-        found = scouts.plan(text) if self.scouts_on else []
+        found = self.plan_scout_list(text)
         self.plan_scout_key().write_text(scouts.brief_key(text) + "\n", encoding="utf-8")
         self.log("PLAN-SCOUTS")
         return scouts.listing(folder, self.feature, "plan", found)
@@ -144,7 +150,10 @@ class Planner:
         text = self.read_text(self.brief_file, "brief") if self.brief_file.is_file() else None
         if not self.scouts_on or text is None or key is None or key.strip() != scouts.brief_key(text):
             raise NoPhase("run plan-scouts first: no scouts are listed for the brief of %s" % self.feature)
-        return one_scout(self, scouts.plan(text), k)
+        return one_scout(self, self.plan_scout_list(text), k)
+
+    def plan_scout_list(self, text):
+        return scouts.by_level(scouts.plan(text), self.scout_code, self.scout_web) if self.scouts_on else []
 
     def no_plan_yet(self):
         if self.plan.is_dir():
@@ -176,7 +185,7 @@ class Planner:
             found = ""
             key = state.read_text(self.plan_scout_key())
             if not findings and key is not None and key.strip() == scouts.brief_key(text):
-                found = scouts.section(self.state_file.parent, self.feature, "plan", len(scouts.plan(text)))
+                found = scouts.section(self.state_file.parent, self.feature, "plan", len(self.plan_scout_list(text)))
             return prompts.plan("plan", self.scripts, self.feature, self.draft_text(), text, notes,
                                 brainstorm) + found
         except FileNotFoundError as err:

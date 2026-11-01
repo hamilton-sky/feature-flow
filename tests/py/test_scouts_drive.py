@@ -28,7 +28,7 @@ def ticket(index, header):
 
 
 class ScoutsDrive(unittest.TestCase):
-    def setup(self, headers, **env):
+    def setup(self, headers, brainstorm="", **env):
         repo = Repo(tickets=())
         self.addCleanup(repo.close)
         env = dict({"FLOW_TICKETS_PER_SESSION": "99"}, **env)
@@ -38,6 +38,9 @@ class ScoutsDrive(unittest.TestCase):
             "# Commands: f\n\nSmoke: `%s -c \"pass\"`\nTest: `%s -c \"pass\"`\n" % (PYTHON, PYTHON), encoding="utf-8")
         for index, header in enumerate(headers, 1):
             repo.path("plans/f/tasks/%02d-t.md" % index).write_text(ticket(index, header), encoding="utf-8")
+        if brainstorm:  # the header lines of the plan's brainstorm.md
+            repo.path("plans/f/brainstorm.md").write_text("# Brainstorm: f\n\n%s\n## Idea\n" % brainstorm,
+                                                          encoding="utf-8")
         repo.commit("plan")
         rc, out = repo.flow("start", **env)
         self.assertEqual(rc, 0, out)
@@ -129,6 +132,19 @@ class ScoutsDrive(unittest.TestCase):
         env["FLOW_SCOUTS"] = "off"
         seen = self.drive(repo, env, reply)
         self.assertEqual([r for _, _, _, r, _ in seen], [[], []])
+
+    def test_deep_code_scouts_ask_as_for_one_level_higher(self):
+        repo, env, reply = self.setup((["Level: 1"], ["Level: 2"]), brainstorm="Type: map\n")
+        builds = [(n, r) for w, n, _, r, _ in self.drive(repo, env, reply) if w == "BUILD"]
+        self.assertEqual(builds, [("01", [("flow-scout", "builder")]),
+                                  ("02", [("flow-scout", "builder"), ("flow-scout", "builder")])])
+
+    def test_the_brainstorms_scout_levels_reach_the_build(self):
+        repo, env, reply = self.setup((["Level: 3"],), brainstorm="Type: map\nScouts: code=light\n")
+        self.assertEqual([r for _, _, _, r, _ in self.drive(repo, env, reply)],
+                         [[("flow-scout", "builder")], [("flow-scout", "reviewer")]])
+        repo, env, reply = self.setup((["Level: 3"],), brainstorm="Scouts: code=off\n")
+        self.assertEqual([r for _, _, _, r, _ in self.drive(repo, env, reply)], [[], []])
 
     def test_the_feature_review_gets_a_reviewer_scout(self):
         repo, env, reply = self.setup((["Level: 1"], ["Level: 2"]), FLOW_FAST="1")

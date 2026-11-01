@@ -12,9 +12,29 @@ The file is `.feature-flow/state/brainstorm-<feature>.md`, in the git-ignored st
 - **Never** with `fast` (unless the user typed `brainstorm`), for a Spec Kit or OpenSpec import, or when a plan exists.
 - With **`auto`** and no person to ask, skip it. With **`agent`** (another agent drives), the driving agent answers for the user and picks the option: write `Picked by: agent`.
 
+## The type and the scouts
+
+A brainstorm has a **type**, which says who it is for. The user names it after `brainstorm` (`brainstorm learn`), and may add scout levels (`brainstorm map web=off`).
+
+| Type | For a user who | Code scouts | Web scouts | What changes |
+|---|---|---|---|---|
+| `standard` | knows the domain and the codebase | normal | normal | nothing: the brainstorm below |
+| `learn` | is new to the domain | light | deep | you explain each idea as it comes, and keep a cited Glossary |
+| `map` | knows the domain, not this code | deep | light | the scouts map the repository first, into a Repo map |
+| `quick` | knows both and wants it short | light | light | one look, one or two options, no lens and no skeptic |
+| `explore` | is not sure it is worth building | light | normal | it ends in a Go or No-go Verdict, and only a Go goes on to the brief |
+
+A scout level is `off`, `light` (one helper, a quick pass, no codeintel), `normal` (the profile's count) or `deep` (as many as `careful` allows, each asking a different question, with codeintel when it is ready). The user's `code=<level>` and `web=<level>` words win over the type's, and `FLOW_SCOUTS=off` set by the user wins over both.
+
+When the user named no type, recommend one from what they said, in one question where "ok" takes your pick: for example "This looks like `learn`, since you are new to payments. ok, or another type?" Never ask more than that once. With `auto`, `agent`, or when they skip it, use your pick, or `standard` when nothing points elsewhere. The type and the levels go into the brainstorm's header (below) before you ask any helper: the script reads them from there to count the helpers, and once the plan is accepted the plan's scouts and the build's scouts follow the same levels.
+
 ## Step 1: Understand the idea
 
-Ask at most three questions, one at a time, only about what the code cannot tell you: who it is for, what success looks like, what is off limits. Skip any the conversation already answers.
+Ask at most three questions, one at a time, only about what the code cannot tell you: who it is for, what success looks like, what is off limits. Skip any the conversation already answers. With `quick`, ask at most one.
+
+Then write the brainstorm file with its header and the Idea section only, with the shell as Step 4 shows: `Type:` with the type, and `Scouts:` only when the user gave a level (`Scouts: code=deep web=off`). You fill in the rest as you go.
+
+With `learn`, explain as you go: each time the brainstorm needs a term or an idea of the domain, say what it means in a sentence of plain words before you use it, and add it to the Glossary with the link or file it came from (a web helper's link, the library's docs, the repository). Ask the user, in one line, whether a term is clear before you build an option on it.
 
 ## The helpers
 
@@ -32,15 +52,17 @@ Six read only helpers work for you, never for each other, and never talk to the 
 
 A lens is one way of looking, and its name is the helper's name: `positive` (the best case for each option), `researcher` (what the repository's own evidence says), `open-minded` (the option nobody drafted), `artistic` (how it feels to the person who meets it), `ux` (usability and accessibility) or `security` (what a hostile caller or a mistake could do). Pick the lenses that fit the idea: a screen the user sees gets `ux` and often `artistic`; anything that touches data, money, accounts or limits gets `security`; a vague or new idea gets `open-minded`; a choice that rests on a guess gets `researcher`. Ask a lens after the options are written, as the skeptic is.
 
-The script counts them per brainstorm and stops past the limit: `normal` allows 2 scouts, 1 web, 2 consultants (architect, designer and po together), 1 skeptic and 2 lenses; `careful` allows 3, 2, 3, 1 and 3. `FLOW_SCOUTS=off` allows no scout or web. Past a limit, go on without. A reply that ends `ANSWER: USER` is a question for the user: ask it.
+The script counts them per brainstorm and stops past the limit: `normal` allows 2 scouts, 1 web, 2 consultants (architect, designer and po together), 1 skeptic and 2 lenses; `careful` allows 3, 2, 3, 1 and 3. The scout levels replace the first two: `off` allows none, `light` 1, and `deep` 3 scouts or 2 web, as `careful` does. `quick` allows 1 consultant, no skeptic and no lens. Past a limit, go on without. A reply that ends `ANSWER: USER` is a question for the user: ask it.
 
 ## Step 2: Look around
 
 Ask one `scout`: how does this codebase already do the nearest thing, and which files would change? When the idea leans on an outside library, API or a known hard problem, ask a `web` helper at the same time: how have others solved it? Their replies are leads, not facts: check what an option depends on yourself.
 
+With `map`, map the repository before the options: ask up to three scouts at once, each a different question (the folders and modules the idea lives in and what calls what, how data moves through them, the tests, commands and conventions around them), and write what you checked into the Repo map. Ask the user's questions in terms of that map. With `learn`, ask the web helpers what the domain's terms mean and how the known products do it, with links, before you draw. With `explore`, ask a web helper whether something already does this, and what it would cost to keep.
+
 ## Step 3: Draw the options
 
-Write two or three options that really differ (not one idea and two straw men). For each:
+Write two or three options that really differ (not one idea and two straw men); with `quick`, one or two. For each:
 
 - a **mermaid diagram** in a ```mermaid block: a `flowchart` of the parts and what calls what, or a `sequenceDiagram` of the main flow. Show only what the feature adds or changes, at most about 12 nodes, labels in plain words.
 - two or three pros and cons, a rough size (tickets, or S, M, L), and the risky areas: anything that touches auth, secrets, money, data that could be lost, limits, or what a hostile caller reaches.
@@ -48,6 +70,8 @@ Write two or three options that really differ (not one idea and two straw men). 
 If the choice turns on module boundaries, a screen or scope, ask the `architect`, `designer` or `po`. Then, with the options written, ask the `skeptic` (always in `careful`, otherwise when there are two options or more): its question is the Options section as you wrote it, never your reasons. Fold its objections into each option's cons and risky areas, add its simpler option when there is one, and only then recommend one option and say why in a sentence.
 
 ## Step 4: The user picks
+
+With `explore`, write the Verdict before the user picks: Go or No-go and why, in two or three lines, with the option you would build on a Go. The user agrees or not. On a No-go, keep the file (it is git-ignored), write no brief, and stop: the user has their answer. On a Go, go on as below.
 
 Write the brainstorm file (below) with the options and no Chosen yet, then make it a review page: `python3 scripts/flow-status.py <feature> --brainstorm-page` writes `.feature-flow/state/brainstorm-<feature>.html` beside it, with a sidebar for the sections, a light, dark or system switch, diagrams whose boxes the user can drag, and an arrow animation they can turn on. The look is the brainstorm's `Style:` line: the style the user names, else the one that fits the subject (below). If you can publish an artifact, add `--fragment` and publish that file; otherwise give the user the file's path to open. Then show the options and your pick, and ask: which one? They may pick, edit, mix, or drop the brainstorm. On a drop, delete the file and write the brief as before.
 

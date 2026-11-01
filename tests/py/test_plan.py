@@ -193,7 +193,7 @@ class Planning(unittest.TestCase):
         for helper in ("scout", "web"):
             rc, out, _ = self.flow("brainstorm-prompt", helper, q, FLOW_SCOUTS="off")
             self.assertEqual(rc, 1, out)
-            self.assertIn("FLOW_SCOUTS=off allows no scouts", out)
+            self.assertIn("has used its 0 %s helper(s) (normal; type standard, scouts code=off web=off)" % helper, out)
         self.assertEqual(self.flow("brainstorm-prompt", "skeptic", q, FLOW_SCOUTS="off")[0], 0)
 
     def test_brainstorm_prompt_refuses_an_unknown_helper_an_empty_question_and_an_existing_plan(self):

@@ -135,8 +135,10 @@ class Workspace:
 
     def scout_questions(self):
         """[(agent, role, question)] for the phase handed out last: a build's first attempt above level 1 (or with
-        no level), a level 3 ticket's first review, and the first round of the feature review."""
-        return self.pending().scout_questions(self)
+        no level), a level 3 ticket's first review, and the first round of the feature review, cut to the scout
+        levels: none at off, the first one of each kind at light."""
+        return scouts.by_level(self.pending().scout_questions(self), self.settings.scout_code,
+                               self.settings.scout_web)
 
     def list_scouts(self):
         """`SCOUT <k> <agent> <reply file>` lines for the phase handed out last, or NONE. Clears old replies."""
