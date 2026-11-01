@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
-from feature_flow import profiles, tickets
+from feature_flow import brainstorm_mode, profiles, state, tickets
 from feature_flow.conductor.errors import Stop
 
 
@@ -56,11 +56,14 @@ class Settings:
     reviewers: int = 1  # 2: a quality and a ticket reviewer side by side, where one review would run
     round_review: bool = False  # one review of the whole round at the end, after every ticket's own
     base_gate: bool = False  # the whole gate once at the base, before the first ticket
+    scout_code: str = "normal"  # off, light, normal or deep: how far the code scouts (flow-scout) look
+    scout_web: str = "normal"  # the same for the web scouts (flow-web)
+    brainstorm_type: str = ""  # the brainstorm's Type: line, "" without one
 
     @classmethod
     def load(cls, feature, environ=None):
         """The settings of feature's run. Stops on the first bad value, in the order the conductor always
-        checked them: the profile, then the whole numbers. Fills the profile's settings into environ."""
+        checked them: the profile, the scout levels, then the whole numbers. Fills the profile's settings into environ."""
         environ = os.environ if environ is None else environ
         root = Path(environ.get("FLOW_DIR") or "plans")
         try:
@@ -68,6 +71,11 @@ class Settings:
         except profiles.UnknownProfile as err:
             raise Stop(str(err))
         filled = profiles.apply(environ, profile)
+        try:
+            mode = brainstorm_mode.read(root, state.STATE_DIR, feature)
+            code, web = (brainstorm_mode.level(kind, environ, filled, mode) for kind in brainstorm_mode.KINDS)
+        except brainstorm_mode.BadMode as err:
+            raise Stop("%s. fix the header of the brainstorm of %s" % (err, feature))
         return cls(
             root=root,
             profile=profile,
@@ -82,12 +90,15 @@ class Settings:
             small_files=_env_int("FLOW_SMALL_FILES", 3, environ),
             small_lines=_env_int("FLOW_SMALL_LINES", 60, environ),
             batch_size=min(_env_int("FLOW_BATCH", MAX_BATCH, environ), MAX_BATCH),
-            scouts_on=environ.get("FLOW_SCOUTS", "on") != "off",
+            scouts_on=(code, web) != ("off", "off"),
             relay=environ.get("FLOW_RELAY", "0") == "1",
             invoke=environ.get("FLOW_INVOKE") or "/feature-flow",
             reviewers=_reviewers(environ),
             round_review=environ.get("FLOW_ROUND_REVIEW", "off") == "on",
             base_gate=environ.get("FLOW_BASE_GATE", "off") == "on",
+            scout_code=code,
+            scout_web=web,
+            brainstorm_type=mode.get("type", ""),
         )
 
     def session_limit(self, driver):

@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from feature_flow import __version__, codeintel, git, lanes, report, state, suggest, tickets
+from feature_flow import __version__, brainstorm_mode, codeintel, git, lanes, report, state, suggest, tickets
 
 USAGE = "usage: feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR] [--compare <eval.json> ...]"
 CATCHES = report.FAILS + ("FOOTPRINT-FAIL", "FEATURE-FAIL", "ACCEPT-FAIL")
@@ -350,8 +350,8 @@ def later(plan_dir, end):
 
 
 def brainstorm(plan_dir, rows=()):
-    """{"picked_by": "person"|"agent", "helpers": {helper: count}} when the plan was brainstormed first
-    (plans/<feature>/brainstorm.md), else None."""
+    """{"picked_by": "person"|"agent", "helpers": {helper: count}, "type": its Type: line} when the plan was
+    brainstormed first (plans/<feature>/brainstorm.md), else None."""
     path = Path(plan_dir) / "brainstorm.md"
     if not path.is_file():
         return None
@@ -363,7 +363,11 @@ def brainstorm(plan_dir, rows=()):
         if event.startswith("BRAINSTORM-"):
             name = event[len("BRAINSTORM-"):].lower()
             helpers[name] = helpers.get(name, 0) + 1
-    return {"picked_by": picked if picked in ("person", "agent") else "unknown", "helpers": helpers}
+    try:
+        kind = brainstorm_mode.parse(text).get("type", "standard")
+    except brainstorm_mode.BadMode:
+        kind = "unknown"
+    return {"picked_by": picked if picked in ("person", "agent") else "unknown", "helpers": helpers, "type": kind}
 
 
 # ---- the command -----------------------------------------------------------------------
@@ -420,7 +424,9 @@ def render(record, out_dir, wrote_form):
                                                          % t["deferred_checks"] if t.get("deferred_checks") else ""))
     if record.get("brainstorm"):
         used = record["brainstorm"].get("helpers") or {}
-        lines.append("  brainstorm: yes, the option picked by %s, %s" % (record["brainstorm"]["picked_by"], ", ".join(
+        kind = record["brainstorm"].get("type", "standard")
+        lines.append("  brainstorm: yes%s, the option picked by %s, %s" % (
+            "" if kind == "standard" else " (%s)" % kind, record["brainstorm"]["picked_by"], ", ".join(
             "%s x%d" % kv for kv in sorted(used.items())) or "no helpers"))
     lines.append("  active minutes: %s" % (record["active_minutes"] if record["active_minutes"] is not None else "unknown"))
     tm = record.get("timing")

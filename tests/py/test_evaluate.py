@@ -152,8 +152,12 @@ class EvalCommandTests(unittest.TestCase):
             code, out, err = self.run_eval("f")
             self.assertEqual(code, 0, err)
             record = json.loads((plan / "eval.json").read_text(encoding="utf-8"))
-            self.assertEqual(record["brainstorm"], {"picked_by": expect, "helpers": {}})
+            self.assertEqual(record["brainstorm"], {"picked_by": expect, "helpers": {}, "type": "standard"})
             self.assertIn("brainstorm: yes, the option picked by %s, no helpers" % expect, out)
+        (plan / "brainstorm.md").write_text("# Brainstorm: f\n\nPicked by: agent\nType: explore\n", encoding="utf-8")
+        code, out, err = self.run_eval("f")
+        self.assertEqual(json.loads((plan / "eval.json").read_text(encoding="utf-8"))["brainstorm"]["type"], "explore")
+        self.assertIn("brainstorm: yes (explore), the option picked by agent", out)
         folder = state.state_dir(self.repo.dir)
         (folder / "flow-f.log").write_text("2026-10-23T09:50:00Z,-,BRAINSTORM-SCOUT\n2026-10-23T09:51:00Z,-,BRAINSTORM-SCOUT\n"
                                            "2026-10-23T09:55:00Z,-,BRAINSTORM-SKEPTIC\n" + LOG, encoding="utf-8")

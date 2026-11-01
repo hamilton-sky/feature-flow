@@ -312,7 +312,7 @@ Before a planner, builder or reviewer starts, the session can spawn cheap helper
 | a level 3 ticket's first review | one reviewer scout on the conventions the diff must follow |
 | the feature review (fast path) | one reviewer scout |
 
-`scouts [lane]` lists `SCOUT <k> <agent> <reply file>` lines (or `NONE`) and clears the last ones' replies; `scout-prompt <k> [lane]` prints one scout's prompt. The session saves each reply into its file, and the phase's `prompt` adds them under `## Scout findings (unverified)`, cut to 60 lines each. A reply saved for one phase never reaches another. Retries and later rounds get no scouts. `FLOW_SCOUTS=off` turns them off.
+`scouts [lane]` lists `SCOUT <k> <agent> <reply file>` lines (or `NONE`) and clears the last ones' replies; `scout-prompt <k> [lane]` prints one scout's prompt. The session saves each reply into its file, and the phase's `prompt` adds them under `## Scout findings (unverified)`, cut to 60 lines each. A reply saved for one phase never reaches another. Retries and later rounds get no scouts. `FLOW_SCOUTS=off` turns them off. After a brainstorm, its `Scouts:` levels apply here too: `off` lists none of that kind, `light` only the first, and `deep` code scouts ask before a build as for a ticket one level higher ([Brainstorm types](#brainstorm-before-planning)).
 
 ## codeintel (optional)
 
@@ -400,7 +400,19 @@ The long `python3 -I -c ...` line the skill uses to call the conductor stays as 
 
 When an idea is still fuzzy, the session can brainstorm it with you before it writes the brief: `/feature-flow <feature> brainstorm`, always in `careful`, and offered on its own when there is no bar yet or there are two real ways to build it. It asks you up to three questions, one at a time, sends a scout to see how the code does the nearest thing today, then lays out two or three options, each with a mermaid diagram, its pros and cons, its size and its risky areas, and recommends one. Your pick and the brief share one yes.
 
-Read only helpers work for the session during a brainstorm: a code scout, a web scout, the architect, designer and product owner, `flow-skeptic`, who attacks each finished option so the session that wrote the options is not the one that judges them, and `flow-lens`, who looks at the options through one lens the session picks for the idea: `positive`, `researcher`, `open-minded`, `artistic`, `ux` or `security` ([guides/lenses/](guides/lenses/)). Each gets its prompt from `brainstorm-prompt <helper> <question file>`, which counts them: `normal` allows 2 scouts, 1 web, 2 consultants, 1 skeptic and 2 lenses per brainstorm, `careful` 3, 2, 3, 1 and 3, and `FLOW_SCOUTS=off` no scouts. Helpers never write the brainstorm and never ask you anything; the session does both.
+**Brainstorm types.** A word after `brainstorm` says who the brainstorm is for, and the session suggests one when you name none (one question; "ok" takes its pick, and `auto` or `agent` take it without asking):
+
+| Type | For when you | Code scouts | Web scouts | What changes |
+|---|---|---|---|---|
+| `standard` | know the domain and the codebase | normal | normal | nothing |
+| `learn` | are new to the domain | light | deep | each idea is explained as it comes, and the brainstorm keeps a Glossary with a source for every term |
+| `map` | know the domain, not this code | deep | light | up to three scouts map the repository first, each asking something different, into a Repo map |
+| `quick` | know both and want it short | light | light | one or two options, one consultant, no skeptic and no lens |
+| `explore` | are not sure it is worth building | light | normal | it ends in a Go or No-go Verdict; only a Go goes on to the brief |
+
+`code=<level>` and `web=<level>` after the type set the scouts yourself: `off`, `light` (one scout, no codeintel), `normal`, or `deep` (as many as `careful` allows; before a build, the scouts ask as for a ticket one level higher). The type and the levels are header lines of the brainstorm (`Type: map`, `Scouts: web=off`), so the plan's and the build's scouts follow them after the plan is accepted. `FLOW_SCOUTS=off` still turns every scout off.
+
+Read only helpers work for the session during a brainstorm: a code scout, a web scout, the architect, designer and product owner, `flow-skeptic`, who attacks each finished option so the session that wrote the options is not the one that judges them, and `flow-lens`, who looks at the options through one lens the session picks for the idea: `positive`, `researcher`, `open-minded`, `artistic`, `ux` or `security` ([guides/lenses/](guides/lenses/)). Each gets its prompt from `brainstorm-prompt <helper> <question file>`, which counts them: `normal` allows 2 scouts, 1 web, 2 consultants, 1 skeptic and 2 lenses per brainstorm, `careful` 3, 2, 3, 1 and 3; the type and the scout levels change these as the table says. Helpers never write the brainstorm and never ask you anything; the session does both.
 
 Before you pick, the session shows the brainstorm as a review page: `feature-flow brainstorm-page <feature>` (or `flow-status.py <feature> --brainstorm-page`) writes it beside the brainstorm as one HTML file. It has a sidebar that routes between the sections and shows how far you read, a system, light or dark switch, flowchart diagrams you can edit (arrange them left to right, top to bottom, radial or as a grid, drag, add boxes of seven kinds, colour them from 12 colours, rename and delete them, connect them with arrows, undo and redo, with the keyboard too), reset, and copy back as mermaid (the edited diagram once you change it; edits are kept only in that browser), and an arrow animation that stays off until you turn it on. Its look is a style: `route` (the default), `blueprint`, `sketch`, `paper`, `terminal` or `bright`, picked with `--style`, the brainstorm's `Style:` line or `FLOW_STYLE`; the session picks the one that fits the subject unless you name one, and colours boxes by role. A style is one CSS file of colour, font and box tokens in Forkboard's [themes/](packages/forkboard/forkboard/themes/), so adding one is adding a file. `--fragment` leaves out the html and body tags, for publishing the page as an artifact.
 
@@ -494,7 +506,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting |
 | `FLOW_BUDGET` | unset | read by `start`: minutes of active work before fast mode turns on, then a re-plan offer; `off` drops it |
 | `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off |
-| `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase |
+| `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase, whatever the brainstorm's `Scouts:` line says |
 | `FLOW_CODEINTEL` | `auto` | `off` keeps codeintel out of the scout's and reviewer's prompts; `auto` adds it when `codeintel doctor` reports an engine ready |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |

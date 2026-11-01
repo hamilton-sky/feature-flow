@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.31: brainstorm types
+
+| Version | Added |
+|---|---|
+| 0.31.0 | **Brainstorm types** ([README](../README.md#brainstorm-before-planning)): `brainstorm learn` (new to the domain: ideas explained as they come, a cited Glossary, deep web scouts), `brainstorm map` (new to the code: a Repo map first, deep code scouts), `brainstorm quick` (one or two options, few helpers) and `brainstorm explore` (ends in a Go or No-go). **Scout levels**: `code=` and `web=` take `off`, `light`, `normal` or `deep`. Both are header lines of the brainstorm (`Type:`, `Scouts:`), so the plan's and the build's scouts follow them. `FLOW_SCOUTS=off` still turns every scout off, and a brainstorm with no type works as before. |
+
 ## 0.30: the standard profile
 
 | Version | Added |

@@ -92,8 +92,12 @@ class Build(Phase):
 
     @classmethod
     def scout_questions(cls, ws):
-        """A build's first attempt above level 1 (or with no level), never in a later round or after a question."""
+        """A build's first attempt above level 1 (or with no level), never in a later round or after a question.
+        Deep code scouts ask as for one level higher: a level 1 ticket gets one, a level 2 ticket the boundary too."""
         if not ws.scouts_on or ws.num("round") or ws.num("asks") or ws.num("attempt") != 1:
             return []
+        level = ws.num("level")
+        if ws.settings.scout_code == "deep" and level in (1, 2):
+            level += 1
         return scouts.build(proof.repo_relative(ws.ticket(), cwd=ws.folder), ws.get("base"), lanes.touches(ws.ticket_at_base()) or [],
-                            ws.num("level"))
+                            level)

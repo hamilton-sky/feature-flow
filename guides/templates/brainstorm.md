@@ -2,10 +2,20 @@
 
 Picked by: <person|agent>
 Style: <route|blueprint|sketch|paper|terminal|bright>
+Type: <standard|learn|map|quick|explore>
+Scouts: <code=off|light|normal|deep web=off|light|normal|deep, or leave the line out for the type's levels>
 
 ## Idea
 
 <The ask in the user's words, and the answers to the questions you asked.>
+
+## Glossary
+
+<Type learn only: each domain term the brainstorm uses, one line in plain words, with the link or file it came from. Leave the section out for the other types.>
+
+## Repo map
+
+<Type map only: the parts of the repository the idea lives in, one line each with its folder, what calls what, and where the tests are. Leave the section out for the other types.>
 
 ## What exists
 
@@ -35,6 +45,10 @@ flowchart LR
 ### B. <name>
 
 <Same shape.>
+
+## Verdict
+
+<Type explore only: Go or No-go, and why in two or three lines. On a No-go, leave Chosen, Rejected and the rest out. Leave the section out for the other types.>
 
 ## Chosen
 
