@@ -52,6 +52,9 @@ class Handle:
     def get(self, key, default=""):
         return self.st.get(key, default)
 
+    def checkpointing(self):
+        return False
+
     def log(self, event):
         self.events.append(event)
 

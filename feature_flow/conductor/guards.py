@@ -66,6 +66,8 @@ def relaxed(c):
         c.log("FLOOR-RELAXED-%s" % cat.upper())
     if not c.gate_on:
         c.log("GATE-OFF-UNSAFE")
+    elif c.checkpointing():  # the full gate and the review run at checkpoints, not after each ticket
+        c.log("GATE-END" if c.settings.gate_every == 0 else "GATE-BATCH-%d" % c.settings.gate_every)
 
 
 LANE_CAPS = {"careful": 2}  # the most lanes `Lanes: auto` gives a profile: fast batches instead, the rest up to MAX_LANES

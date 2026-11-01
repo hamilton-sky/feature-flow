@@ -1,9 +1,10 @@
 """One ticket at a time: hand out the lowest ready ticket, and end through the shared end of run."""
 
 from feature_flow import checks, floorguard, git, lanes, tickets
-from feature_flow.conductor import guards
+from feature_flow.conductor import checkpoint, guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases.build import Build
+from feature_flow.conductor.phases.final import Final
 from feature_flow.conductor.policy import levels
 from feature_flow.conductor.schedulers.end import EndOfRun
 
@@ -61,6 +62,8 @@ class SerialScheduler:
         if dirty:
             raise Stop("working tree is not clean, commit or stash first: %s%s"
                        % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
+        if checkpoint.due(c) and checkpoint.run(c) == checkpoint.PASSED:  # every N tickets: gate and review them
+            return Final.hand_out(c)
         nxt = checks.flow_status(c.scripts, c.feature, "--next")
         if nxt.code == 0:
             guards.before_ticket(c, only=("base",))  # before the tester too: its tests are judged by the gate

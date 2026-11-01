@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) describes how 
 
 Upgrade between features, not in the middle of a run (see [Upgrading](../README.md#upgrading)).
 
+## 0.34: checkpoints for the gate
+
+| Version | Added |
+|---|---|
+| 0.34.0 | **When the gate runs** ([README](../README.md#when-the-gate-runs-checkpoints)): `Gate: each`, `Gate: batch N` or `Gate: end` in `commands.md`, a choice on the plan-yes card. With `batch N` or `end`, each ticket gets only the cheap checks (Quick, the floor guard, the footprint, test first) and no review below level 3; every N tickets and at the end a checkpoint runs the full gate and the Done when checks at HEAD, then one reviewer reads those tickets together. A red gate is traced to the first ticket at whose commit it fails, and only that ticket is built again (`CHECKPOINT-PASS`, `CHECKPOINT-FAIL`). Defaults: `fast` end, `standard` batch 3, `careful` and `normal` each. Lanes stop leasing until a due checkpoint has run; a merge runs only Quick. `Gate: off unsafe` and `FLOW_GATE=off` work as before. |
+
 ## 0.33: the build setup on the plan's yes
 
 | Version | Added |

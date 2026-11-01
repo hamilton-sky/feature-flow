@@ -41,6 +41,8 @@ class Final(Phase):
         ws.count_run()
         ws.all.update({"phase": "final", "num": "all", "ticket": ""})  # the log names the feature review `all`
         ws.all["final_base"] = cls.feature_base(ws)
+        if ws.checkpointing():
+            ws.all["checkpoint_mid"] = "1" if cls.tickets_left(ws) else ""
         ws.snapshot_code()  # what check_code holds the feature review to; with lanes, no ticket's snapshot is here
         ws.all["review_attempt"] = (ws.num("review_attempt") if retry else 0) + 1  # not the last ticket's count
         ws.all["review_sha"] = git.head()
@@ -63,6 +65,9 @@ class Final(Phase):
             for key in ("phase", "deferred", "reviewed", "final_base", "final_round", "review_attempt", "review_sha",
                         "scout_key"):
                 ws.all[key] = ""
+            for key in ("checkpoint_sha", "checkpoint_round", "checkpoint_wait", "checkpoint_mid"):
+                if key in ws.all:
+                    ws.all[key] = ""
             ws.save()
             ws.log("FEATURE-PASS")
             return Outcome(ws.scheduler().resume())
@@ -75,6 +80,8 @@ class Final(Phase):
             if not git.commit_file(path, "chore(%s): fixes from the feature review, round %d" % (ws.feature, round_no)):
                 raise Stop("cannot commit %s. this session must be allowed to run git commit" % path.as_posix())
             ws.all.update({"phase": "", "final_round": round_no, "review_attempt": 0, "review_sha": ""})
+            if ws.checkpointing():  # the next checkpoint waits for this fix ticket
+                ws.all["checkpoint_wait"] = tickets.number(str(path))
             ws.save()
             ws.log("FEATURE-FAIL")
             return Outcome(ws.scheduler().resume())
@@ -108,11 +115,31 @@ class Final(Phase):
         nums = [num for num, _ in ws.deferred()]
         try:
             return prompts.feature_review(ws.scripts, ws.feature, ws.plan.as_posix(), ws.all["final_base"], nums,
-                                          [n for n in [cls.final_note(ws), ws.all.get("edit_note", "")] if n],
+                                          [n for n in [cls.checkpoint_note(ws), cls.final_note(ws), ws.all.get("edit_note", "")] if n],
                                           os.environ.get("FLOW_TICKETS") or "tasks", ws.prompts_top
                                           ) + ws.scout_findings()
         except FileNotFoundError as err:
             raise Stop(str(err))
+
+    @classmethod
+    def tickets_left(cls, ws):
+        """True when some ticket of the plan is not resolved yet: the review is a checkpoint, not the last one."""
+        folder = ws.plan / (os.environ.get("FLOW_TICKETS") or "tasks")
+        return any(tickets.status(p) not in tickets.DONE + ("parked", "wontfix")
+                   for p in tickets.ticket_files(str(folder)))
+
+    @classmethod
+    def checkpoint_note(cls, ws):
+        """What the reviewer of a checkpoint is told: the conductor's checks it can count on, and its scope."""
+        if not ws.checkpointing() or ws.all.get("checkpoint_sha") != ws.all.get("review_sha"):
+            return ""
+        note = ("the conductor ran the full gate and each of these tickets' Done when checks at HEAD, and they "
+                "passed; each ticket also passed the floor guard and the footprint check as it was built. read the "
+                "combined diff for what those checks cannot see")
+        if ws.all.get("checkpoint_mid"):
+            note += (". this is a checkpoint, not the end: tickets not built yet are not part of this review, so do "
+                     "not report what they will add")
+        return note
 
     @classmethod
     def final_note(cls, ws):

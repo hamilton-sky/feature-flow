@@ -30,13 +30,13 @@ class Drive:
     """A session: it keeps the builds and reviews it handed to subagents and finishes them in the order the
     test asks for, calling the conductor the way the skill says."""
 
-    def __init__(self, test, repo, tickets, test_command='-c "pass"', lanes="2"):
+    def __init__(self, test, repo, tickets, test_command='-c "pass"', lanes="2", extra=""):
         self.test, self.repo = test, repo
         for folder in ("agents", "guides"):
             shutil.copytree(str(ROOT / folder), str(repo.path(folder)))
         repo.path("plans/f/commands.md").write_text(
-            "# Commands: f\n\nSetup: `%s -c \"pass\"`\nSmoke: `%s -c \"pass\"`\nTest: `%s %s`\n"
-            % (PYTHON, PYTHON, PYTHON, test_command), encoding="utf-8")
+            "# Commands: f\n\nSetup: `%s -c \"pass\"`\nSmoke: `%s -c \"pass\"`\nTest: `%s %s`\n%s"
+            % (PYTHON, PYTHON, PYTHON, test_command, extra), encoding="utf-8")
         for slug, title, blocked, header in tickets:
             repo.path("plans/f/tasks/%s.md" % slug).write_text(ticket(title, blocked, header), encoding="utf-8")
         repo.commit("plan")
@@ -65,7 +65,7 @@ class Drive:
             word = out.split()[0]
             if word in ("BUILD", "REVIEW"):
                 fields = out.split()
-                self.pending.append([word, fields[4], fields[1], fields[2]])
+                self.pending.append([word, fields[4] if len(fields) > 4 else "", fields[1], fields[2]])
                 rc, out = self.call("next")
                 continue
             return out

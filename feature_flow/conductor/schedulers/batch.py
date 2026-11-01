@@ -101,8 +101,11 @@ class BatchScheduler(SerialScheduler):
             raise Stop("HEAD is detached after the batch of %s. a builder must not switch branches" % c.ticket_name())
         ends = self.ticket_ends(paths)
         built = [(path, end) for path, end in ends if end]
-        gate = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=c.gate_quick()) if built else None
-        if built:
+        # a checkpointed gate runs only Quick here (nothing without a Quick command): the full gate is the checkpoint's
+        quick = True if c.checkpointing() else c.gate_quick()
+        gated = built and (c.has_quick() or not c.checkpointing())
+        gate = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick) if gated else None
+        if gated:
             c.log("GATE-PASS" if gate.ok else "GATE-FAIL")
         broke = None
         results = []
@@ -116,8 +119,8 @@ class BatchScheduler(SerialScheduler):
                              "level_note": ""})
                 c.st["level"] = c.base_level()
                 failure = None
-                if not gate.ok and broke is None:
-                    result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=c.gate_quick())
+                if gate is not None and not gate.ok and broke is None:
+                    result = checks.gate(c.scripts, c.feature, c.gate_timeout, quick=quick)
                     if not result.ok:
                         broke, failure = path, ("gate", result.out)
                 if failure is None:
@@ -132,7 +135,7 @@ class BatchScheduler(SerialScheduler):
             git._git("checkout", "-q", home)
             c.st["batch_restore"] = ""
             c.save()
-        if built and not gate.ok and broke is None:  # it fails at HEAD but at no ticket's end: blame the last one
+        if gate is not None and not gate.ok and broke is None:  # it fails at HEAD but at no ticket's end: blame the last one
             path, base, _, due = results[-1]
             results[-1] = (path, base, ("gate", gate.out), due)
         for path, base, failure, due in results:
