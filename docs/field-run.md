@@ -12,7 +12,7 @@ A run on your repo, with a feature you actually need, teaches more than another 
 
 ## During
 
-Talk the feature through, then `/feature-flow` (Codex: `$feature-flow`). Say yes twice. To try the brainstorm too, add `brainstorm` (`/feature-flow <feature> brainstorm`); [brainstorm.md](brainstorm.md) shows what to expect, and the review page and its diagram editor are worth a note of their own. Let it run, and write down anything you did not expect. If another agent drives the session for you, add `agent` (`/feature-flow <feature> agent`), so the eval does not count its stops as your time.
+Talk the feature through, then `/feature-flow` (Codex: `$feature-flow`). Say yes twice. To try the brainstorm too, add `brainstorm` (`/feature-flow <feature> brainstorm`); [brainstorm.md](brainstorm.md) shows what to expect, and the review page and its diagram editor are worth a note of their own. Let it run, and write down anything you did not expect. To try the guided flow, start with `brainstorm` and no type: the session asks the start card's question, and the run should stop for you three times in all (the start card, the brainstorm's pick and the plan's yes). On the plan's yes, look at the width the card shows and try one choice (the lanes, a full review or a builder note); [guided-flow.md](guided-flow.md) shows each stop. If another agent drives the session for you, add `agent` (`/feature-flow <feature> agent`), so the eval does not count its stops as your time.
 
 ## After
 
@@ -35,5 +35,6 @@ Fill in `eval-verdict.md`, above all whether each catch was real or a false alar
 3. Which tickets needed a rework round, and why?
 4. Did the session ever mangle the loader line or lose a digest?
 5. Was the plan right: did the tickets match what you wanted built?
+6. For a guided run: did it stop more than three times (eval's `guided stops` line), was the start card's setup right, and did the helpers' ideas reach the pick (eval's `helpers' ideas` line)? Did `Lanes: auto` build as many tickets at once as the card said?
 
 Keep `.feature-flow/state/` (the log and state files) and open an issue at https://github.com/hamilton-sky/feature-flow/issues with `eval.json` attached, the report output and your answers.

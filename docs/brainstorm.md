@@ -1,6 +1,6 @@
 # Brainstorming a feature, and the review page
 
-This page walks through a brainstorm from your side of the chat, then shows Forkboard, the package that draws the review page. The rules the session follows are in [guides/brainstorm.md](../guides/brainstorm.md); the [README](../README.md#brainstorm-before-planning) has the summary.
+This page walks through a brainstorm from your side of the chat, then shows Forkboard, the package that draws the review page. The brainstorm is the first two of the guided flow's three stops; [guided-flow.md](guided-flow.md) walks through the whole run, up to the plan's yes and the build. The rules the session follows are in [guides/brainstorm.md](../guides/brainstorm.md); the [README](../README.md#brainstorm-before-planning) has the summary.
 
 ## When to brainstorm
 
@@ -14,15 +14,18 @@ In a Claude Code session in your repo (Codex: `$feature-flow` instead of `/featu
 /feature-flow rate-limits brainstorm
 ```
 
-1. **Questions.** The session asks up to three, one at a time, and only what the code can't tell it: who it is for, what success looks like, what is off limits.
-2. **A look around.** A scout reads how your code does the nearest thing today and which files would change. A web scout looks up prior art when the idea leans on an outside library or a known hard problem.
-3. **Options.** Two or three ways to build it that really differ. Each one has a mermaid diagram, two or three pros and cons, a rough size and its risky areas. Helpers can weigh in: the architect, designer or product owner, a skeptic who attacks each option, and lenses (`positive`, `researcher`, `open-minded`, `artistic`, `ux`, `security`).
-4. **The review page.** The session shows the options as one page and recommends one. It writes the page beside the brainstorm (`.feature-flow/state/brainstorm-<feature>.html`) and opens it, or publishes it as an artifact when it can.
-5. **Your pick.** Answer in the chat: pick one, mix two, change one, or drop the brainstorm. The same yes approves the brief that follows, so you approve once.
+1. **The start card.** When you name no type, the session asks whether you know the domain, the codebase, both, or are just exploring, and shows the setup it picked (the type, the scout levels and the helpers) in one line. "ok" takes it. Name a type yourself (`brainstorm learn`, `map`, `quick`, `explore`) to skip the card.
+2. **Questions.** The session asks up to three, one at a time, and only what the code can't tell it: who it is for, what success looks like, what is off limits.
+3. **A look around.** A scout reads how your code does the nearest thing today and which files would change. A web scout looks up prior art when the idea leans on an outside library or a known hard problem.
+4. **Options.** Two or three ways to build it that really differ. Each one has a mermaid diagram, two or three pros and cons, a rough size and its risky areas. Helpers can weigh in: the architect, designer or product owner, a skeptic who attacks each option, and lenses (`positive`, `researcher`, `open-minded`, `artistic`, `ux`, `security`), limited to the ones the setup picked. Each idea a helper gave ends with its name in brackets (`[skeptic]`).
+5. **The review page.** The session shows the options on the flow's one page (its Options step) and recommends one. It writes the page beside the brainstorm (`.feature-flow/state/brainstorm-<feature>.html`) and opens it, or publishes it as an artifact when it can.
+6. **Your pick.** Answer in the chat: pick one, mix two, change one, or drop the brainstorm. The same yes approves the brief that follows, so you approve once.
 
 The brainstorm is saved as `.feature-flow/state/brainstorm-<feature>.md` and committed with the plan as `plans/<feature>/brainstorm.md`. The planner builds the option you chose, and the plan reviewer fails a plan that builds a rejected one.
 
 ## Using the page
+
+- **Steps.** The page has four steps at the top: Setup, Options, Plan and Build. A finished step folds into a one-line summary with a Change button, the current one is open, and a later one is greyed out. On the live page, Setup's buttons and boxes pick the type, the scout levels and the helpers.
 
 - **Read.** The sidebar jumps between sections and options. Switch between system, light and dark at its foot.
 - **Edit a diagram.** Drag boxes. **Add box** (its arrow picks one of seven kinds and a colour), double-click a box to rename it, **Connect** two boxes, **Delete**, **Undo** and **Redo** (Ctrl+Z and Ctrl+Shift+Z), **Reset**. Edits stay in your browser.
@@ -48,7 +51,7 @@ The page is drawn by **Forkboard** ([packages/forkboard/](../packages/forkboard/
 ```bash
 feature-flow brainstorm-page rate-limits                    # writes .feature-flow/state/brainstorm-rate-limits.html
 feature-flow brainstorm-page rate-limits --style blueprint
-python3 scripts/flow-status.py rate-limits --brainstorm-page   # the same, from a repo install
+python3 scripts/flow-status.py rate-limits --page          # the same, from a repo install (--brainstorm-page still works)
 ```
 
 Forkboard also works without feature-flow, from any JSON review document:
@@ -65,4 +68,4 @@ The document format and the rest are in [Forkboard's README](../packages/forkboa
 
 ## What has not been tried yet
 
-The brainstorm has had no real run on a project yet, and the live page's loop (a person saves, the session wakes, answers and publishes again) has only run against a stand-in in tests. If you try either, [docs/field-run.md](field-run.md) says what to send back.
+The guided flow's stops and the Setup and Plan steps' choices have not had a field run yet. The live page's loop (a person saves, the session wakes, answers and publishes again) has only run against a stand-in in tests. If you try either, [docs/field-run.md](field-run.md) says what to send back.

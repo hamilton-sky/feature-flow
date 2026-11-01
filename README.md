@@ -12,6 +12,7 @@ One skill, 12 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-t
 
 | | What you get |
 |---|---|
+| **Guide** | [Three stops](#the-guided-flow), each skippable: the start card, the brainstorm's pick and the plan's yes, on one page that grows from Setup to Build, with the build's lanes, checks and builder notes set on the plan's yes. |
 | **Plan** | A brief you approve, a fresh planner and a fresh plan reviewer, a second yes before anything is written. An optional [brainstorm](#brainstorm-before-planning) first, shown as a review page with diagrams you can edit, or an [import](#starting-from-spec-kit-or-openspec) from Spec Kit or OpenSpec. |
 | **Build** | One fresh builder per ticket, then the [gate, floor guard, footprint, Done when and test-first checks](#how-a-ticket-flows), all run by the script. |
 | **Review** | A fresh reviewer that never saw the builder's reasoning, as much as the ticket's [level](#how-a-ticket-flows) asks for, and [read only](#the-skill-and-the-roles) by hook and by the conductor. |
@@ -23,7 +24,7 @@ One skill, 12 agent roles, a Python conductor, 6 Python scripts (`flow`, `flow-t
 [docs/releases.md](docs/releases.md) lists what each release added.
 
 - [Quick start](#quick-start) · [How a ticket flows](#how-a-ticket-flows) · [The skill and the roles](#the-skill-and-the-roles) · [Plans and tickets](#plans-and-tickets) · [See the graph](#see-the-graph)
-- [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [codeintel](#codeintel-optional) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
+- [The guided flow](#the-guided-flow) · [Lanes](#tickets-side-by-side-lanes) · [Scouts](#scouts) · [codeintel](#codeintel-optional) · [Questions](#questions-for-the-architect-designer-or-product-owner) · [Acceptance tests](#acceptance-tests-the-tester) · [Fast path](#the-fast-path) · [Time budget](#a-time-budget) · [Eval](#recording-a-run-eval) · [Profiles](#profiles) · [Brainstorm](#brainstorm-before-planning) · [Import](#starting-from-spec-kit-or-openspec)
 - [Long features and handoff](#long-features-and-handoff) · [Commands and settings](#commands-and-settings) · [What is tested](#what-is-tested) · [Limits](#limits) · [Upgrading](#upgrading) · [Caution](#caution)
 
 ## Quick start
@@ -286,8 +287,9 @@ One self contained HTML file: no server, no libraries, no network, light and dar
 
 ## Tickets side by side (lanes)
 
-With `FLOW_LANES=2` (up to 4) on `start`, tickets that do not touch the same files are built at the same time, each with its own builder and reviewers in its own git worktree. Only the start and the end of a ticket change: the build, the gate, the floor guard and the reviews are the same as with one lane.
+With `Lanes: auto` (or `2` to `4`) in the plan's `commands.md`, or `FLOW_LANES=2` (up to 4) on `start`, tickets that do not touch the same files are built at the same time, each with its own builder and reviewers in its own git worktree. Only the start and the end of a ticket change: the build, the gate, the floor guard and the reviews are the same as with one lane.
 
+- **How many.** `Lanes: auto` takes the plan's width (`flow-status.py <feature> --width`), capped by the profile ([The guided flow](#the-guided-flow)); `FLOW_LANES` overrides the line.
 - **Plan.** Each ticket lists the paths it changes on a `Touches:` line (a folder ends with `/`, a `*` glob crosses folders). `commands.md` may name `Shared:` paths that many tickets change, and a `Setup:` command a fresh checkout needs. The plan reviewer checks the footprints; you approve them with the plan.
 - **Schedule.** The conductor leases a ready ticket to a free lane only when its `Touches:` (read from the feature branch, never from a builder) does not overlap any running ticket's, it touches nothing on `Shared:`, and, when either ticket is level 3, the two keep to different top-level folders. A ticket with no `Touches:` line runs alone.
 - **Lanes.** The lanes are worktrees in `.feature-flow/lanes/<feature>/` (git ignores the folder), created on first use, with `Setup:` run once in each. Each ticket gets a branch `ff/<feature>/<NN>` from the feature head.
@@ -396,6 +398,43 @@ Pick one with `/feature-flow <feature> careful` (or `standard`, `fast`), `FLOW_P
 
 The long `python3 -I -c ...` line the skill uses to call the conductor stays as it is: it is how the skill checks `flow-trust.py` against the sha256 it pins before running it, and a shorter wrapper would be one more file nothing checks. The session copies it from the skill; you never type it.
 
+## The guided flow
+
+The guided flow is the path from an idea to a running build with as few questions as possible. It stops **three times**, and you can skip each stop by saying "ok" (or let `auto`, `agent` or `fast` take the defaults and ask nothing). There is no timer: a stop waits for you.
+
+```
+ stop 1: start card        stop 2: brainstorm pick        stop 3: plan yes
+ ┌─────────┐   ok   ┌─────────┐   pick   ┌─────────┐   yes   ┌─────────┐
+ │  Setup  │ ─────► │ Options │ ───────► │  Plan   │ ──────► │  Build  │
+ └─────────┘        └─────────┘          └─────────┘         └─────────┘
+  type, scouts,      2-3 options with      tickets, order,      lanes, gate,
+  helpers            diagrams, a pick      width, checks        reviews
+ └──────────────────── one page, published to the same link ─────────────┘
+```
+
+| Step | What it shows | What you can pick | Written to |
+|---|---|---|---|
+| **Setup** (stop 1, the start card) | "Do you know the domain, the codebase, both, or are you just exploring?", then one line with the setup | the [brainstorm type](#brainstorm-before-planning), the code and web scout levels (off, light, normal, deep), the helpers (consultants, the skeptic, lenses), capped by the limits | the brainstorm's `Type:`, `Scouts:` and `Helpers:` lines |
+| **Options** (stop 2) | two or three options, each with an editable diagram, pros, cons, size and risky areas, and the session's pick | an option, a mix, an edited diagram, or drop the brainstorm | the brainstorm's Chosen section, then the brief |
+| **Plan** (stop 3, the plan-yes card) | the drafted tickets, their order, each ticket's level and review, how many can build at once and why the others wait, and the checks | the profile, the lanes, which tickets get a full review, each ticket's builder notes; adding or relaxing checks in the chat | the draft's `commands.md` (`Profile:`, `Lanes:`, check lines) and tickets (`Review: full`, `Builder:`) |
+| **Build** | each ticket's status as the run goes | nothing: the plan's yes froze the build setup | the run's log and state |
+
+**One page.** All four steps are one page: `flow-status.py <feature> --page` (the same as `--brainstorm-page`, or `feature-flow brainstorm-page <feature>`). A finished step folds into a one-line summary with a Change button, the current step is open, and a later one is greyed out. When the session can publish artifacts, it publishes the [live page](#brainstorm-before-planning) to the same link at each stop, so you keep one page; what you pick there is saved into the page, and `--page --picks <live folder>` writes it into the files in the last column. The page writes nothing else. Anywhere else (Codex, or no Artifact tool) you answer the same one question in the chat.
+
+**The plan-yes card sets up the build.** One yes approves the plan and its build flow together, and both are frozen with the plan, so a picked profile or lane count cannot change mid-run. The card says it in one line, for example "standard, up to 3 at once, gate + typecheck":
+
+- **Width.** `flow-status.py <feature> --width` prints how many tickets can build at once and, for each waiting ticket, what it waits for (a blocker, an overlapping `Touches:`, a `Shared:` path, or a level 3 ticket in the same folder).
+- **Lanes.** A new plan's `Lanes: auto` builds up to the plan's width side by side: at most 4, at most 2 with `careful`, and 1 with `fast` (which batches instead), under `FLOW_RELAY`, or when the session is not at the top of the repo. `Lanes: 1` to `4` sets it yourself, `FLOW_LANES` still overrides both, and a plan with no line keeps one lane. The log records `LANES-AUTO-<n>`. See [Lanes](#tickets-side-by-side-lanes).
+- **Builder notes.** A ticket's optional `Builder: frontend`, `backend` or `docs` adds that kind of code's notes ([guides/builders/](guides/builders/)) to its build prompt. It is the same builder agent with a few more things to watch for. The page shows what the ticket's paths suggest and lets you switch it.
+- **Adding checks.** Ask in the chat and the session adds the line to the draft's `commands.md`: `Typecheck:` and `Security:` run after Lint, and `Check <path>: <command>` runs only for a ticket that changes that path. The checks have their own 3 send-backs, so a flaky test does not use up a ticket's review rounds.
+- **Relaxing checks.** `Floor: allow <category>, reason: <why>` relaxes the floor guard for the whole plan, and the reason goes into `decisions.md`; a line without a reason stops the run (`FLOOR-RELAXED-<CAT>` in the log). The gate goes off from the plan only as `Gate: off unsafe`, and the report and eval then say "gate off (unsafe)" in their first line.
+
+**Measuring it.** The session logs each stop (`asked setup`, `asked options`, `asked plan`), and every idea a brainstorm takes from a helper ends with that helper's name in brackets (`[architect]`, `[ux]`). `feature-flow eval` prints how many times the run stopped for you (the aim is 3 or fewer) and, per helper, how often it was asked, how many of its ideas went in and how many reached the option you picked, so a helper that never helps can be dropped.
+
+**Cleaning up.** After the plan is accepted, `flow-status.py <feature> --clean` lists the brainstorm's spent files in `.feature-flow/state/` (the helpers' question and reply files, its counts, and the plain page once a live page exists), and `--clean --yes` deletes them. The plan keeps its own copy of the brainstorm.
+
+[docs/guided-flow.md](docs/guided-flow.md) walks through a guided run from your side of the chat.
+
 ## Brainstorm before planning
 
 When an idea is still fuzzy, the session can brainstorm it with you before it writes the brief: `/feature-flow <feature> brainstorm`, always in `careful`, and offered on its own when there is no bar yet or there are two real ways to build it. It asks you up to three questions, one at a time, sends a scout to see how the code does the nearest thing today, then lays out two or three options, each with a mermaid diagram, its pros and cons, its size and its risky areas, and recommends one. Your pick and the brief share one yes.
@@ -412,17 +451,9 @@ When an idea is still fuzzy, the session can brainstorm it with you before it wr
 
 `code=<level>` and `web=<level>` after the type set the scouts yourself: `off`, `light` (one scout, no codeintel), `normal`, or `deep` (as many as `careful` allows; before a build, the scouts ask as for a ticket one level higher). The type and the levels are header lines of the brainstorm (`Type: map`, `Scouts: web=off`), so the plan's and the build's scouts follow them after the plan is accepted. `FLOW_SCOUTS=off` still turns every scout off.
 
-Read only helpers work for the session during a brainstorm: a code scout, a web scout, the architect, designer and product owner, `flow-skeptic`, who attacks each finished option so the session that wrote the options is not the one that judges them, and `flow-lens`, who looks at the options through one lens the session picks for the idea: `positive`, `researcher`, `open-minded`, `artistic`, `ux` or `security` ([guides/lenses/](guides/lenses/)). Each gets its prompt from `brainstorm-prompt <helper> <question file>`, which counts them: `normal` allows 2 scouts, 1 web, 2 consultants, 1 skeptic and 2 lenses per brainstorm, `careful` 3, 2, 3, 1 and 3; the type and the scout levels change these as the table says. Helpers never write the brainstorm and never ask you anything; the session does both.
-
-Each idea the brainstorm takes from a helper ends with that helper's name in brackets (`[architect]`, `[ux]`), and the session logs each time it stops to ask you (`asked setup|options|plan`). `eval` then prints how many times it stopped (the aim is 3 or fewer) and, per helper, how often it was asked, how many of its ideas went in, and how many reached the option you picked.
+Read only helpers work for the session during a brainstorm: a code scout, a web scout, the architect, designer and product owner, `flow-skeptic`, who attacks each finished option so the session that wrote the options is not the one that judges them, and `flow-lens`, who looks at the options through one lens the session picks for the idea: `positive`, `researcher`, `open-minded`, `artistic`, `ux` or `security` ([guides/lenses/](guides/lenses/)). Each gets its prompt from `brainstorm-prompt <helper> <question file>`, which counts them: `normal` allows 2 scouts, 1 web, 2 consultants, 1 skeptic and 2 lenses per brainstorm, `careful` 3, 2, 3, 1 and 3; the type and the scout levels change these as the table says. A `Helpers:` line in the brainstorm (`Helpers: po skeptic lens=ux`, or `none`) limits the helpers to the ones it names; a helper it leaves out is refused, and so is a line that picks more than the limits allow. Helpers never write the brainstorm and never ask you anything; the session does both. Where each pick fits in the run is in [The guided flow](#the-guided-flow).
 
 Before you pick, the session shows the brainstorm as a review page: `feature-flow brainstorm-page <feature>` (or `flow-status.py <feature> --brainstorm-page`) writes it beside the brainstorm as one HTML file. It has a sidebar that routes between the sections and shows how far you read, a system, light or dark switch, flowchart diagrams you can edit (arrange them left to right, top to bottom, radial or as a grid, drag, add boxes of seven kinds, colour them from 12 colours, rename and delete them, connect them with arrows, undo and redo, with the keyboard too), reset, and copy back as mermaid (the edited diagram once you change it; edits are kept only in that browser), and an arrow animation that stays off until you turn it on. Its look is a style: `route` (the default), `blueprint`, `sketch`, `paper`, `terminal` or `bright`, picked with `--style`, the brainstorm's `Style:` line or `FLOW_STYLE`; the session picks the one that fits the subject unless you name one, and colours boxes by role. A style is one CSS file of colour, font and box tokens in Forkboard's [themes/](packages/forkboard/forkboard/themes/), so adding one is adding a file. `--fragment` leaves out the html and body tags, for publishing the page as an artifact.
-
-**One page for the whole flow.** The page has four steps, Setup, Options, Plan and Build, shown at the top. A finished step folds into a one-line summary with a Change button, the current step is open, and a later one is greyed out. The session publishes it to the same link at each stop, so you keep one page. Setup holds the brainstorm's type, the scout levels (Off, Light, Normal, Deep for code and web) and the helpers it will ask (consultants, the skeptic and lenses, as boxes capped by the limits). On the live page, what you pick is saved into the page, and `--page --picks <live folder>` writes it into the brainstorm's `Type:`, `Scouts:` and `Helpers:` lines, which are the only lines the page ever writes. Anywhere else, you answer the same one question in the chat. `--page` is the same command as `--brainstorm-page`.
-
-**Three stops, each skippable.** The guided flow stops three times: the start card ("Do you know the domain, the codebase, both, or are you just exploring?", then one line with the setup where "ok" takes it), the pick on the brainstorm page, and the plan's yes. With `auto`, `agent` or `fast` it takes the defaults and asks nothing. A `Helpers:` line in the brainstorm (`Helpers: po skeptic lens=ux`, or `none`) limits the helpers to the ones it names. A helper it leaves out is refused, and so is a line that picks more than the limits allow.
-
-**The plan-yes card sets up the build.** Once the plan is drafted, the page's Plan step shows the tickets, their order, the build flow (each ticket's level and review), how many tickets can build at once and the checks. Its choices are the profile, the lanes, which tickets get a full review and each ticket's builder notes (`Builder: frontend`, `backend` or `docs` adds `guides/builders/<name>.md` to that ticket's build prompt; the page shows what its paths suggest), and `--page --picks` writes them into the draft, so one yes approves the plan and its build flow together. `flow-status.py <feature> --width` prints the width and why each waiting ticket waits. A new plan's `Lanes: auto` builds up to that many tickets side by side (at most 4, at most 2 with `careful`, and `fast` batches instead); `FLOW_LANES` still overrides it, and a plan without the line keeps one lane. commands.md also takes `Typecheck:` and `Security:`, which run after Lint, and `Check <path>:` lines, which run only for a ticket that changes that path. The checks have their own count of send-backs (3), so a flaky test no longer uses up a ticket's review rounds. `Floor: allow <category>, reason: <why>` relaxes the floor guard for the whole plan, and a line without a reason stops the run. The gate goes off from the plan only as `Gate: off unsafe`, and the report and eval then say so in their first line. After the plan is accepted, `flow-status.py <feature> --clean` lists the brainstorm's spent files, and `--clean --yes` deletes them.
 
 ![A Forkboard review page for a rate-limits brainstorm: a sidebar with the sections and options, option A's diagram with the API gateway box selected and the editing tools above it, and its pros, cons, size and risky areas below](docs/forkboard.png)
 
@@ -490,6 +521,9 @@ python3 scripts/flow-status.py <feature> --lint           --check plus: a check 
 feature-flow report <feature>                             what a run did, from its log: builds, reviews, failed checks, stops
 feature-flow import <spec-kit or openspec folder> <feature>   start plans/<feature>/ from their task list
 feature-flow eval <feature> [--later]                     record the run in plans/<feature>/eval.json, with your verdict (also: flow-status.py <feature> --eval)
+python3 scripts/flow-status.py <feature> --width          how many tickets can build at once, and why each waiting ticket waits
+python3 scripts/flow-status.py <feature> --page           the flow's one page (Setup, Options, Plan, Build); --picks DIR writes the live page's picks
+python3 scripts/flow-status.py <feature> --clean [--yes]  list (or delete) the brainstorm's spent files once the plan is accepted
 python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
 python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser
@@ -510,7 +544,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_TICKETS_PER_SESSION` | `4` | tickets per session before `HANDOFF`; `0` never hands off |
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
 | `FLOW_DRIVER` | `person` | read by `start`: `agent` when another agent drives the run: no handoffs (unless `FLOW_TICKETS_PER_SESSION` is set), and the eval says so |
-| `FLOW_LANES` | `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`) |
+| `FLOW_LANES` | the plan's `Lanes:` line, else `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`); overrides `Lanes:` |
 | `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting |
 | `FLOW_BUDGET` | unset | read by `start`: minutes of active work before fast mode turns on, then a re-plan offer; `off` drops it |
 | `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off |
@@ -519,7 +553,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |
-| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks |
+| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks; from the plan, only `Gate: off unsafe` in `commands.md` does the same |
 | `FLOW_REVIEWERS` | `1` | `2` runs a quality and a ticket reviewer side by side where one review would run (not in lanes) |
 | `FLOW_ROUND_REVIEW` | `off` | `on` reviews the whole round once at the end, after every ticket's own review |
 | `FLOW_BASE_GATE` | `off` | `on` runs the whole gate once at the base, before the first ticket, and stops if it is red (`<feature>.base-gate.log`) |
