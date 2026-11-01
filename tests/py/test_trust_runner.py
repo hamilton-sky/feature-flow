@@ -245,6 +245,7 @@ class Started(Base):
         self.assertEqual(set(runner.GUIDES) | set(runner.SKILL_GUIDES), shipped)
         self.assertEqual(set(runner.TEMPLATES), {p.name for p in (guides / "templates").iterdir() if p.is_file()})
         self.assertEqual(set(runner.LENSES), {p.name for p in (guides / "lenses").iterdir() if p.is_file()})
+        self.assertEqual(set(runner.BUILDERS), {p.name for p in (guides / "builders").iterdir() if p.is_file()})
 
 
 class Trips(Base):

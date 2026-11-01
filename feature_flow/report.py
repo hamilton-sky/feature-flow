@@ -48,7 +48,10 @@ def summarize(rows):
 
 def render(feature, rows):
     tickets, run, stops = summarize(rows)
-    out = ["report for %s: %d log line(s)" % (feature, len(rows)), ""]
+    unsafe = any(event == "GATE-OFF-UNSAFE" for _, event, _ in rows)
+    relaxed = sorted({event[len("FLOOR-RELAXED-"):].lower() for _, event, _ in rows if event.startswith("FLOOR-RELAXED-")})
+    out = ["report for %s: %d log line(s)%s%s" % (feature, len(rows), ", gate off (unsafe)" if unsafe else "",
+                                                   ", floor relaxed: %s" % ", ".join(relaxed) if relaxed else ""), ""]
     if tickets:
         out.append("ticket  level  builds  reviews  single  quick-gate  full-gate  failures")
         for num, row in tickets.items():

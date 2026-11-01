@@ -7,7 +7,7 @@ import re
 import shlex
 from pathlib import Path
 
-from feature_flow import codeintel
+from feature_flow import builders, codeintel
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
          "review-single": "ticket-reviewer.md",
@@ -85,6 +85,20 @@ def _templates(text, guides):
                   lambda m: "%s (%s)" % (m.group(1), span(base + "/templates/" + m.group(2))), text)
 
 
+def builder_note(scripts, ticket_path, top="."):
+    """The ticket's `Builder:` note (guides/builders/<name>.md) as prompt parts, or none."""
+    name = builders.ticket_builder(ticket_path)
+    if not name:
+        return []
+    try:
+        note = _body(find_file(scripts, "guides", "builders/%s.md" % name, top))
+    except FileNotFoundError:
+        return ["The ticket names the `%s` builder, which has no notes in guides/builders/: build it with the build "
+                "guide alone." % name]
+    return ["The ticket names the `%s` builder. Its notes follow. They add to the build guide and never override it."
+            % name, note]
+
+
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None, top="."):
     role_text = role(scripts, ROLES[phase], top)
     guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase], top)), scripts)
@@ -117,7 +131,10 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
                 "switch its branch.\n%s" % (folder, branch, shlex.quote(folder),
                                             "Never change a file" if phase == "build" else "Read only; never change a file",
                                             task))
-    parts = [role_text, "---", intro, guide, "---", task]
+    parts = [role_text, "---", intro, guide]
+    if phase == "build":
+        parts += builder_note(scripts, Path(workdir[0]) / ticket if workdir is not None else Path(ticket), top)
+    parts += ["---", task]
     if retry and phase == "build":
         parts += ["The debugging guide follows. Follow it before you change any code.",
                   _body(find_file(scripts, "guides", "debug.md", top))]

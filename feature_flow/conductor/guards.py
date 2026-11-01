@@ -8,10 +8,10 @@ import os
 import re
 from pathlib import Path
 
-from feature_flow import checks, gate, git, prompts, tickets
+from feature_flow import checks, floorguard, gate, git, prompts, status, tickets
 from feature_flow.conductor import budget, planning
 from feature_flow.conductor.errors import Stop
-from feature_flow.conductor.settings import _env_int, mode_ok
+from feature_flow.conductor.settings import MAX_LANES, _env_int, mode_ok
 
 
 OLD_OWNER = re.compile(r"^[0-9a-f]{16}$")  # a raw token, stored by a run started before 0.5.0
@@ -42,17 +42,59 @@ def before_start(c):
     if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
         raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
                    % (c.feature, owner[:8]))
-    wanted = _env_int("FLOW_LANES", 1)
+    busy = c.lane_sched().busy_lanes()
+    wanted, auto = lanes_wanted(c, busy)
     mode_ok("lanes_range", lanes=wanted)
     mode_ok("lanes_relay", lanes=wanted, relay=c.relay)
     mode_ok("lanes_top", lanes=wanted, cwd=Path.cwd().resolve(), top=c.top)
-    busy = c.lane_sched().busy_lanes()
-    if busy and wanted != c.num("lanes"):
+    if busy and wanted != c.num("lanes") and not auto:
         raise Stop("lane(s) %s still hold tickets from the last session, which ran with FLOW_LANES=%d. start with "
                    "that, or reset to drop them" % (",".join(map(str, busy)), c.num("lanes")))
     driver = os.environ.get("FLOW_DRIVER", "")
     mode_ok("driver", driver=driver)
+    relaxed(c)
     return takeover, wanted, driver
+
+
+def relaxed(c):
+    """Stops on a commands.md Floor: line the floor guard would refuse, and logs what the plan relaxed or turned off,
+    so eval and the report can say the bar moved."""
+    cats, why, problem = floorguard.plan_allow(c.show_head(c.commands))
+    if problem:
+        raise Stop("%s. fix the plan (replan-prompt repair), not the build" % problem)
+    for cat in cats.split():
+        c.log("FLOOR-RELAXED-%s" % cat.upper())
+    if not c.gate_on:
+        c.log("GATE-OFF-UNSAFE")
+
+
+LANE_CAPS = {"careful": 2}  # the most lanes `Lanes: auto` gives a profile: fast batches instead, the rest up to MAX_LANES
+
+
+def lanes_wanted(c, busy):
+    """(the lanes this run uses, whether they came from `Lanes: auto`). FLOW_LANES wins, then commands.md's `Lanes:`
+    line, a number or auto: the plan's width (flow-status.py --width), capped by the profile. Without either, one.
+    auto never stops a run: it takes one lane where lanes cannot run (fast, FLOW_RELAY, not at the top of the repo),
+    and keeps the lanes a last session left busy."""
+    if os.environ.get("FLOW_LANES"):
+        return _env_int("FLOW_LANES", 1), False
+    value = (tickets.commands_text_value(c.show_head(c.commands), "Lanes") or "").strip().lower()
+    if not value:
+        return 1, False
+    if value != "auto":
+        if not value.isdigit():
+            raise Stop("commands.md's Lanes: must be auto or 1 to %d, not %s" % (MAX_LANES, value))
+        return int(value), False
+    if busy:
+        return c.num("lanes"), True
+    if os.environ.get("FLOW_FAST") == "1" or c.fast() or c.relay or Path.cwd().resolve() != c.top:
+        return 1, True
+    folder = c.plan / os.environ.get("FLOW_TICKETS", "tasks")
+    graph = tickets.Graph(tickets.ticket_files(folder))
+    width = status.width_of(graph, str(c.commands))[0]
+    wanted = max(1, min(width, LANE_CAPS.get(c.profile, MAX_LANES), MAX_LANES))
+    c.log("LANES-AUTO-%d" % wanted)
+    return wanted, True
 
 
 def handoff(c):

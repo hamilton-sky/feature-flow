@@ -62,6 +62,17 @@ def catch_ids(rows):
     return ids
 
 
+def rebuilds_by_lane(rows):
+    """{lane: rebuilds after a merge conflict} for a run with lanes: a LEASE-k gives the ticket's lane."""
+    lane_of, out = {}, {}
+    for _, num, event, _ in rows:
+        if event.startswith("LEASE-"):
+            lane_of[num] = event[len("LEASE-"):]
+        elif event == "REBUILD" and num in lane_of:
+            out[lane_of[num]] = out.get(lane_of[num], 0) + 1
+    return out
+
+
 def run_summary(rows):
     plain = [(num, event, detail) for _, num, event, detail in rows]
     per, run, stops = report.summarize(plain)
@@ -92,6 +103,10 @@ def run_summary(rows):
         "deferred_checks": sum(int(detail or 1) for _, _, event, detail in rows if event == "DONEWHEN-DEFERRED"
                                and (detail or "1").isdigit()),
         "fast": any(event in ("REVIEW-DEFERRED", "BUDGET-FAST") for _, _, event, _ in rows),
+        "gate_off": any(event == "GATE-OFF-UNSAFE" for _, _, event, _ in rows),
+        "floor_relaxed": sorted({event[len("FLOOR-RELAXED-"):].lower() for _, _, event, _ in rows
+                                 if event.startswith("FLOOR-RELAXED-")}),
+        "rebuilds_by_lane": rebuilds_by_lane(rows),
     }, {
         "stops": [{"ticket": n, "reason": r} for n, r in stops],
         "handoffs": run["HANDOFF"],
@@ -415,8 +430,13 @@ def build(feature, top, out_dir, home, with_later):
 
 def render(record, out_dir, wrote_form):
     t = record["totals"]
-    lines = ["eval for %s: %d ticket(s), %d build(s), %d review(s), %d catch(es)"
-             % (record["feature"], t["tickets"], t["builds"], t["reviews"], t["catches"])]
+    lines = ["eval for %s: %d ticket(s), %d build(s), %d review(s), %d catch(es)%s%s"
+             % (record["feature"], t["tickets"], t["builds"], t["reviews"], t["catches"],
+                ", gate off (unsafe)" if t.get("gate_off") else "",
+                ", floor relaxed: %s" % ", ".join(t["floor_relaxed"]) if t.get("floor_relaxed") else "")]
+    if t.get("rebuilds_by_lane"):
+        lines.append("  rebuilds after a merge conflict, by lane: " + ", ".join(
+            "lane %s x%d" % kv for kv in sorted(t["rebuilds_by_lane"].items())))
     if t["catches_by_check"]:
         lines.append("  caught by: " + ", ".join("%s x%d" % kv for kv in sorted(t["catches_by_check"].items())))
     lines.append("  reworked: %s" % (", ".join(t["reworked"]) or "none"))

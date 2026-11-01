@@ -8,7 +8,10 @@ it also protects the plan from the worker: only the ticket's own Status line and
 appended lines in map.md and learnings.md may change, and nothing else under the plans folder.
 a ticket can allow categories with a line "Floor: allow skip, suppress" (skip, suppress,
 empty-catch, test-delete, threshold, trivial-assert, config, ticket-edit, commands-edit). the line is
-read from the ticket as it was at base-commit, so a worker cannot excuse itself.
+read from the ticket as it was at base-commit, so a worker cannot excuse itself. commands.md may allow a category
+for the whole plan, with a reason: "Floor: allow config, reason: we are upgrading eslint" (only the diff's
+categories: skip, suppress, empty-catch, test-delete, threshold, trivial-assert, config); it is read at
+base-commit too, and a line without a reason is itself a finding.
 run it from the repo root. exit 0 clean, 1 findings, 2 usage error.
 
 Text is str (UTF-8 with errors="surrogateescape", so any byte comes back out unchanged).
@@ -81,6 +84,30 @@ def allow_line(source):
             v = re.sub(r"^floor:[ \t]*allow[ \t]*", "", line.lower(), count=1)
             return v.replace(",", " ")
     return ""
+
+
+PLAN_ALLOWS = ("skip", "suppress", "empty-catch", "test-delete", "threshold", "trivial-assert", "config")
+
+
+def plan_allow(text):
+    """(the categories a commands.md `Floor:` line allows for the whole plan, the reason, a problem or "")."""
+    for line in (text or "").split("\n"):
+        if line.startswith("Floor:"):
+            value = line[len("Floor:"):].replace("`", "").strip()
+            if not value or value.startswith("<"):
+                return "", "", ""
+            m = re.search(r"(?i),?\s*reason:", value)
+            what, why = (value[:m.start()], value[m.end():]) if m else (value, "")
+            cats = re.sub(r"^allow[ \t]*", "", what.strip().lower()).replace(",", " ").split()
+            bad = [c for c in cats if c not in PLAN_ALLOWS]
+            if bad:
+                return "", "", "commands.md's Floor: line may allow only %s for the whole plan, not %s" % (
+                    ", ".join(PLAN_ALLOWS), ", ".join(bad))
+            if not why.strip():
+                return "", "", ("commands.md's Floor: line needs a reason: Floor: allow %s, reason: <why the bar moves>"
+                                % ", ".join(cats))
+            return " ".join(cats), why.strip(), ""
+    return "", "", ""
 
 
 def diff_findings(diff, allow):
@@ -222,6 +249,14 @@ def run(argv, out, err, environ=None, cwd=None):
             err("cat: %s: %s\n" % (ticket, e.strerror))
             return 1
     allow = allow_line(source)
+    c_path = "%s/%s/commands.md" % (root, feature)
+    plan_text = _strip_newlines(g.git("show", "%s:./%s" % (base, c_path), quiet=True)[1]) \
+        if g.git("cat-file", "-e", "%s:./%s" % (base, c_path), quiet=True)[0] == 0 else ""
+    plan_cats, _, plan_problem = plan_allow(plan_text)
+    if plan_problem:
+        out("floor guard: %s\n" % plan_problem)
+        return 1
+    allow = (allow + " " + plan_cats).strip()
     allow_words = " %s " % allow
 
     def allows(cat):

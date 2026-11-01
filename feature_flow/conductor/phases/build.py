@@ -42,7 +42,7 @@ class Build(Phase):
             raise Stop("working tree is dirty after %s, it should have been committed" % ws.ticket_name())
         source, report, notes = buildchecks.run(ws, buildchecks.pipeline(ws))
         if source:
-            return Outcome(ws.send_back(source, report))
+            return Outcome(ws.send_back(source, report, kind="check"))
         level = ws.measure_level()
         decision, review_pass, more, events = review.after_checks(
             level, ws.fast(), ws.gate_on, ws.checks_ran, ws.small_note() if level == 0 else "",

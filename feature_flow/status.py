@@ -1,6 +1,6 @@
 """The ticket graph reader, ported from the bash script of the same name.
 
-usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]
+usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]
 Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready.
 --ready prints every ready ticket path, one per line, with the same exit codes.
 """
@@ -11,9 +11,9 @@ import shlex
 import shutil
 import sys
 
-from feature_flow import suggest, tickets
+from feature_flow import builders, suggest, tickets
 
-USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]"
+USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]"
 
 
 def _env(name, default):
@@ -126,6 +126,9 @@ def _report(g, mode, opt, feature, out, err, root="plans", cwd=None):
                   '"waiting":%d,"parked":%d,"unknown":%d,"ready":%d}}\n' % ((jstr(feature), ",".join(parts)) + counts))
         return 0
 
+    if mode == "--width":
+        return width(g, "%s/%s/commands.md" % (root, feature), cwd, out)
+
     if mode == "--mermaid":
         out.write("flowchart TD\n")
         for t in g.order:
@@ -219,6 +222,8 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
             errors.append(lab + ": Test first must be yes or no")
         if t in g.hasreview and g.review[t] not in ("full", "auto"):
             errors.append(lab + ": Review must be full or auto")
+        if t in g.hasbuilder and g.builder[t] not in builders.NAMES:
+            errors.append(lab + ": Builder must be %s" % ", ".join(builders.NAMES))
         if t in g.haslevel and g.level[t] not in ("1", "2", "3"):
             errors.append(lab + ": Level must be 1, 2 or 3")
         if t in g.hastouches and not g.touches[t]:
@@ -278,6 +283,26 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
     return 0
 
 
+def width_of(g, commands):
+    """(how many of the plan's open tickets can build at once, [(ticket, the one it waits for, why)]), from the
+    tickets' Touches:, Level: and Blocked by: lines and the Shared: line of commands.md."""
+    from feature_flow import lanes
+    shared = lanes.touches("Touches: " + (tickets.commands_value(commands, "Shared") or "")) or [] \
+        if os.path.isfile(commands) else []
+    items = [(t, g.touches.get(t) if t in g.hastouches else None,
+              int(g.level[t]) if g.level.get(t, "").isdigit() else 0, g.blk[t],
+              g.stat[t] in ("resolved", "parked")) for t in g.order]
+    return lanes.plan_width(items, shared)
+
+
+def width(g, commands, cwd, out):
+    wide, waits = width_of(g, _under(cwd, commands))
+    out.write("up to %d ticket%s can build at once\n" % (wide, "" if wide == 1 else "s"))
+    for t, other, why in waits:
+        out.write("  %s waits for %s: %s\n" % (g.lab[t], g.lab[other], why))
+    return 0
+
+
 class _Bytes:
     """Writes text to a byte stream, keeping the bytes awk would have passed through untouched."""
 
@@ -297,6 +322,9 @@ def main(argv=None):
     if len(argv) > 1 and argv[1] in ("--brainstorm-page", "--page"):  # the brainstorm as a review page, feature_flow/brainstorm_page.py
         from feature_flow import brainstorm_page
         return brainstorm_page.main(argv[:1] + argv[2:])
+    if len(argv) > 1 and argv[1] == "--clean":  # the brainstorm's spent files, feature_flow/clean.py
+        from feature_flow import clean
+        return clean.main(argv[:1] + argv[2:], sys.stdout, sys.stderr)
     if len(argv) > 2 and argv[1] == "--import":  # start the plan from a Spec Kit or OpenSpec task list
         from feature_flow import importer
         return importer.main(argv[2:] + argv[:1])
