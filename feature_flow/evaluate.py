@@ -98,6 +98,7 @@ def run_summary(rows):
         "resets": run["RESET"],
         "takeovers": run["TAKEOVER"],
         "questions_to_user": user_questions,
+        "guided_stops": [event[len("GUIDED-"):].lower() for _, _, event, _ in rows if event.startswith("GUIDED-")],
     }, (min(times), max(times)) if times else None
 
 
@@ -367,7 +368,8 @@ def brainstorm(plan_dir, rows=()):
         kind = brainstorm_mode.parse(text).get("type", "standard")
     except brainstorm_mode.BadMode:
         kind = "unknown"
-    return {"picked_by": picked if picked in ("person", "agent") else "unknown", "helpers": helpers, "type": kind}
+    return {"picked_by": picked if picked in ("person", "agent") else "unknown", "helpers": helpers, "type": kind,
+            "credit": brainstorm_mode.credit(text)}
 
 
 # ---- the command -----------------------------------------------------------------------
@@ -428,6 +430,12 @@ def render(record, out_dir, wrote_form):
         lines.append("  brainstorm: yes%s, the option picked by %s, %s" % (
             "" if kind == "standard" else " (%s)" % kind, record["brainstorm"]["picked_by"], ", ".join(
             "%s x%d" % kv for kv in sorted(used.items())) or "no helpers"))
+        credit = record["brainstorm"].get("credit") or {}
+        named = sorted(set(used) | set(credit.get("ideas") or {}))
+        if credit.get("ideas"):
+            lines.append("  helpers' ideas (asked, ideas, in the pick): " + ", ".join(
+                "%s %d/%d/%d" % (n, used.get(n, 0), credit["ideas"].get(n, 0), (credit.get("chosen") or {}).get(n, 0))
+                for n in named))
     lines.append("  active minutes: %s" % (record["active_minutes"] if record["active_minutes"] is not None else "unknown"))
     tm = record.get("timing")
     if tm:
@@ -453,6 +461,8 @@ def render(record, out_dir, wrote_form):
             ", ".join("%s x%d" % kv for kv in sorted(ci["queries"].items())) or "none seen",
             ", ".join("%s x%d" % (v, ci["said"][v]) for v in codeintel.VERDICTS if ci["said"].get(v)) or "nothing"))
     you = record["you"]
+    if you.get("guided_stops"):
+        lines.append("  guided stops: %d (%s; the aim is 3 or fewer)" % (len(you["guided_stops"]), ", ".join(you["guided_stops"])))
     lines.append("  %s: %d stop(s), %d question(s), %d handoff(s), %d reset(s)"
                  % ("needed the driving agent (not you)" if record.get("driver") == "agent" else "needed you",
                     len(you["stops"]), you["questions_to_user"], you["handoffs"], you["resets"]))

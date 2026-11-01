@@ -13,7 +13,7 @@ The conductor is `python3 scripts/flow.py <feature> <command>`. If `scripts/flow
 
 ## Calling the conductor
 
-Every conductor command (`start`, `next`, `prompt`, `verdict`, `fast`, `scouts`, `scout-prompt`, `reset`, `plan-prompt`, `plan-review-prompt`, `plan-accept`, `plan-scouts`, `plan-scout-prompt`, `consult-prompt`, `brainstorm-prompt`, `budget`, `replan-prompt`) runs through `flow-trust.py`, never `flow.py` itself. `<S>` below is the folder of the `flow.py` picked above: `scripts` for the repo's own install, else `"${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/scripts"`. `flow-trust.py` is started by this loader line, which checks the file against the sha256 pinned here and runs those same bytes. Copy it exactly, replacing only `<S>`:
+Every conductor command (`start`, `next`, `prompt`, `verdict`, `fast`, `scouts`, `scout-prompt`, `reset`, `plan-prompt`, `plan-review-prompt`, `plan-accept`, `plan-scouts`, `plan-scout-prompt`, `consult-prompt`, `brainstorm-prompt`, `asked`, `budget`, `replan-prompt`) runs through `flow-trust.py`, never `flow.py` itself. `<S>` below is the folder of the `flow.py` picked above: `scripts` for the repo's own install, else `"${FEATURE_FLOW_HOME:-$HOME/.feature-flow}/scripts"`. `flow-trust.py` is started by this loader line, which checks the file against the sha256 pinned here and runs those same bytes. Copy it exactly, replacing only `<S>`:
 
     python3 -I -c "import hashlib,sys;b=open(sys.argv[1],'rb').read().replace(b'\r\n',b'\n');sys.exit(exec(compile(b,'flow-trust','exec')) if hashlib.sha256(b).hexdigest()==sys.argv[2] else 'flow-trust.py does not match this skill')" <S>/flow-trust.py a561cb2bf1d8d8970e45065f24a736a02d9f803f09d652a26ca51b579f44cf7b
 

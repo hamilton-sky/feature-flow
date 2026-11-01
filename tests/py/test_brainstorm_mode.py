@@ -35,6 +35,14 @@ class Header(unittest.TestCase):
         self.assertNotIn("fast", brainstorm_mode.TYPES)  # fast already means no brainstorm at all
 
 
+class Credit(unittest.TestCase):
+    def test_tags_count_per_helper_and_a_link_is_not_a_tag(self):
+        text = ("# B\n\n## Options\n\n### A. One\n\n- idea [ux]\n- [security](https://x) is a link\n\n"
+                "### B. Two\n\n- idea [web] [ux]\n\n## Chosen\n\nB, because of [po]\n")
+        self.assertEqual(brainstorm_mode.credit(text), {"ideas": {"ux": 2, "web": 1}, "chosen": {"web": 1, "ux": 1, "po": 1}})
+        self.assertEqual(brainstorm_mode.credit(""), {"ideas": {}, "chosen": {}})
+
+
 class Levels(unittest.TestCase):
     def level(self, kind, mode, filled=(), **env):
         return brainstorm_mode.level(kind, env, filled, mode)
@@ -139,6 +147,15 @@ class Brainstorm(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertTrue(out.startswith("STOP Type: must be standard, learn, map, quick, explore, not fast. fix the "
                                        "header of the brainstorm of g"), out)
+
+    def test_asked_logs_a_guided_stop_and_refuses_another_word(self):
+        rc, out = self.flow("asked", "setup")
+        self.assertEqual((rc, out), (0, "OK asked setup"))
+        log = self.repo.path(".feature-flow/state/flow-g.log").read_text(encoding="utf-8")
+        self.assertIn(",GUIDED-SETUP", log)
+        rc, out = self.flow("asked", "build")
+        self.assertEqual(rc, 1)
+        self.assertIn("STOP asked takes setup, options, plan, not build", out)
 
     def test_without_a_type_the_brainstorm_is_as_before(self):
         self.assertEqual((self.used("scout"), self.used("web"), self.used("ux")), (2, 1, 2))

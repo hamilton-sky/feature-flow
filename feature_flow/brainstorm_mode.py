@@ -10,11 +10,16 @@ The file is `.feature-flow/state/brainstorm-<feature>.md` until the plan exists 
 `plans/<feature>/brainstorm.md`, so the scouts of the plan and the build follow the same choice.
 """
 
+import re
 from pathlib import Path
 
 LEVELS = ("off", "light", "normal", "deep")
 KINDS = ("code", "web")  # code: flow-scout, web: flow-web
 AGENTS = {"flow-scout": "code", "flow-web": "web"}
+LENSES = ("positive", "researcher", "open-minded", "artistic", "ux", "security")  # guides/lenses/<name>.md
+HELPER_NAMES = ("scout", "web", "architect", "designer", "po", "skeptic") + LENSES
+STOPS = ("setup", "options", "plan")  # the guided flow's three stops: the start card, the brainstorm page, the plan yes
+TAG = re.compile(r"\[(%s)\](?!\()" % "|".join(re.escape(n) for n in HELPER_NAMES))
 
 TYPES = {
     "standard": {"about": "you know the domain and the codebase", "code": "normal", "web": "normal"},
@@ -101,3 +106,34 @@ def limits(profile, levels, kind):
     for group in ("consult", "skeptic", "lens"):
         out[group] = TYPES.get(kind or "standard", {}).get(group, out[group])
     return out
+
+
+def credit(text):
+    """{"ideas": {helper: tags in Options}, "chosen": {helper: tags in the chosen option and the Chosen section}}.
+
+    Each idea in the brainstorm ends with the helper it came from in brackets (`[architect]`, `[ux]`), so eval can
+    say which helpers' ideas reached the pick. A markdown link `[text](url)` is not a tag."""
+    sections, current, sub = {}, None, None
+    for line in (text or "").splitlines():
+        if line.startswith("## "):
+            current, sub = line[3:].strip().lower(), None
+            sections.setdefault(current, {"": []})
+        elif line.startswith("### ") and current:
+            sub = line[4:].strip()
+            sections[current][sub] = []
+        elif current:
+            sections[current][sub or ""].append(line)
+    chosen_text = "\n".join(sections.get("chosen", {}).get("", []))
+    letter = re.match(r"^\W*([A-Z])\b", chosen_text.strip())
+    ideas, chosen = {}, {}
+
+    def count(into, lines):
+        for name in TAG.findall("\n".join(lines)):
+            into[name] = into.get(name, 0) + 1
+
+    for sub, lines in sections.get("options", {}).items():
+        count(ideas, lines)
+        if letter and re.match(r"^%s[.)]\s" % letter.group(1), sub):
+            count(chosen, lines)
+    count(chosen, sections.get("chosen", {}).get("", []))
+    return {"ideas": ideas, "chosen": chosen}

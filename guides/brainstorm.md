@@ -26,7 +26,7 @@ A brainstorm has a **type**, which says who it is for. The user names it after `
 
 A scout level is `off`, `light` (one helper, a quick pass, no codeintel), `normal` (the profile's count) or `deep` (as many as `careful` allows, each asking a different question, with codeintel when it is ready). The user's `code=<level>` and `web=<level>` words win over the type's, and `FLOW_SCOUTS=off` set by the user wins over both.
 
-When the user named no type, recommend one from what they said, in one question where "ok" takes your pick: for example "This looks like `learn`, since you are new to payments. ok, or another type?" Never ask more than that once. With `auto`, `agent`, or when they skip it, use your pick, or `standard` when nothing points elsewhere. The type and the levels go into the brainstorm's header (below) before you ask any helper: the script reads them from there to count the helpers, and once the plan is accepted the plan's scouts and the build's scouts follow the same levels.
+When the user named no type, recommend one from what they said, in one question where "ok" takes your pick: for example "This looks like `learn`, since you are new to payments. ok, or another type?" Never ask more than that once. Before you ask it, run `asked setup` (a conductor command, through `flow-trust.py`): eval counts the stops. With `auto`, `agent`, or when they skip it, use your pick, or `standard` when nothing points elsewhere. The type and the levels go into the brainstorm's header (below) before you ask any helper: the script reads them from there to count the helpers, and once the plan is accepted the plan's scouts and the build's scouts follow the same levels.
 
 ## Step 1: Understand the idea
 
@@ -67,13 +67,15 @@ Write two or three options that really differ (not one idea and two straw men); 
 - a **mermaid diagram** in a ```mermaid block: a `flowchart` of the parts and what calls what, or a `sequenceDiagram` of the main flow. Show only what the feature adds or changes, at most about 12 nodes, labels in plain words.
 - two or three pros and cons, a rough size (tickets, or S, M, L), and the risky areas: anything that touches auth, secrets, money, data that could be lost, limits, or what a hostile caller reaches.
 
+End each idea you take from a helper (a pro, a con, a risk, a step, a whole option) with that helper's name in brackets: `[architect]`, `[web]`, `[ux]`. Your own ideas carry no tag. Eval counts, per helper, how often it was asked, how many of its ideas went in, and how many reached the pick, so a helper that rarely helps can be dropped.
+
 If the choice turns on module boundaries, a screen or scope, ask the `architect`, `designer` or `po`. Then, with the options written, ask the `skeptic` (always in `careful`, otherwise when there are two options or more): its question is the Options section as you wrote it, never your reasons. Fold its objections into each option's cons and risky areas, add its simpler option when there is one, and only then recommend one option and say why in a sentence.
 
 ## Step 4: The user picks
 
 With `explore`, write the Verdict before the user picks: Go or No-go and why, in two or three lines, with the option you would build on a Go. The user agrees or not. On a No-go, keep the file (it is git-ignored), write no brief, and stop: the user has their answer. On a Go, go on as below.
 
-Write the brainstorm file (below) with the options and no Chosen yet, then make it a review page: `python3 scripts/flow-status.py <feature> --brainstorm-page` writes `.feature-flow/state/brainstorm-<feature>.html` beside it, with a sidebar for the sections, a light, dark or system switch, diagrams whose boxes the user can drag, and an arrow animation they can turn on. The look is the brainstorm's `Style:` line: the style the user names, else the one that fits the subject (below). If you can publish an artifact, add `--fragment` and publish that file; otherwise give the user the file's path to open. Then show the options and your pick, and ask: which one? They may pick, edit, mix, or drop the brainstorm. On a drop, delete the file and write the brief as before.
+Write the brainstorm file (below) with the options and no Chosen yet, then make it a review page: `python3 scripts/flow-status.py <feature> --brainstorm-page` writes `.feature-flow/state/brainstorm-<feature>.html` beside it, with a sidebar for the sections, a light, dark or system switch, diagrams whose boxes the user can drag, and an arrow animation they can turn on. The look is the brainstorm's `Style:` line: the style the user names, else the one that fits the subject (below). If you can publish an artifact, add `--fragment` and publish that file; otherwise give the user the file's path to open. Then run `asked options`, show the options and your pick, and ask: which one? They may pick, edit, mix, or drop the brainstorm. On a drop, delete the file and write the brief as before.
 
 Styles, and what each suits:
 
