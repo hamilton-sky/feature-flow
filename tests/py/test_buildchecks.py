@@ -181,13 +181,13 @@ class RealChecks(unittest.TestCase):
         c = self.base()
         self.work("src/a.txt")
         self.assertEqual(buildchecks.Footprint().run(c), (None, "", []))
-        self.assertEqual(c.events, ["FOOTPRINT-PASS"])
+        self.assertEqual(c.events, ['CHANGED ["src/a.txt"]', "FOOTPRINT-PASS"])
         self.work("other.txt")
         c.events = []
         source, report, notes = buildchecks.Footprint().run(c)
         self.assertEqual(source, "footprint check")
         self.assertIn("outside the ticket's `Touches:` line (src/): other.txt", report)
-        self.assertEqual(c.events, ["FOOTPRINT-FAIL"])
+        self.assertEqual(c.events, ['CHANGED ["other.txt", "src/a.txt"]', "FOOTPRINT-FAIL"])
 
     def test_one_extra_file_named_in_the_answer_passes_for_the_reviewer_to_judge(self):
         self.ticket("Touches: src/\n")
@@ -199,17 +199,17 @@ class RealChecks(unittest.TestCase):
         self.repo.commit("answer")
         source, report, notes = buildchecks.Footprint().run(c)
         self.assertIsNone(source)
-        self.assertEqual(c.events, ["FOOTPRINT-EXTRA"])
+        self.assertEqual(c.events, ['CHANGED ["setup.cfg", "src/a.txt"]', "FOOTPRINT-EXTRA"])
         self.assertIn("`setup.cfg` (the new module has to be registered there)", notes[0])
         self.work("other.txt")  # a second one is not passed
         c.events = []
         self.assertEqual(buildchecks.Footprint().run(c)[0], "footprint check")
 
-    def test_footprint_without_touches_logs_nothing(self):
+    def test_footprint_without_touches_logs_only_what_changed(self):
         c = self.base()
         self.work("other.txt")
         self.assertEqual(buildchecks.Footprint().run(c), (None, "", []))
-        self.assertEqual(c.events, [])
+        self.assertEqual(c.events, ['CHANGED ["other.txt"]'])
 
     def test_done_when(self):
         self.ticket(done_when=FENCE + "check\n$ " + py("print('hi')") + "\nprints hi\n" + FENCE + "\n")
@@ -287,7 +287,7 @@ class RealChecks(unittest.TestCase):
         self.work("other.txt")
         source, _, notes = buildchecks.run(c, buildchecks.pipeline(c, gate=False))
         self.assertEqual((source, notes), ("footprint check", []))
-        self.assertEqual(c.events, ["GUARD-PASS", "FOOTPRINT-FAIL"])
+        self.assertEqual(c.events, ["GUARD-PASS", 'CHANGED ["other.txt"]', "FOOTPRINT-FAIL"])
         self.assertFalse(c.checks_ran)
 
 

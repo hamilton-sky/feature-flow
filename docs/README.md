@@ -12,6 +12,7 @@ The README covers what feature-flow is and how to start. These pages hold the re
 | | [Brainstorming a feature](brainstorm.md) | an idea is still fuzzy, or you want the review page and Forkboard |
 | | [Trying it on your own repo](field-run.md) | you are running a trial, and how to record it with `eval` |
 | **Understand** | [How it works](how-it-works.md) | you want every check, the review levels, the agent roles and the graph page |
+| | [Files are the truth](source-of-truth.md) | you want to know what the page can and cannot change, and what Plan vs reality shows |
 | | [Plans and tickets](plans-and-tickets.md) | you are reading or editing a plan, or importing one from Spec Kit or OpenSpec |
 | | [Speed and long runs](speed.md) | you want profiles, side-by-side lanes, the fast path, checkpoints, a time budget or handoffs |
 | | [Scouts and helper agents](helpers.md) | you want the scouts, codeintel, the architect, designer and product owner, or the tester |

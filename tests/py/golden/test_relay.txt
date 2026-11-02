@@ -40,6 +40,7 @@ DONE f is complete: 1 ticket(s) resolved in this run
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
+01,CHANGED ["work-01-a.txt"]
 01,DONEWHEN-PASS
 01,LEVEL-2
 01,REVIEW-SINGLE

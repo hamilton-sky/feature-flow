@@ -11,7 +11,7 @@ it with a re-plan. The Build step shows how far the run is.
 import re
 from pathlib import Path
 
-from feature_flow import builders, gate, lanes, profiles, status, tickets
+from feature_flow import builders, gate, lanes, profiles, reality, status, tickets
 
 PLAN_KEYS = ("profile", "lanes", "gate", "full_review")
 GATE_CHOICES = ("each", "batch 2", "batch 3", "batch 5", "end")
@@ -178,14 +178,19 @@ def sections(folder, draft, environ=None):
 
 
 def build_section(folder):
-    """(the Build step's state and summary, its section) from the accepted plan's ticket statuses."""
+    """(the Build step's state and summary, its sections: the ticket statuses, then plan vs reality once a build ran) from the accepted plan's ticket statuses."""
     g = Plan(folder).graph
     done = sum(1 for t in g.order if g.stat[t] in ("resolved", "parked"))
     state = "done" if g.order and done == len(g.order) else "current"
     summary = "%d of %d tickets done" % (done, len(g.order))
     rows = ["| Ticket | Status |", "|---|---|"] + ["| %s %s | %s |" % (g.lab[t], g.title[t].replace("|", "/"), g.stat[t])
                                                    for t in g.order]
-    return state, summary, {"title": "Build", "kind": "text", "markdown": "\n".join(rows), "items": [], "step": "Build"}
+    out = [{"title": "Build", "kind": "text", "markdown": "\n".join(rows), "items": [], "step": "Build"}]
+    items, run = reality.for_plan(folder, Path(folder).name)
+    if any(item["changed"] is not None for item in items):
+        out.append({"title": "Plan vs reality", "kind": "text", "markdown": reality.markdown(items, run), "items": [],
+                    "step": "Build"})
+    return state, summary, out
 
 
 def set_header(text, key, value):
