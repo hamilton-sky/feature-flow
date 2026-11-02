@@ -1,5 +1,6 @@
-"""The guided flow's one page (feature_flow/flow_page.py): the brainstorm page as steps, Setup with the type, the
-scout levels and the helpers as choices, and the page's picks written back into the brainstorm's header lines."""
+"""The guided flow's one page (feature_flow/flow_page.py): the brainstorm page as tabs, Style with the type and the
+scout levels, Team with the helpers, each step opened by the Approve before it, and the page's picks written back
+into the brainstorm's header lines."""
 
 import io
 import json
@@ -20,38 +21,50 @@ fb = studio.load()
 ENV = {}  # no FLOW_ settings: the normal profile
 
 
-def page_doc(text):
-    return flow_page.document(brainstorm_page.document(text, "csv"), text, ENV)
+def page_doc(text, approved=None):
+    return flow_page.document(brainstorm_page.document(text, "csv"), text, ENV, approved=approved)
 
 
 class Steps(unittest.TestCase):
-    def test_a_picked_brainstorm_has_setup_and_options_done(self):
+    def test_a_picked_brainstorm_has_style_team_and_options_done(self):
         doc = page_doc(BRAINSTORM)
         self.assertEqual([(s["name"], s["state"]) for s in doc["steps"]],
-                         [("Setup", "done"), ("Options", "done"), ("Plan", "later"), ("Build", "later")])
-        self.assertEqual(doc["steps"][0]["summary"], "type standard, scouts code=normal web=normal, helpers architect skeptic")
-        self.assertEqual(doc["steps"][1]["summary"], "picked B")
+                         [("Style", "done"), ("Team", "done"), ("Options", "done"), ("Plan", "later"), ("Build", "later")])
+        self.assertEqual(doc["steps"][0]["summary"], "type standard, scouts code=normal web=normal")
+        self.assertEqual(doc["steps"][1]["summary"], "helpers architect skeptic")
+        self.assertEqual(doc["steps"][2]["summary"], "picked B")
         self.assertEqual([(s["title"], s["step"]) for s in doc["sections"]],
-                         [("Setup", "Setup"), ("Idea", "Setup"), ("Options", "Options"), ("Chosen", "Options"),
-                          ("Open", "Options")])
+                         [("Idea", "Style"), ("Style", "Style"), ("Team", "Team"), ("Options", "Options"),
+                          ("Chosen", "Options"), ("Open", "Options")])
+        option = doc["sections"][3]["choices"][0]  # the Options section
+        self.assertEqual((option["key"], option["value"], [o["value"] for o in option["options"]]), ("option", "B", ["A", "B"]))
         self.assertEqual(fb.doc.check(doc), doc)
 
-    def test_before_the_options_setup_is_the_current_step(self):
-        doc = page_doc("# Brainstorm: csv\n\nType: learn\n\n## Idea\n\nExport rows.\n")
-        self.assertEqual([s["state"] for s in doc["steps"]], ["current", "later", "later", "later"])
-        doc = page_doc(SKETCH)
-        self.assertEqual([s["state"] for s in doc["steps"]][:2], ["done", "current"])
-        self.assertEqual(doc["steps"][1]["summary"], "2 options")
+    def test_on_the_live_page_each_approve_opens_the_next_step(self):
+        text = "# Brainstorm: csv\n\nType: learn\n\n## Idea\n\nExport rows.\n"
+        states = lambda approved: [s["state"] for s in page_doc(text, approved)["steps"]][:3]
+        self.assertEqual(states(set()), ["current", "later", "later"])  # a session starts in a style
+        self.assertEqual(states({"Style"}), ["done", "current", "later"])  # then adds its team
+        self.assertEqual(states({"Style", "Team"}), ["done", "done", "current"])
+        self.assertEqual(page_doc(text, {"Style", "Team"})["steps"][2]["summary"], "Claude is writing the options")
+        self.assertEqual(states({"Team"}), ["current", "later", "later"])  # Change on Style took Team back too
+        self.assertEqual(states(None), ["current", "current", "later"])  # not live: both, answered in the chat
+        doc = page_doc(SKETCH, set())
+        self.assertEqual([s["state"] for s in doc["steps"]][:3], ["done", "done", "current"])  # options exist
+        self.assertEqual(doc["steps"][2]["summary"], "2 options")
 
     def test_explore_ends_at_its_verdict(self):
         doc = page_doc("# B\n\nType: explore\n\n## Options\n\n### A. One\n\nx\n\n## Verdict\n\nNo-go.\n")
-        self.assertEqual([s["name"] for s in doc["steps"]], ["Setup", "Options"])
+        self.assertEqual([s["name"] for s in doc["steps"]], ["Style", "Team", "Options"])
 
 
 class Choices(unittest.TestCase):
     def choices(self, text, env=ENV):
         doc = flow_page.document(brainstorm_page.document(text, "csv"), text, env)
-        return {c["key"]: c for c in doc["sections"][0]["choices"]}
+        style, team = doc["sections"][1:3]
+        self.assertEqual([c["key"] for c in style["choices"]], ["type", "code", "web"])
+        self.assertEqual([c["key"] for c in team["choices"]], ["consult", "skeptic", "lens"])
+        return {c["key"]: c for c in style["choices"] + team["choices"]}
 
     def test_the_choices_show_the_header_and_the_limits(self):
         c = self.choices("# B\n\nType: quick\nScouts: web=off\nHelpers: architect\n\n## Idea\n\nx\n")
@@ -63,6 +76,13 @@ class Choices(unittest.TestCase):
         self.assertEqual((careful["consult"]["max"], careful["lens"]["max"]), (3, 3))
         self.assertEqual(careful["consult"]["value"], ["architect"])  # the standard type's helpers
         self.assertEqual(careful["skeptic"]["value"], ["skeptic"])
+
+    def test_each_option_says_what_it_means(self):
+        c = self.choices("# B\n\n## Idea\n\nx\n")
+        for key in ("type", "code", "web", "consult", "skeptic", "lens"):
+            self.assertTrue(c[key]["about"], key)
+            self.assertTrue(all(o.get("note") for o in c[key]["options"]), key)
+        self.assertEqual(c["code"]["options"][3]["note"], "up to three scouts map the code widely; slower")
 
 
 class Picks(unittest.TestCase):
@@ -113,8 +133,10 @@ class Command(unittest.TestCase):
         folder = self.dir / "live"
         self.assertEqual(self.run_page("csv", "--live", str(folder))[0], 0)
         index = (folder / "index.html").read_text(encoding="utf-8")
-        self.assertIn('<div class="step done" data-step="Setup">', index)
+        self.assertIn('id="step-1" aria-labelledby="tab-1" data-step="Style" hidden>', index)  # options exist: done
+        self.assertIn('<button type="button" class="approve" data-approve="Options" disabled>', index)
         self.assertIn('data-key="lens" data-kind="some" data-max="2"', index)
+        self.assertIn('<ul class="explain"><li><b>Architect</b>', index)
         rc, out, _ = self.run_page("csv", "--picks", str(folder))
         self.assertEqual((rc, out), (0, "no picks on the page: %s is as it was\n" % self.file.as_posix()))
         st = json.loads((folder / "state.json").read_text(encoding="utf-8"))
@@ -131,6 +153,28 @@ class Command(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("picked 3 consult helper(s)", err)
         self.assertEqual(self.file.read_text(encoding="utf-8"), before)
+        st["picks"] = {"option": {"by": "u_me", "at": "t", "value": "B"}}
+        (folder / "state.json").write_text(json.dumps(st), encoding="utf-8")
+        rc, out, err = self.run_page("csv", "--picks", str(folder))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("the page picked option B: write it as Chosen", out)
+
+    def test_the_live_page_moves_on_with_the_approvals_in_its_state(self):
+        self.file.write_text("# Brainstorm: csv\n\nType: learn\n\n## Idea\n\nExport rows.\n", encoding="utf-8")
+        folder = self.dir / "live"
+        self.assertEqual(self.run_page("csv", "--live", str(folder))[0], 0)
+        index = (folder / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<button type="button" class="approve" data-approve="Style" disabled>Approve Style</button>', index)
+        self.assertNotIn('data-approve="Team"', index)
+        st = json.loads((folder / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(st["approved"], {})
+        st["approved"] = {"Style": {"by": "u_me", "at": "t"}}
+        (folder / "state.json").write_text(json.dumps(st), encoding="utf-8")
+        self.assertEqual(self.run_page("csv", "--live", str(folder))[0], 0)
+        index = (folder / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<button type="button" class="approve" data-approve="Team" disabled>Approve Team</button>', index)
+        self.assertEqual(json.loads((folder / "state.json").read_text(encoding="utf-8"))["approved"],
+                         {"Style": {"by": "u_me", "at": "t"}})
 
     def test_a_bad_header_says_what_to_fix_and_page_is_the_same_command(self):
         self.file.write_text("# B\n\nHelpers: wizard\n\n## Idea\n\nx\n", encoding="utf-8")

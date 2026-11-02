@@ -53,8 +53,9 @@ class Draft(unittest.TestCase):
     def test_a_draft_makes_plan_the_current_step(self):
         doc = self.doc()
         self.assertEqual([(s["name"], s["state"]) for s in doc["steps"]],
-                         [("Setup", "done"), ("Options", "done"), ("Plan", "current"), ("Build", "later")])
-        self.assertEqual(doc["steps"][2]["summary"], "6 tickets, standard, lanes auto (4)")
+                         [("Style", "done"), ("Team", "done"), ("Options", "done"), ("Plan", "current"),
+                          ("Build", "later")])
+        self.assertEqual(doc["steps"][3]["summary"], "6 tickets, standard, lanes auto (4)")
         plan, flow = [s for s in doc["sections"] if s.get("step") == "Plan"]
         self.assertIn("Up to 4 tickets can build at once. 04 waits for 03: level 3 shares the folder app/", plan["markdown"])
         self.assertIn('T01["01 model"]', plan["markdown"])
@@ -107,13 +108,15 @@ class Draft(unittest.TestCase):
         folder = self.dir / "live"
         self.assertEqual(self.run_page("csv", "--live", str(folder))[0], 0)
         index = (folder / "index.html").read_text(encoding="utf-8")
-        self.assertIn('<div class="step current" data-step="Plan">', index)
+        self.assertIn('<section class="step current" role="tabpanel" id="step-4" aria-labelledby="tab-4" data-step="Plan">', index)
+        self.assertIn('<button type="button" class="approve" data-approve="Plan" disabled>Approve Plan</button>', index)
+        self.assertIn('<div class="ask-about" hidden><script type="application/json">["01 ', index)  # ask about a ticket
         st = json.loads((folder / "state.json").read_text(encoding="utf-8"))
         st["picks"] = {"type": {"by": "u", "at": "t", "value": "map"}, "lanes": {"by": "u", "at": "t", "value": "3"}}
         (folder / "state.json").write_text(json.dumps(st), encoding="utf-8")
         rc, out, err = self.run_page("csv", "--picks", str(folder))
         self.assertEqual(rc, 0, err)
-        self.assertEqual(out, "wrote Lanes: 3 into the draft %s\n" % self.draft.as_posix())  # Setup is done: type kept
+        self.assertEqual(out, "wrote Lanes: 3 into the draft %s\n" % self.draft.as_posix())  # Style and Team are done: type kept
         self.assertNotIn("Type: map", (self.dir / ".feature-flow/state/brainstorm-csv.md").read_text(encoding="utf-8"))
         plan = self.dir / "plans" / "csv"
         shutil.copytree(str(self.draft), str(plan))  # plan-accept
@@ -121,9 +124,9 @@ class Draft(unittest.TestCase):
         rc, out, _ = self.run_page("csv", "--picks", str(folder))
         self.assertIn("kept as approved", out)
         doc = self.doc()
-        self.assertEqual([s["state"] for s in doc["steps"]], ["done", "done", "done", "current"])
-        self.assertEqual(doc["steps"][3]["summary"], "0 of 6 tickets done")
-        self.assertTrue(doc["steps"][2]["summary"].startswith("approved: 6 tickets"))
+        self.assertEqual([s["state"] for s in doc["steps"]], ["done", "done", "done", "done", "current"])
+        self.assertEqual(doc["steps"][4]["summary"], "0 of 6 tickets done")
+        self.assertTrue(doc["steps"][3]["summary"].startswith("approved: 6 tickets"))
         flow = [s for s in doc["sections"] if s["title"] == "Build flow"][0]
         self.assertEqual(flow["choices"], [])  # an accepted plan only shows
 

@@ -83,7 +83,7 @@ The run stops for you three times, and you can skip any stop by saying "ok" (wit
 
 | Stop | What you decide | Skip with "ok" and |
 |---|---|---|
-| **1. Setup** | how well you know the domain and the code, which sets how much the brainstorm reads and asks | the session's suggested setup |
+| **1. Style, then Team** | how well you know the domain and the code, which sets how much the brainstorm reads, then which helpers it asks | the session's suggested setup |
 | **2. Options** | one of two or three ways to build it, each with a diagram you can edit, pros, cons and risks | the session's recommended option |
 | **3. The plan's yes** | the tickets, their order and review, how many build at once, and the checks | the plan as drafted |
 

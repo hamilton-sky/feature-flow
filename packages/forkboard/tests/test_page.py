@@ -24,8 +24,8 @@ class Rendering(unittest.TestCase):
         self.assertIn('id="motion"', nav)
 
     def test_the_chosen_option_is_marked(self):
-        self.assertIn('<article class="opt chosen" id="b-in-the-background">', self.html)
-        self.assertIn('<article class="opt" id="a-stream-it">', self.html)
+        self.assertIn('<article class="opt chosen" id="b-in-the-background" data-about="B. In the background">', self.html)
+        self.assertIn('<article class="opt" id="a-stream-it" data-about="A. Stream it">', self.html)
         self.assertIn('<div class="callout good">', self.html)
 
     def test_flowcharts_become_draggable_and_others_load_mermaid(self):

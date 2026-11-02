@@ -25,7 +25,7 @@ The brainstorm is saved as `.feature-flow/state/brainstorm-<feature>.md` and com
 
 ## Using the page
 
-- **Steps.** The page has four steps at the top: Setup, Options, Plan and Build. A finished step folds into a one-line summary with a Change button, the current one is open, and a later one is greyed out. On the live page, Setup's buttons and boxes pick the type, the scout levels and the helpers.
+- **Tabs.** The page has five tabs: Style, Team, Options, Plan and Build. A finished step shows a one-line summary and a Change button, the current one is open with an Approve button, and a later one is greyed out. On the live page, Style's buttons pick the type and the scout levels, Team's boxes the helpers, Options' buttons the option, and each option says what it means. Your picks wait until you press Approve, which saves them and wakes the session.
 
 - **Read.** The sidebar jumps between sections and options. Switch between system, light and dark at its foot.
 - **Edit a diagram.** Drag boxes. **Add box** (its arrow picks one of seven kinds and a colour), double-click a box to rename it, **Connect** two boxes, **Delete**, **Undo** and **Redo** (Ctrl+Z and Ctrl+Shift+Z), **Reset**. Edits stay in your browser.

@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.35: the guided flow's page as tabs
+
+| Version | Added |
+|---|---|
+| 0.35.0 | **Tabs and Approve** ([docs](guided-flow.md#the-guided-flow-in-full)): the guided flow's page has a tab per step, Style, Team, Options, Plan and Build. Setup is split: you start in a style (the type and the scout levels), and the team (the helpers) opens after you approve it, from that style's defaults. A pick waits on the page until you press the tab's Approve, which saves the tab's picks and its approval in one save and wakes the session; the session writes them with `--page --picks` and opens the next tab. Approving the Plan tab is the plan's yes; Options has an option pick. Every choice explains each of its options. Change on a done tab takes back its approval and the ones after it. **Ask about one**: each option and each of the plan's tickets has an Ask Claude button (an ask with `about`). Forkboard 0.4.0 (`approved` in `state.json`, tabs, Approve). |
+
 ## 0.34: checkpoints for the gate
 
 | Version | Added |

@@ -51,7 +51,7 @@ async function open(url, options = {}) {
   page.on('console', (m) => { if (m.type() === 'error' && !/fonts\.g|jsdelivr|ERR_/.test(m.text())) errors.push(m.text()); });
   await page.route(/^https:\/\//, (route) => route.abort());  // no fonts or mermaid from the network: the page must cope
   await page.goto(url);
-  await page.waitForSelector('figure.graph g.node');
+  await page.waitForSelector('figure.graph g.node', { state: 'attached' });  // a figure may sit in a closed tab
   return { page, errors, context };
 }
 
@@ -189,24 +189,47 @@ test('the live page saves a version, and a clash reloads and saves the change ag
   await context.close();
 });
 
-test('a live page with steps saves picks, keeps a max, and a Change button asks to reopen a step', async () => {
+test('a live page with steps shows them as tabs, saves picks only on Approve, and Change takes an approval back', async () => {
   const { page, errors, context } = await open(base + 'steps/', { init: runtime });
-  const web = page.locator('fieldset.choice[data-key=web]');
-  await page.locator('details.step-body > summary').click();  // Setup is done, so it is folded
-  await page.waitForFunction(() => !document.querySelector('fieldset.choice[data-key=web] button').disabled);
-  await web.locator('button[data-value=light]').click();  // save 1
+  assert.equal(await page.locator('[role=tabpanel]:not([hidden])').getAttribute('data-step'), 'Team');  // the current step is open
+  const approve = page.locator('button.approve[data-approve=Team]');
+  await page.waitForFunction(() => !document.querySelector('button.approve').disabled);
+  const lens = page.locator('fieldset.choice[data-key=lens]');
+  await lens.locator('input[value=security]').check();  // a pick waits for Approve
+  assert.ok(await lens.locator('input[value=artistic]').isDisabled());  // up to 2
+  assert.equal(await page.evaluate(() => window.__saved().length), 0);
+  await approve.click();  // save 1: the step's picks, its approval and an ask, at once
   await page.waitForFunction(() => window.__saved().length === 1);
-  assert.equal((await page.evaluate(() => window.__saved()[0])).picks.web.value, 'light');
-  assert.equal(await web.locator('button[data-value=light]').getAttribute('aria-pressed'), 'true');
-  await page.locator('fieldset.choice[data-key=lens] input[value=security]').check();  // save 2 clashes, the reload saves it again
+  const first = await page.evaluate(() => window.__saved()[0]);
+  assert.deepEqual(first.picks.lens.value, ['ux', 'security']);
+  assert.equal(first.approved.Team.by, 'u_me');
+  const ask = first.asks.pop();
+  assert.deepEqual([ask.step, ask.approve, ask.text], ['Team', true, 'Approved Team: Lenses: ux, security']);
+  await page.waitForFunction(() => document.querySelector('button.approve').textContent === 'Approved');
+  assert.ok(await approve.isDisabled());
+  assert.ok(await lens.locator('input[value=ux]').isDisabled());  // an approved step waits for Claude
+  await page.locator('#tab-2').focus();
+  await page.keyboard.press('ArrowLeft');  // the tabs move with the arrow keys
+  assert.equal(await page.locator('[role=tabpanel]:not([hidden])').getAttribute('data-step'), 'Style');
+  assert.ok(await page.locator('fieldset.choice[data-key=web] button[data-value=light]').isDisabled());  // a done step is changed with Change
+  await page.locator('button.change[data-change=Style]').click();  // save 2 clashes, the reload saves it again
   await page.waitForFunction(() => window.__saved().length === 2, null, { timeout: 10000 });
-  assert.deepEqual((await page.evaluate(() => window.__saved()[1])).picks.lens.value, ['ux', 'security']);
-  await page.locator('details.step-body > summary').click();
-  assert.ok(await page.locator('fieldset.choice[data-key=lens] input[value=artistic]').isDisabled());  // up to 2
-  await page.locator('button.change[data-change=Setup]').click();
+  const second = await page.evaluate(() => window.__saved()[1]);
+  assert.deepEqual(second.approved, {});  // Style and every step after it
+  assert.deepEqual([second.asks.at(-1).step, second.asks.at(-1).text], ['Style', 'Change the step Style']);
+  await page.locator('#tab-3').click();  // Options: ask about one option, and about one of a section's subjects
+  await page.locator('article.opt[data-about="B. In the background"] button.ask-open').click();
+  await page.locator('article.opt[data-about="B. In the background"] textarea').fill('Is a queue worth it?');
+  await page.locator('article.opt[data-about="B. In the background"] .ask-row button.go').click();
   await page.waitForFunction(() => window.__saved().length === 3);
-  const ask = (await page.evaluate(() => window.__saved()[2])).asks.pop();
-  assert.deepEqual([ask.step, ask.text], ['Setup', 'Change the step Setup']);
+  const third = (await page.evaluate(() => window.__saved()[2])).asks.at(-1);
+  assert.deepEqual([third.about, third.text], ['B. In the background', 'Is a queue worth it?']);
+  await page.locator('.ask-about button.ask-open').click();
+  await page.locator('.ask-about select').selectOption('02 CSV writer');
+  await page.locator('.ask-about textarea').fill('Why after 01?');
+  await page.locator('.ask-about .ask-row button.go').click();
+  await page.waitForFunction(() => window.__saved().length === 4);
+  assert.equal((await page.evaluate(() => window.__saved()[3])).asks.at(-1).about, '02 CSV writer');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth) <= 1280, true);
   assert.deepEqual(errors, []);
   await context.close();
