@@ -7,11 +7,11 @@
  "intro": "",
  "sections": [
   {
-   "title": "Setup",
+   "title": "Style",
    "kind": "text",
-   "markdown": "How far the scouts look, and who helps.",
+   "markdown": "How far the scouts look.",
    "items": [],
-   "step": "Setup",
+   "step": "Style",
    "choices": [
     {
      "key": "web",
@@ -32,7 +32,16 @@
       }
      ],
      "value": "deep"
-    },
+    }
+   ]
+  },
+  {
+   "title": "Team",
+   "kind": "text",
+   "markdown": "Who helps.",
+   "items": [],
+   "step": "Team",
+   "choices": [
     {
      "key": "lens",
      "label": "Lenses",
@@ -63,7 +72,11 @@
    "kind": "text",
    "markdown": "\n```mermaid\nflowchart LR\n  Admin([Admin]) -->|clicks Export| Api[Export endpoint]\n  Api --> Db[(Tasks table)]\n```\n",
    "items": [],
-   "step": "Options"
+   "step": "Options",
+   "ask_about": [
+    "01 Export button",
+    "02 CSV writer"
+   ]
   },
   {
    "title": "Options",
@@ -88,16 +101,16 @@
  ],
  "steps": [
   {
-   "name": "Setup",
+   "name": "Style",
    "state": "done",
    "summary": "type learn, scouts web=deep"
   },
   {
-   "name": "Options",
+   "name": "Team",
    "state": "current"
   },
   {
-   "name": "Plan",
+   "name": "Options",
    "state": "later"
   }
  ]

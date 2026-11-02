@@ -19,7 +19,7 @@ feature-flow report <feature>                             what a run did, from i
 feature-flow import <spec-kit or openspec folder> <feature>   start plans/<feature>/ from their task list
 feature-flow eval <feature> [--later]                     record the run in plans/<feature>/eval.json, with your verdict (also: flow-status.py <feature> --eval)
 python3 scripts/flow-status.py <feature> --width          how many tickets can build at once, and why each waiting ticket waits
-python3 scripts/flow-status.py <feature> --page           the flow's one page (Setup, Options, Plan, Build); --picks DIR writes the live page's picks
+python3 scripts/flow-status.py <feature> --page           the flow's one page (Style, Team, Options, Plan, Build tabs); --picks DIR writes the live page's picks
 python3 scripts/flow-status.py <feature> --clean [--yes]  list (or delete) the brainstorm's spent files once the plan is accepted
 python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, coloured by status (add "plain" for none)
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
