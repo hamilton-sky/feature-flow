@@ -71,7 +71,7 @@ test('the editor adds, connects, renames, deletes, undoes and resets', async () 
   await fig.locator('g.node').last().click();
   assert.deepEqual(await counts(fig), [4, 4]);
   await fig.locator('g.node').nth(1).dblclick();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type('Renamed');
   await page.keyboard.press('Enter');
   assert.ok((await fig.locator('g.node text').allTextContents()).includes('Renamed'));
