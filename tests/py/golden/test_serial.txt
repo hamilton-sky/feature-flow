@@ -312,6 +312,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
+01,CHANGED ["work-01-a.txt"]
 01,DONEWHEN-PASS
 01,LEVEL-2
 01,REVIEW-SINGLE
@@ -322,6 +323,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
+01,CHANGED ["work-01-a.txt"]
 01,DONEWHEN-PASS
 01,LEVEL-2
 01,REVIEW-SINGLE
@@ -336,6 +338,7 @@ DONE f is complete: 2 ticket(s) resolved in this run
 02,GATE-FULL
 02,GATE-PASS
 02,GUARD-PASS
+02,CHANGED ["work-02-b.txt"]
 02,DONEWHEN-PASS
 02,LEVEL-3
 02,REVIEW

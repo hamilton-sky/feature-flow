@@ -178,9 +178,9 @@ def document(base, text, environ=None, top=None, feature=None, approved=None):
         said, extra = flow_plan.sections(plan or draft, draft=plan is None, environ=environ)
         steps[3].update(state="done" if plan else "current", summary=("approved: " if plan else "") + said)
         if plan:
-            state_, summary_, section = flow_plan.build_section(plan)
+            state_, summary_, found = flow_plan.build_section(plan)
             steps[4].update(state=state_, summary=summary_)
-            extra.append(section)
+            extra.extend(found)
         for step in steps[:3]:
             step["state"] = "done"
     if kind == "explore" and verdict is not None:

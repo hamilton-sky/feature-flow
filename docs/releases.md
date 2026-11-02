@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.37: plan vs reality
+
+| Version | Added |
+|---|---|
+| 0.37.0 | **Plan vs reality** ([docs](source-of-truth.md#plan-vs-reality)): after each build the footprint check logs the paths it changed (`CHANGED [...]`). `feature-flow report` and the guided flow's Build tab show, per ticket, its planned `Touches:` and level next to what it changed: paths outside `Touches:`, planned paths left untouched, a level raised in review, rebuilds, questions decided by a role and findings left for later, and whether the plan was re-planned or repaired. **Files are the truth** ([docs](source-of-truth.md)): the contract between the files and the page, written down. |
+
 ## 0.36: fixing a bug
 
 | Version | Added |

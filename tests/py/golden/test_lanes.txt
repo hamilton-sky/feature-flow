@@ -131,6 +131,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 02,GATE-FULL
 02,GATE-PASS
 02,GUARD-PASS
+02,CHANGED ["b/y.txt"]
 02,FOOTPRINT-PASS
 02,DONEWHEN-PASS
 02,LEVEL-2
@@ -140,6 +141,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 01,GATE-FULL
 01,GATE-PASS
 01,GUARD-PASS
+01,CHANGED ["a/x.txt"]
 01,FOOTPRINT-PASS
 01,DONEWHEN-PASS
 01,LEVEL-2
@@ -159,6 +161,7 @@ DONE f is complete: 3 ticket(s) resolved in this run
 03,GATE-FULL
 03,GATE-PASS
 03,GUARD-PASS
+03,CHANGED ["a/z.txt"]
 03,FOOTPRINT-PASS
 03,DONEWHEN-PASS
 03,LEVEL-2
