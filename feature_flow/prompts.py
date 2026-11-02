@@ -99,6 +99,18 @@ def builder_note(scripts, ticket_path, top="."):
             % name, note]
 
 
+FIX = re.compile(r"^Type:[ \t]*fix\b", re.IGNORECASE | re.MULTILINE)
+
+
+def is_fix(path):
+    """True when the ticket's header says `Type: fix` (a ticket from flow-status --fix)."""
+    try:
+        head = "\n".join(Path(path).read_text(encoding="utf-8", errors="replace").splitlines()[:20])
+    except OSError:
+        return False
+    return bool(FIX.search(head))
+
+
 def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None, top="."):
     role_text = role(scripts, ROLES[phase], top)
     guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase], top)), scripts)
@@ -135,6 +147,10 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
     if phase == "build":
         parts += builder_note(scripts, Path(workdir[0]) / ticket if workdir is not None else Path(ticket), top)
     parts += ["---", task]
+    if phase == "build" and not retry and is_fix(Path(workdir[0]) / ticket if workdir is not None else Path(top) / ticket):
+        parts += ["This ticket fixes a bug (`Type: fix`). The debugging guide follows: start at its step 2, reproduce, "
+                  "and follow it before you change any code.",
+                  _body(find_file(scripts, "guides", "debug.md", top))]
     if retry and phase == "build":
         parts += ["The debugging guide follows. Follow it before you change any code.",
                   _body(find_file(scripts, "guides", "debug.md", top))]

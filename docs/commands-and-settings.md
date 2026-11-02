@@ -17,6 +17,7 @@ python3 scripts/flow-status.py <feature> --check          cycles, missing blocke
 python3 scripts/flow-status.py <feature> --lint           --check plus: a check block (or `Check: none <why>`) on every ticket, a Test command
 feature-flow report <feature>                             what a run did, from its log: builds, reviews, failed checks, stops
 feature-flow import <spec-kit or openspec folder> <feature>   start plans/<feature>/ from their task list
+python3 scripts/flow-status.py <feature> --fix <diagnosis.md>   start plans/<feature>/ as one Type: fix ticket from the session's diagnosis (docs/fix.md)
 feature-flow eval <feature> [--later]                     record the run in plans/<feature>/eval.json, with your verdict (also: flow-status.py <feature> --eval)
 python3 scripts/flow-status.py <feature> --width          how many tickets can build at once, and why each waiting ticket waits
 python3 scripts/flow-status.py <feature> --page           the flow's one page (Style, Team, Options, Plan, Build tabs); --picks DIR writes the live page's picks

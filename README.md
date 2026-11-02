@@ -69,6 +69,7 @@ feature-flow install --user          # once, for every repo (Claude Code; add --
 | Build its tickets (a plan exists) | `/feature-flow csv-export` | `$feature-flow csv-export` |
 | The same, asking nothing | `/feature-flow csv-export auto` | `$feature-flow csv-export auto` |
 | Watch the graph, animated | `/feature-flow csv-export show` | `$feature-flow csv-export show` |
+| Fix a bug: find the cause, then one checked ticket ([how](docs/fix.md)) | `/feature-flow empty-export fix` | `$feature-flow empty-export fix` |
 | Weigh ways to build it first | `/feature-flow csv-export brainstorm` | `$feature-flow csv-export brainstorm` |
 | Everyday feature (what a new plan names) | `/feature-flow csv-export standard` | `$feature-flow csv-export standard` |
 | Small, low-risk feature: one review at the end | `/feature-flow csv-export fast` | `$feature-flow csv-export fast` |

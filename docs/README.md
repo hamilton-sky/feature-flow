@@ -8,6 +8,7 @@ The README covers what feature-flow is and how to start. These pages hold the re
 |---|---|---|
 | **Use** | [Installing feature-flow](install.md) | you want the plugin, a clone, a private install, to uninstall, or to upgrade |
 | | [A guided run](guided-flow.md) | you want to see each of the three stops, with a picture of the page |
+| | [Fixing a bug](fix.md) | something is broken: find the cause, then fix it as one checked ticket |
 | | [Brainstorming a feature](brainstorm.md) | an idea is still fuzzy, or you want the review page and Forkboard |
 | | [Trying it on your own repo](field-run.md) | you are running a trial, and how to record it with `eval` |
 | **Understand** | [How it works](how-it-works.md) | you want every check, the review levels, the agent roles and the graph page |

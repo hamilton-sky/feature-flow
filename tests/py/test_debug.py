@@ -27,6 +27,17 @@ class DebugGuide(unittest.TestCase):
         prompt = self.repo.flow("prompt")[1]
         self.assertNotIn(INTRO, prompt)
 
+    def test_debug_first_build_prompt_of_a_fix_ticket_carries_the_guide(self):
+        ticket = self.repo.path(T1)
+        ticket.write_text(ticket.read_text(encoding="utf-8").replace("Type: task", "Type: fix"), encoding="utf-8")
+        self.repo.commit("a fix ticket")
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        prompt = self.repo.flow("prompt")[1]
+        self.assertIn("This ticket fixes a bug (`Type: fix`)", prompt)
+        self.assertEqual(prompt.count(INTRO), 1)
+
     def test_debug_build_prompt_after_a_failing_gate_carries_the_guide(self):
         self.repo.flow("next")
         self.repo.path("FAILING").write_text("x\n", encoding="utf-8")

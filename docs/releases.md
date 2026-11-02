@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.36: fixing a bug
+
+| Version | Added |
+|---|---|
+| 0.36.0 | **The fix path** ([docs](fix.md)): `/feature-flow <name> fix` reproduces a bug, finds its cause without changing anything, and on one yes writes a plan of one `Type: fix` ticket (`flow-status.py <name> --fix <diagnosis>`), with no brief, planner or plan reviewer. The ticket is test first, its check block runs the reproduce command, `commands.md` takes the newest plan's command lines under `Profile: normal`, and its builder gets the debugging guide from the first attempt. `fix diagnose` stops after the diagnosis. |
+
 ## 0.35: the guided flow's page as tabs
 
 | Version | Added |
