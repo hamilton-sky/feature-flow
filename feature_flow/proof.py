@@ -305,6 +305,19 @@ def _repo_of(plan_dir):
     return str(top) if top is not None else None
 
 
+def test_commit(feature, num, cwd=None, depth=1000):
+    """The newest commit on HEAD's first-parent line (within depth) whose subject is the build guide's
+    `test(<feature>): NN failing test`, or None. Only a pointer for people and for `resume`: the red run still
+    proves the commit failed."""
+    pattern = re.compile(r"^test\(%s\):\s*%s\b.*failing test" % (re.escape(feature), re.escape(num)), re.IGNORECASE)
+    out = git._git("log", "--first-parent", "-n", str(depth), "--format=%H %s", check=False, cwd=cwd).stdout
+    for line in out.splitlines():
+        sha, _, subject = line.partition(" ")
+        if pattern.search(subject):
+            return sha
+    return None
+
+
 def test_first(base, test_command, plan_dir, timeout, remember):
     """Prove a test-only commit between base and HEAD fails the Test command. Returns (ok, text): the note
     for the reviewer, or the send-back finding. remember(value) records the branch (or sha) to go back to

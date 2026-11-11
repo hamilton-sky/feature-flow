@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.39: resume
+
+| Version | Added |
+|---|---|
+| 0.39.0 | **Resume** ([docs](speed.md#long-features-and-handoff)): `feature-flow resume <feature> [NN] [--from <commit>]` carries on after an upgrade, a change to the flow's own code, or a reset, without losing where the ticket started. It accepts the flow code as it is now and keeps the ticket's start: the run's, else the one the last `reset` dropped, else the commit just before the ticket's `test(<feature>): NN failing test` commit. Every check still runs from there, test first included. `reset` now says when a ticket's own commits would stop counting and names the `resume` line that keeps them. The `flow code changed while building` stop names `resume`, and a test-first check whose failing test is before the ticket's start stops with the `resume` line instead of sending the ticket back again and again. |
+
 ## 0.38: faster gates
 
 | Version | Added |

@@ -17,6 +17,7 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow status <feature> [--next | --counts | --check | --mermaid [plain] | --json]
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
        feature-flow reset <feature> [NN]
+       feature-flow resume <feature> [NN] [--from <commit>]
        feature-flow report <feature>
        feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]
        feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]
@@ -27,6 +28,8 @@ install copies the skill, its roles, scripts and guides into a repo; --user inst
 uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude, ~/.agents and ~/.feature-flow.
 status and view read plans/<feature>/ in the current directory, like scripts/flow-status.py and scripts/flow-view.py.
 reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.
+resume carries on after an upgrade, a change to the flow's code or a reset: it accepts the flow code as it is now and keeps
+where the ticket started (else it starts just before the ticket's failing test commit, or at --from). Every check still runs.
 report prints what a run did (builds, reviews, failed checks, stops) from its log in .feature-flow/state/. Read-only.
 given a Spec Kit or OpenSpec task list, `import` starts plans/<feature>/ with one ticket per phase or section.
 brainstorm-page writes the feature's brainstorm as a review page beside it: a section sidebar, a theme switch, diagrams you can edit. --live writes a page and its state.json to publish as an artifact that people save versions in and ask Claude through; --asks, --answer and --apply are the session's side of it.
@@ -34,7 +37,7 @@ eval records a field run in plans/<feature>/eval.json: cost, tokens, what each c
 """
 
 
-COMMANDS = ("install", "uninstall", "status", "view", "reset", "report", "eval", "import", "brainstorm-page", "--version",
+COMMANDS = ("install", "uninstall", "status", "view", "reset", "resume", "report", "eval", "import", "brainstorm-page", "--version",
             "--help")
 
 
@@ -69,5 +72,10 @@ def main(argv=None):
             sys.stderr.write(USAGE)
             return 2
         return cli.main(rest[:1] + ["reset"] + rest[1:], scripts=Path.cwd() / "scripts")
+    if command == "resume":
+        if not rest or len(rest) > 4:
+            sys.stderr.write(USAGE)
+            return 2
+        return cli.main(rest[:1] + ["resume"] + rest[1:], scripts=Path.cwd() / "scripts")
     sys.stderr.write("unknown command: %s\n%s%s" % (command, suggest.hint(command, COMMANDS), USAGE))
     return 2

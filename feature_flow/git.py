@@ -39,6 +39,17 @@ def head(cwd=None):
     return _git("rev-parse", "HEAD", cwd=cwd).stdout.strip()
 
 
+def commit_sha(rev, cwd=None):
+    """The full sha of the commit rev names, or None when it names none."""
+    result = _git("rev-parse", "--verify", "-q", "%s^{commit}" % rev, check=False, cwd=cwd)
+    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
+
+
+def is_ancestor(older, newer, cwd=None):
+    """True when commit older is newer or one of its ancestors."""
+    return _git("merge-base", "--is-ancestor", older, newer, check=False, cwd=cwd).returncode == 0
+
+
 def diff_size(base, head, exclude, cwd=None):
     """(files, lines, binary) of the diff base..head outside the exclude path: the changed paths, the
     added plus removed lines of the text files, and whether any file is binary (`-` counts in numstat).

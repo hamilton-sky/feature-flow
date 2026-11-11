@@ -168,8 +168,22 @@ class TestFirst:
             raise Stop("test first check of %s: %s" % (c.ticket_name(), err))
         c.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")
         if not ok:
+            lost_start(c)
             return "test first", text, []
         return None, "", [text] if text else []
+
+
+def lost_start(c):
+    """Stop when the ticket's own failing-test commit is at or before its base: a reset or an upgrade moved the
+    base past it, so no rebuild can pass the check, and only the user can say where the ticket started."""
+    base = c.get("base")
+    test = proof.test_commit(c.feature, c.get("num"), cwd=_folder(c)) if base else None
+    if test and git.is_ancestor(test, base, cwd=_folder(c)):
+        c.log("TESTFIRST-LOST-START")
+        raise Stop("%s's failing test commit %s is before where this build started (%s), so the test-first check "
+                   "cannot see it. a reset or an upgrade moves the start like this. run `feature-flow resume %s %s`: "
+                   "it starts the ticket again just before that commit, and the check still runs the test there"
+                   % (c.ticket_name(), test[:10], base[:10], c.feature, c.get("num")))
 
 
 def pipeline(c, gate=True):

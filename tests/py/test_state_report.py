@@ -96,7 +96,8 @@ class Report(Base):
 
         rc, out, err = self.run_flow("reset", FLOW_TRUSTED="1", FLOW_TAKEOVER="1")
         self.assertEqual(rc, 0, out)
-        self.assertEqual(self.reported(err), ("none", "none"))
+        self.assertIn("feature-flow resume f 01", out)  # the ticket's own commits: where it started is kept for resume
+        self.assertEqual(self.reported(err)[1], "none")
         self.assertReportsDisk(err)
 
     def test_a_usage_error_during_a_run_reports_the_files_on_disk(self):

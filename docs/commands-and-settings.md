@@ -8,6 +8,7 @@ Every script command and every `FLOW_` setting. The skill runs these for you; yo
 
 ```bash
 python3 scripts/flow.py <feature> start|reset [NN]          the conductor (the skill runs it; also plan-prompt, plan-review-prompt, plan-accept)
+feature-flow resume <feature> [NN] [--from <commit>]      carry on after an upgrade or a reset: accept the flow code as it is now, keep where the ticket started (also flow.py <feature> resume)
 FLOW_TRUST=<digest|new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py <feature> next|prompt|verdict <file>|fast on|off   loop commands by hand, through the runner: prints TRUST <digest> first (no hash check, see below)
 python3 scripts/flow-status.py <feature>                  table of tickets and which are READY
 python3 scripts/flow-status.py <feature> --next           path of the next ready ticket (exit 10 = done, 11 = stuck)
