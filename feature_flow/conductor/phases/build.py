@@ -23,6 +23,17 @@ class Build(Phase):
         return ws.emit("BUILD %s %s %s%s" % (ws.ticket(), ws.get("num"), ws.get("base"), ws.lane_word()))
 
     @classmethod
+    def keep_note(cls, ws):
+        """Commit the ticket file of a build that ended unresolved, its Attempt note and Status included, when it is
+        the only change: the next builder starts from a clean tree and reads the note. Other changes stay for the
+        clean-tree checks to name."""
+        rel = proof.repo_relative(ws.ticket(), cwd=ws.folder)
+        dirty = git.changes(cwd=ws.folder)
+        if dirty == [rel] and git.commit_file(ws.ticket(), "chore(%s): %s attempt note" % (ws.feature, ws.get("num")),
+                                              cwd=ws.folder):
+            ws.log("ATTEMPT-NOTE")
+
+    @classmethod
     def judge(cls, ws):
         ws.check_code(ws.flow_edit_allowed())
         ws.log("CHECKS")  # the build ended: eval times the checks from here
@@ -32,6 +43,7 @@ class Build(Phase):
         if status not in tickets.DONE:
             if status in tickets.RESET:
                 tickets.set_open(ws.at(ws.ticket()))
+            cls.keep_note(ws)
             role, question = ask_phase.Ask.open_ask(ws)
             if role:
                 return Outcome(ask_phase.Ask.hand_out(ws, "build", role, question))

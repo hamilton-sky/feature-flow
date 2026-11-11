@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.40: a repair keeps the start
+
+| Version | Added |
+|---|---|
+| 0.40.0 | **A plan repair keeps the ticket's start** ([docs](speed.md#long-features-and-handoff)): after `replan-prompt repair` the ticket is built again from the repaired plan (its text, `commands.md` and the floor guard's allow lines are read at the repair, `plan_sha`), but its work still counts from where it started, so its failing test commit and code stay in the checks and the review. It no longer stops with "run reset". `resume` takes over a pending repair. **Attempt notes**: a build that ends unresolved with only its ticket changed has the ticket committed (`chore(<feature>): NN attempt note`). **No identical rebuilds**: the same test-first failure twice stops with the `resume … --from` line. **Old conductor warning**: `feature-flow status`, `reset`, `resume` and `report` say when the repo's own conductor is older than the installed feature-flow. `floor-guard.py` takes an optional plan commit. |
+
 ## 0.39: resume
 
 | Version | Added |
