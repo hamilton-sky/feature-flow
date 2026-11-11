@@ -111,7 +111,11 @@ def is_fix(path):
     return bool(FIX.search(head))
 
 
-def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None, top="."):
+GATE_OFF = ("The conductor's gate is off for this run, so nothing runs the whole Test command after you: run it "
+            "yourself once, at the end, and prove it as Done when asks.")
+
+
+def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, workdir=None, top=".", gate_on=True):
     role_text = role(scripts, ROLES[phase], top)
     guide = _runner(_body(find_file(scripts, "guides", GUIDES[phase], top)), scripts)
     for placeholder, value in (("<feature>", feature), ("<NN>", num), ("<ticket>", ticket), ("<sha>", sha),
@@ -123,6 +127,8 @@ def build(phase, scripts, feature, ticket, num, sha, notes=(), retry=False, work
         task = ("Your task: build ticket %s of the feature `%s`, in auto mode (`%s auto %s`). The ticket is `%s`. "
                 "The work starts at commit `%s`.\n%s\nWhen you are done, reply with what you built and the "
                 "commit. Do not review your own work." % (num, feature, feature, num, ticket, sha, fresh))
+        if not gate_on:
+            task += "\n" + GATE_OFF
         task += codeintel.note("builder", top, sha)
         intro = "The build guide follows. Follow it exactly."
     else:

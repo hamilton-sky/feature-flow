@@ -158,10 +158,12 @@ class RealChecks(unittest.TestCase):
         source, report, notes = buildchecks.Gate().run(c)
         self.assertEqual((source, notes), ("gate (full)", []))
         self.assertIn("Test failed", report)
-        self.assertEqual(c.events, ["GATE-FULL", "GATE-FAIL"])
+        self.assertRegex(c.events[0], r"^GATE-TIME Test=\d+$")  # how long the gate's Test took, in seconds
+        self.assertEqual(c.events[1:], ["GATE-FULL", "GATE-FAIL"])
         c.quick, c.events = True, []
         self.assertEqual(buildchecks.Gate().run(c), (None, "", []))
-        self.assertEqual(c.events, ["GATE-QUICK", "GATE-PASS"])
+        self.assertRegex(c.events[0], r"^GATE-TIME Quick=\d+$")
+        self.assertEqual(c.events[1:], ["GATE-QUICK", "GATE-PASS"])
 
     def test_floor_guard(self):
         c = self.base()

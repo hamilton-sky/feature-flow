@@ -398,7 +398,7 @@ if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] &&
 LEFT="$(find "$BAR/home" -type f)"
 if [ -z "$LEFT" ]; then ok "the user uninstall leaves no files in the home"; else bad "the user uninstall leaves no files in the home" "$LEFT"; fi
 if [ ! -e "$BAR/home/.feature-flow" ]; then ok "and ~/.feature-flow is gone"; else bad "and ~/.feature-flow is gone"; fi
-expect_has "--version prints the version" "feature-flow 0.37.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
+expect_has "--version prints the version" "feature-flow 0.38.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"
@@ -581,9 +581,10 @@ echo "flow.py, unit tests"
 if [ "${FLOW_UNIT_IN_SHARDS:-}" = 1 ]; then
   echo "  note  the unit tests run in CI's own shard jobs (tests/shard.py), not here"
 else
-  out="$(cd "$ROOT" && python3 -m unittest discover -s tests/py 2>&1)"; rc=$?
-  expect_rc "python3 -m unittest discover -s tests/py passes" 0 $rc
-  [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -20
+  # the same four shards as CI, side by side (tests/shard.py all): each in its own process and temp folder
+  out="$(cd "$ROOT" && python3 tests/shard.py all 4 2>&1)"; rc=$?
+  expect_rc "the unit tests in tests/py pass (python3 tests/shard.py all 4)" 0 $rc
+  [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -60
 fi
 out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py feature_flow/conductor/*.py feature_flow/conductor/*/*.py packages/forkboard/forkboard/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor and Forkboard parse as Python 3.9" 0 $?

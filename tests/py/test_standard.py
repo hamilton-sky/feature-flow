@@ -216,6 +216,14 @@ class Timing(unittest.TestCase):
         self.assertEqual(result["by_level"], {"1": 6, "2": 17})
         self.assertEqual(result["slowest"], {"ticket": "01", "minutes": 17, "most_in": "build"})
         self.assertEqual(result["full_test_runs"], {"01": 1})
+        self.assertEqual(result["gate_minutes"], {})
+
+    def test_the_gate_minutes_are_summed_per_command(self):
+        rows = self.rows()
+        rows.insert(4, (rows[3][0], "01", "GATE-TIME", "Test=150 Lint=6"))
+        rows.insert(5, (rows[3][0], "02", "GATE-TIME", "Test=90 Check_web/=30"))
+        result = evaluate.timing(rows, {"01": {"level": 2}, "02": {"level": 1}})
+        self.assertEqual(result["gate_minutes"], {"Check_web/": 0.5, "Lint": 0.1, "Test": 4.0})
 
     def test_a_log_without_dates_has_no_timing(self):
         self.assertIsNone(evaluate.timing([(None, "01", "BUILD", "")], {}))

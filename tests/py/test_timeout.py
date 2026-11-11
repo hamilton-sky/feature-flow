@@ -69,7 +69,7 @@ class TimeoutTests(unittest.TestCase):
         self.commands("Test: `%s`\n" % self.sleep_command(2))
         os.environ["FLOW_GATE_TIMEOUT"] = "0"
         code, out, _ = self.run_gate()
-        self.assertEqual((code, out.endswith("gate: 1 command(s) passed\n")), (0, True), out)
+        self.assertEqual((code, "gate: 1 command(s) passed in " in out), (0, True), out)
 
     def test_timeout_that_is_not_a_number_names_the_variable(self):
         self.commands("Test: `%s`\n" % self.sleep_command(0))
