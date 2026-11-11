@@ -8,18 +8,19 @@ from pathlib import Path
 from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 from feature_flow.conductor.planning import Planner
+from feature_flow.conductor import resume as run_resume
 
 USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] [file] | verdict <file> [lane] | fast on|off\n"
          "       python3 scripts/flow.py <feature> budget [<minutes>|+<minutes>|off] | replan-prompt [repair]\n"
          "       python3 scripts/flow.py <feature> scouts [lane] | scout-prompt <k> [lane] | plan-scouts <brief> | plan-scout-prompt <k>\n"
          "       python3 scripts/flow.py <feature> consult-prompt architect|designer|po <question file>\n"
          "       python3 scripts/flow.py <feature> brainstorm-prompt scout|web|architect|designer|po|skeptic <question file>\n"
-         "       python3 scripts/flow.py <feature> asked setup|options|plan | reset [NN]\n"
+         "       python3 scripts/flow.py <feature> asked setup|options|plan | reset [NN] | resume [NN] [--from <commit>]\n"
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
-COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset", "fast", "scouts",
+COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset", "resume", "fast", "scouts",
             "scout-prompt", "plan-scouts", "plan-scout-prompt", "consult-prompt", "budget", "replan-prompt",
             "brainstorm-prompt", "asked")
-ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "next": (2, 3), "prompt": (2, 3, 4), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
+ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "resume": (2, 3, 4, 5), "next": (2, 3), "prompt": (2, 3, 4), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
         "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,), "brainstorm-prompt": (4,), "asked": (3,), "budget": (2, 3),
         "replan-prompt": (2, 3)}
 WANTS = {"verdict": ("the file the reviewer's whole reply was saved to", "<file> [lane]"),
@@ -128,6 +129,19 @@ def run(args, scripts, trusted):
             line = conductor.prompt(*rest, to_file=to_file)
         elif command == "reset":
             line = conductor.reset(args[2] if len(args) == 3 else None)
+        elif command == "resume":
+            rest, start = args[2:], None
+            if "--from" in rest:
+                at = rest.index("--from")
+                if at + 1 >= len(rest):
+                    sys.stderr.write("resume --from needs a commit: resume [NN] --from <commit>\n")
+                    return 2
+                start = rest[at + 1]
+                rest = rest[:at] + rest[at + 2:]
+            if len(rest) > 1 or (rest and not rest[0].isdigit()):
+                print(USAGE, file=sys.stderr)
+                return 2
+            line = run_resume.resume(conductor, rest[0] if rest else None, start)
         elif command == "scouts":
             line = conductor.scouts(*args[2:])
         elif command == "scout-prompt":

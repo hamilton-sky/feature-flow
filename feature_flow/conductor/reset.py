@@ -4,6 +4,7 @@ counters go."""
 import os
 
 from feature_flow import git, state, suggest, tickets
+from feature_flow.conductor import resume as run_resume
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.store import RunState
 from feature_flow.conductor.workspace import Workspace
@@ -19,6 +20,7 @@ def reset(c, num=None):
         raise Stop("%s is owned by session %s. if that session is closed or dead, run reset with FLOW_TAKEOVER=1"
                    % (c.feature, owner[:8]))
     paths = tickets.ticket_files(str(c.plan / (os.environ.get("FLOW_TICKETS") or "tasks")))
+    bases = run_resume.ticket_bases(c)  # where the tickets in progress started, before the state goes
     if num is not None:
         chosen = [p for p in paths if tickets.number(p) == num.zfill(2)]
         if not chosen:
@@ -37,7 +39,7 @@ def reset(c, num=None):
                        % nums)
     dropped = c.lane_sched().drop_lanes()
     had_run = c.state_file.is_file()
-    keys = ("deferred", "reviewed", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if c.all.get("budget") else ())
+    keys = (run_resume.STARTS, run_resume.FORGOT, "deferred", "reviewed", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if c.all.get("budget") else ())
     kept = {k: c.all[k] for k in keys if c.all.get(k)}  # a deferred ticket still owes its review,
     # and a budget's time stays spent
     if c.all.get("phase") == "test" and c.all.get("test_base"):  # the tester's tests are judged after the reset
@@ -51,6 +53,18 @@ def reset(c, num=None):
     if not reopened and not had_run and not dropped:
         return "OK nothing to reset for %s. run %s %s" % (c.feature, c.invoke, c.feature)
     c.all = RunState(c.state_file, kept)
+    lost = []  # tickets whose own commits stop counting: their next build starts at HEAD
+    for num_, base in sorted(bases.items()):
+        if num is not None and num_ != num.zfill(2):
+            continue
+        if git.commit_sha(base) and git.is_ancestor(base, "HEAD"):
+            own = run_resume.own_commits(base, c.plan)
+            if own:
+                run_resume.remember(c, num_, base, run_resume.FORGOT)
+                kept[run_resume.FORGOT] = c.all[run_resume.FORGOT]
+                lost.append("%s had %d commit(s) since it started at %s, which no longer count: its next build "
+                            "starts from HEAD. to keep them, run `feature-flow resume %s %s` instead of next"
+                            % (num_, len(own), base[:10], c.feature, num_))
     Workspace.__init__(c, c)
     if kept.get("phase") == "test":
         c.snapshot_code()  # the code as it is now, an upgrade included, is what the judging holds the tester to
@@ -64,6 +78,7 @@ def reset(c, num=None):
         done.append("kept the tester's commits since %s for the conductor to judge" % kept["test_base"][:12])
     done += dropped
     done += ["reopened %s" % tickets.name(p) for p in reopened]
+    done += lost
     return "OK %s. run %s %s" % (", ".join(done), c.invoke, c.feature)
 
 

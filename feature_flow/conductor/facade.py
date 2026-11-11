@@ -105,8 +105,8 @@ class Conductor(Workspace):
         if final:
             raise Stop("flow code changed during the feature review of %s: %s. a reviewer must never change it"
                        % (self.feature, ", ".join(names)))
-        raise Stop("flow code changed while building %s: %s. if intended, the ticket needs a line: "
-                   "Floor: allow flow-edit" % (self.ticket_name(), ", ".join(names)))
+        raise Stop("flow code changed while building %s: %s. if you upgraded feature-flow or changed its code, run `feature-flow resume %s`: it keeps the ticket where it is. if the builder changed it, undo that, or give the ticket a line: Floor: allow flow-edit"
+                   % (self.ticket_name(), ", ".join(names), self.feature))
 
     # ---- commands ------------------------------------------------------
 
