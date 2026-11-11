@@ -225,7 +225,10 @@ class Session:
         self.note("spent %d minute(s)" % minutes)
 
     def text(self):
-        events = [self.clean(line.split(",", 1)[1]) for line in self.repo.log().splitlines() if "," in line]
+        # GATE-TIME holds wall-clock seconds, which differ from run to run: test_gate.py and test_buildchecks.py
+        # check it, the recordings leave it out
+        events = [self.clean(line.split(",", 1)[1]) for line in self.repo.log().splitlines()
+                  if "," in line and ",GATE-TIME " not in line]
         path = self.repo.path(".feature-flow/state/flow-f.state")
         keys = []
         if path.is_file():

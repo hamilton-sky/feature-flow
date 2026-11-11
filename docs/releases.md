@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.38: faster gates
+
+| Version | Added |
+|---|---|
+| 0.38.0 | **The conductor owns the full suite** ([docs](speed.md#who-runs-the-full-suite-and-how-long-it-takes)): a builder runs only the tests its change touches (and `Quick:` and its `Check <path>:` commands); the conductor's gate runs the whole Test command once per ticket or checkpoint. With the gate off, the build prompt asks the builder to run it. **The gate says what it is doing**: each command's output goes to `.feature-flow/state/gate-<feature>.log`, a `still running` line comes every minute, the gate ends with each command's time, and the run log's `GATE-TIME` lines show up in `feature-flow eval` as `gate minutes by command`. **Local test shards**: `python3 tests/shard.py all 4` runs the four CI shards side by side, each in its own temp folder, and `tests/run.sh` uses it. |
+
 ## 0.37: plan vs reality
 
 | Version | Added |

@@ -64,6 +64,12 @@ The defaults come from the profile: `fast` is `end`, `standard` is `batch 3`, `c
 - **With lanes**, no new ticket is leased once a checkpoint is due: the busy lanes finish and merge, then the checkpoint runs. A merge runs `Quick` when the plan has one, and leaves the full gate to the checkpoint. **With fast batches**, the batch's own gate at the end runs only `Quick`.
 - **The cost.** Between checkpoints a ticket can build on a mistake in the one before it that only the full Test would catch. That is why `batch 3` is the everyday default and `end` is for small, low-risk features.
 
+## Who runs the full suite, and how long it takes
+
+- **The conductor runs the whole Test command; the builder does not.** A builder runs the tests its change touches, the `Quick:` command and any `Check <path>:` command for a path it changed. The conductor's gate (or its checkpoint) then runs the whole Test command once, and the reviewer takes that result. A Done when bullet that only says the whole suite passes gets `left to the conductor's gate` in the builder's Proof. When the gate is off (`Gate: off unsafe`, `FLOW_GATE=off`), the build prompt says so and the builder runs the whole suite itself, once, at the end.
+- **The gate says what it is doing.** Each command's output goes to `.feature-flow/state/gate-<feature>.log` (it ignores itself in git), which you can read while it runs. The gate names that log, prints a `gate: Test still running, 4m00s, output in …` line every minute on stderr, and ends with how long each command took (`gate: 2 command(s) passed in 3m10s (Test 3m02s, Lint 8s)`). The run log gets a `GATE-TIME Test=182 Lint=8` line per gate run, and `feature-flow eval` adds them up as `gate minutes by command`.
+- **A slow Test command is often a serial one.** If your CI already splits the tests into shards, run those shards side by side in `commands.md`'s Test command too. feature-flow's own `tests/run.sh` does this with `python3 tests/shard.py all 4`.
+
 ## A time budget
 
 `FLOW_BUDGET=<minutes>` on `start` gives the feature a budget of active minutes. The conductor counts the time between its steps, at most an hour for one step, so a session left open overnight does not eat the budget, and the time between two sessions does not count. `budget` (through the runner) reports it, and `budget <minutes>`, `budget +<minutes>` or `budget off` change it between phases.

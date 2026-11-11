@@ -141,5 +141,34 @@ class ReplanBrainstormTests(unittest.TestCase):
         self.assertIn("`plans/f/brainstorm.md`: the folded tickets still build its Chosen option", kept)
 
 
+class FullSuiteOwnerTests(unittest.TestCase):
+    """The conductor owns the whole Test command: the build guide tells the builder to run only the tests its change
+    touches, and a build prompt tells it to run the whole suite itself only when the gate is off."""
+
+    def guide(self):
+        return (helpers.ROOT / "guides" / "build.md").read_text(encoding="utf-8")
+
+    def prompt(self, **kw):
+        return prompts.build("build", helpers.ROOT / "scripts", "demo", "plans/demo/tasks/01-a.md", "01", "abc", **kw)
+
+    def test_the_build_guide_leaves_the_whole_test_command_to_the_conductor(self):
+        text = self.guide()
+        self.assertIn("**The full suite is the conductor's, not yours.**", text)
+        self.assertIn("Do not run the whole Test command", text)
+        self.assertIn("`left to the conductor's gate`", text)
+        self.assertNotIn("Run the whole Test command once, at the end, as Done when asks", text)
+
+    def test_a_build_prompt_with_the_gate_on_says_nothing_more(self):
+        self.assertNotIn(prompts.GATE_OFF, self.prompt())
+
+    def test_a_build_prompt_with_the_gate_off_asks_for_the_whole_suite(self):
+        self.assertIn(prompts.GATE_OFF, self.prompt(gate_on=False))
+
+    def test_a_review_prompt_never_gets_the_note(self):
+        text = prompts.build("review-single", helpers.ROOT / "scripts", "demo", "plans/demo/tasks/01-a.md", "01", "abc",
+                             gate_on=False)
+        self.assertNotIn(prompts.GATE_OFF, text)
+
+
 if __name__ == "__main__":
     unittest.main()
