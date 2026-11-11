@@ -170,16 +170,19 @@ class StandardDrive(unittest.TestCase):
         self.assertTrue(line.startswith("BUILD %s" % T1), line)
         self.assertIn("REPAIR", repo.log())
 
-    def test_a_repair_after_the_ticket_has_code_stops(self):
+    def test_a_repair_after_the_ticket_has_code_keeps_its_start(self):
         repo = self.setup(two=True)
-        self.flow("next")
+        rc, out = self.flow("next")
+        start = out.split()[3]
         self.assertEqual(self.flow("replan-prompt", "repair")[0], 0)
         repo.path("work.txt").write_text("half done\n", encoding="utf-8")
         repo.commit("feat: half")
         repo.path(T1).write_text(ticket("T1 again", "—"), encoding="utf-8")
         repo.commit("plan(f): repair 01")
         rc, out = self.flow("next")
-        self.assertEqual(rc, 1, out)
+        self.assertEqual((rc, out.split()[:4]), (0, ["BUILD", T1, "01", start]), out)
+        self.assertIn("REPAIR-KEPT-START", repo.log())
+        self.assertEqual(repo.state()["plan_sha"], repo.head())  # the ticket is read from the repaired plan
 
 
 class InstallWhileRunning(unittest.TestCase):

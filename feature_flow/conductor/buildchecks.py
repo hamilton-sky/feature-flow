@@ -7,6 +7,7 @@ the gate only with the gate on (a batch leaves it out: its gate runs once at HEA
 first only with the gate on. A checkpointed gate leaves the full gate and Done when to the checkpoint.
 """
 
+import hashlib
 import json
 import re
 
@@ -45,7 +46,8 @@ class Gate:
 
 class FloorGuard:
     def run(self, c):
-        result = checks.floor_guard(c.scripts, c.feature, c.get("num"), c.get("base"), cwd=_folder(c))
+        result = checks.floor_guard(c.scripts, c.feature, c.get("num"), c.get("base"), cwd=_folder(c),
+                                    plan=c.get("plan_sha"))
         c.log("GUARD-PASS" if result.ok else "GUARD-FAIL")
         if not result.ok:
             return "floor guard", result.out, []
@@ -169,7 +171,10 @@ class TestFirst:
         c.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")
         if not ok:
             lost_start(c)
+            same_again(c, text)
             return "test first", text, []
+        if c.get("testfirst_seen"):
+            c.st["testfirst_seen"] = ""
         return None, "", [text] if text else []
 
 
@@ -184,6 +189,20 @@ def lost_start(c):
                    "cannot see it. a reset or an upgrade moves the start like this. run `feature-flow resume %s %s`: "
                    "it starts the ticket again just before that commit, and the check still runs the test there"
                    % (c.ticket_name(), test[:10], base[:10], c.feature, c.get("num")))
+
+
+def same_again(c, text):
+    """Stop when the test-first check fails exactly as it did on the last build: another identical build would only
+    spend an attempt. The user says where the ticket's work starts, or how to redo its test commit."""
+    seen = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    if c.get("testfirst_seen") != seen:
+        c.st["testfirst_seen"] = seen
+        return
+    c.log("TESTFIRST-SAME")
+    raise Stop("%s failed the test-first check the same way twice: %s ... another build would fail the same way. "
+               "if the ticket's failing test commit is already there, run `feature-flow resume %s %s --from "
+               "<the commit just before it>`; if it is not, add one by hand, then resume"
+               % (c.ticket_name(), " ".join(text.split())[:300], c.feature, c.get("num")))
 
 
 def pipeline(c, gate=True):

@@ -135,6 +135,81 @@ class Resume(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("ticket 01 carries on", result.stdout)
 
+    def test_a_build_left_unresolved_has_its_attempt_note_committed(self):
+        self.prepare()
+        path = self.repo.path(T1)
+        path.write_text(path.read_text(encoding="utf-8") + "\n## Attempt note\n\nblocked on x\n", encoding="utf-8")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)
+        self.assertEqual(self.repo.porcelain(), "")
+        self.assertEqual(self.repo.git("log", "-1", "--format=%s"), "chore(f): 01 attempt note")
+        self.assertIn("ATTEMPT-NOTE", self.repo.log())
+
+    def test_other_changes_beside_the_note_are_left_alone(self):
+        self.prepare()
+        path = self.repo.path(T1)
+        path.write_text(path.read_text(encoding="utf-8") + "\n## Attempt note\n\nx\n", encoding="utf-8")
+        self.repo.path("loose.txt").write_text("x\n", encoding="utf-8")
+        self.repo.flow("next")
+        self.assertNotIn("ATTEMPT-NOTE", self.repo.log())
+        self.assertIn("loose.txt", self.repo.porcelain())
+
+    def test_the_same_test_first_failure_twice_stops_with_the_resume_line(self):
+        self.prepare()
+        self.resolve_with("code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("BUILD %s 01 " % T1), out)  # the first time: sent back
+        self.resolve_with("more.txt")
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("failed the test-first check the same way twice", out)
+        self.assertIn("feature-flow resume f 01 --from", out)
+        self.assertIn("TESTFIRST-SAME", self.repo.log())
+
+    def test_resume_takes_over_a_pending_plan_repair(self):
+        self.prepare()
+        base = self.repo.state()["base"]
+        test = self.failing_test()
+        self.repo.flow("replan-prompt", "repair")
+        self.assertTrue(self.repo.state().get("repair_sha"))
+        path = self.repo.path(T1)
+        path.write_text(path.read_text(encoding="utf-8").replace("# A\n", "# A repaired\n"), encoding="utf-8")
+        self.repo.commit("plan(f): repair the plan")
+        rc, out = self.repo.flow("resume")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("took over the pending plan repair", out)
+        state = self.repo.state()
+        self.assertEqual((state["base"], state.get("repair_sha", "")), (base, ""))
+        self.assertEqual(state["plan_sha"], self.repo.head())
+        self.resolve_with("code.txt")
+        rc, out = self.repo.flow("next")
+        self.assertTrue(out.startswith("REVIEW %s 01 " % T1), out)
+        self.assertIn("TESTFIRST-PASS", self.repo.log())
+        self.assertIn("saw %s fail" % test[:10], self.repo.flow("prompt")[1])
+
+
+class OldConductor(unittest.TestCase):
+    def test_an_older_repo_conductor_is_named(self):
+        import tempfile
+        from pathlib import Path
+        from feature_flow import command
+        with tempfile.TemporaryDirectory() as tmp:
+            top = Path(tmp)
+            (top / "scripts").mkdir()
+            (top / "scripts" / "flow.py").write_text("", encoding="utf-8")
+            (top / ".feature-flow" / "feature_flow").mkdir(parents=True)
+            (top / ".feature-flow" / "feature_flow" / "__init__.py").write_text('__version__ = "0.1.0"\n',
+                                                                                encoding="utf-8")
+            said = []
+            command.warn_old_conductor(top, said.append)
+            self.assertEqual(len(said), 1)
+            self.assertIn("its own conductor, feature-flow 0.1.0, older than this feature-flow", said[0])
+            (top / ".feature-flow" / "feature_flow" / "__init__.py").write_text(
+                '__version__ = "%s"\n' % command.__version__, encoding="utf-8")
+            said = []
+            command.warn_old_conductor(top, said.append)
+            self.assertEqual(said, [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,10 +85,11 @@ def gate(scripts, feature, timeout=None, quick=False, cwd=None, changed=None, lo
     return result
 
 
-def floor_guard(scripts, feature, num, base, cwd=None):
-    """feature_flow.floorguard in-process; stdout and stderr are folded together in order. cwd: see floorguard.run."""
+def floor_guard(scripts, feature, num, base, cwd=None, plan=""):
+    """feature_flow.floorguard in-process; stdout and stderr are folded together in order. cwd: see floorguard.run.
+    plan: the commit the plan is read at, when not base."""
     chunks = []
-    code = floorguard.run([str(feature), str(num), str(base)], chunks.append, chunks.append, cwd=cwd)
+    code = floorguard.run([str(feature), str(num), str(base), str(plan or "")], chunks.append, chunks.append, cwd=cwd)
     out = "".join(chunks).encode("utf-8", "surrogateescape").decode("utf-8", "replace")
     return Result(code, out)
 

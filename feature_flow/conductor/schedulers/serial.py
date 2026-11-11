@@ -96,9 +96,12 @@ class SerialScheduler:
                      "attempt": 0, "review_attempt": 0, "round": 0, "check_rounds": 0, "review_rounds": 0, "review_sha": "", "review_notes": "", "review_pass": "spec",
                      "spec_ok": "", "level_note": "", "level_raised": "", "edit_note": "", "due_checks": "", "due_minors": "", "asks": 0, "ask_role": "", "ask_from": "",
                      "ticket_clock": c.all.get("spent", 0)})
+        for key in ("plan_sha", "testfirst_seen"):  # the last ticket's, gone (left out unless set: the goldens)
+            c.st.root.pop(c.st.key(key), None)
         if ws is None:  # a ticket `resume` or `reset` gave a start keeps it, so its own commits still count
             kept = run_resume.take(c, c.st["num"])
             if kept:
+                c.st["plan_sha"] = c.st["base"]  # the ticket as it reads now; its work counts from where it started
                 c.st["base"] = kept
                 c.log("RESUMED-START %s" % kept[:12])
         c.st["level"] = c.base_level()

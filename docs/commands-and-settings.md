@@ -28,7 +28,7 @@ python3 scripts/flow-status.py <feature> --json           every ticket with stat
 python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser
 feature-flow brainstorm-page <feature> [--style NAME] [--fragment]   the brainstorm as the flow's one page (Forkboard); --live DIR, --asks, --answer, --apply, --picks for the live page
 python3 scripts/gate.py <feature>                         run Build, Test and Lint from commands.md
-python3 scripts/floor-guard.py <feature> <NN> [base]      check a ticket's diff, run from the repo root
+python3 scripts/floor-guard.py <feature> <NN> [base] [plan]   check a ticket's diff, run from the repo root (plan: the commit the plan is read at, after a repair)
 ```
 
 `next`, `prompt` and `verdict` run directly stop with `STOP run the conductor through scripts/flow-trust.py, as the skill says`. Pass `FLOW_TRUST=new` on a first call, then the digest from the last `TRUST` line. Run by hand like this, nothing checks `flow-trust.py` itself, so it is for trying things out, not a protected run. The skills never run it this way: they start it through a loader line that first checks the file against the sha256 the skill pins, and stops with `flow-trust.py does not match this skill` if it differs (see `## Calling the conductor` in the skill). For a `--user` install the scripts are in `~/.feature-flow/scripts/` (or `$FEATURE_FLOW_HOME/scripts/`).

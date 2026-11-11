@@ -1,6 +1,6 @@
 """The floor guard.
 
-usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit]
+usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit] [plan-commit]
 looks at the diff from base-commit (default HEAD~1) to HEAD for ways of weakening the bar
 instead of meeting it: skipped tests, silenced checks, empty catches, deleted tests,
 lowered thresholds, edited lint or test config.
@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 
-USAGE = "usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit]"
+USAGE = "usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit] [plan-commit]"
 
 SKIP = re.compile(r"@pytest\.mark\.(skip|xfail)|pytest\.skip\(|(^|[^A-Za-z_])(it|test|describe)\.(skip|todo)\("
                   r"|(^|[^A-Za-z_])(xit|xdescribe|xtest)\(|@Disabled|t\.Skip\(|#\[ignore\]|unittest\.skip"
@@ -227,6 +227,7 @@ def run(argv, out, err, environ=None, cwd=None):
     feature = argv[0] if len(argv) > 0 else ""
     num = argv[1] if len(argv) > 1 else ""
     base = argv[2] if len(argv) > 2 and argv[2] else "HEAD~1"
+    plan = argv[3] if len(argv) > 3 and argv[3] else base  # where the plan is read: a kept start's repaired plan
     if not feature or not num:
         err(USAGE + "\n")
         return 2
@@ -239,8 +240,8 @@ def run(argv, out, err, environ=None, cwd=None):
         return 2
 
     g = _Guard(err, cwd)
-    if g.git("cat-file", "-e", "%s:./%s" % (base, ticket), quiet=True)[0] == 0:
-        source = _strip_newlines(g.git("show", "%s:./%s" % (base, ticket), quiet=True)[1])
+    if g.git("cat-file", "-e", "%s:./%s" % (plan, ticket), quiet=True)[0] == 0:
+        source = _strip_newlines(g.git("show", "%s:./%s" % (plan, ticket), quiet=True)[1])
     else:
         try:
             with open(_under(cwd, ticket), encoding="utf-8", errors="surrogateescape") as f:
@@ -250,8 +251,8 @@ def run(argv, out, err, environ=None, cwd=None):
             return 1
     allow = allow_line(source)
     c_path = "%s/%s/commands.md" % (root, feature)
-    plan_text = _strip_newlines(g.git("show", "%s:./%s" % (base, c_path), quiet=True)[1]) \
-        if g.git("cat-file", "-e", "%s:./%s" % (base, c_path), quiet=True)[0] == 0 else ""
+    plan_text = _strip_newlines(g.git("show", "%s:./%s" % (plan, c_path), quiet=True)[1]) \
+        if g.git("cat-file", "-e", "%s:./%s" % (plan, c_path), quiet=True)[0] == 0 else ""
     plan_cats, _, plan_problem = plan_allow(plan_text)
     if plan_problem:
         out("floor guard: %s\n" % plan_problem)
@@ -298,20 +299,20 @@ def run(argv, out, err, environ=None, cwd=None):
     def add_finding(cat, path, text):
         added.append("%s: %s: %s" % (cat, path, text))
 
-    for st, path in _name_status(g.git("diff", "--name-status", "--no-renames", base, "HEAD", "--", root)[1]):
+    for st, path in _name_status(g.git("diff", "--name-status", "--no-renames", plan, "HEAD", "--", root)[1]):
         if path == t_rel:
             if allows("ticket-edit"):
                 continue
             if st != "M":
                 add_finding("ticket-edit", path, "the ticket was added or deleted")
-            elif frozen(show(base, path)) != frozen(show("HEAD", path)):
+            elif frozen(show(plan, path)) != frozen(show("HEAD", path)):
                 add_finding("ticket-edit", path, "text outside the Status line and the Answer was changed")
         elif path in (m_rel, l_rel, d_rel):
             if allows("ticket-edit"):
                 continue
             if st == "D":
                 add_finding("ticket-edit", path, "the file was deleted")
-            elif st == "M" and count_removed_real_lines(_file_diff(g, base, path)) > 0:
+            elif st == "M" and count_removed_real_lines(_file_diff(g, plan, path)) > 0:
                 add_finding("ticket-edit", path, "existing lines were removed or rewritten (append only)")
         elif path == c_rel:
             if not allows("commands-edit"):

@@ -171,15 +171,13 @@ def check_replan(c, key="replan_sha"):
 
 def after_repair(c):
     """After `replan-prompt repair`: once the repaired plan is committed, the ticket that stopped is started again
-    from it (its base moves to HEAD, so its new Touches and Done when count) and handed out. None: nothing to do."""
+    from it and handed out. Its text and commands.md are read at the repaired plan (plan_sha), so its new Touches and
+    Done when count, while its work still counts from where it started: its failing test and its code commits stay in
+    the checks and the review. None: nothing to do."""
     sha, num = c.all.get("repair_sha"), c.all.get("repair_num")
     if not sha or git.head() == sha:
         return None
-    if num and c.get("num") == num and c.all.get("phase") in ("build", "ask"):
-        code = git.diff_names(c.get("base"), git.head(), c.plan.as_posix())
-        if code:
-            raise Stop("%s has code commits (%s), which no review would see once its base "
-                       "moves. run reset %s, then next" % (c.ticket_name(), ", ".join(code[:5]), num))
+    started = c.get("base") if num and c.get("num") == num and c.all.get("phase") in ("build", "ask") else ""
     check_replan(c, "repair_sha")
     c.all["repair_num"] = ""
     c.log("REPAIR")
@@ -190,6 +188,11 @@ def after_repair(c):
     tickets.set_open(c.ticket())
     git.commit_file(c.ticket(), "chore(%s): %s open again after the plan repair" % (c.feature, num))
     c.scheduler().start_ticket(c.ticket())
+    if started and started != c.get("base") and git.is_ancestor(started, "HEAD"):
+        c.st["plan_sha"] = c.get("base")
+        c.st["base"] = started
+        c.st["level"] = c.base_level()
+        c.log("REPAIR-KEPT-START %s" % started[:12])
     return Build.hand_out(c)
 
 

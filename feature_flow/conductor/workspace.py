@@ -289,7 +289,7 @@ class Workspace:
 
     def flow_edit_allowed(self):
         try:
-            source = git._git("show", "%s:%s" % (self.get("base"), Path(self.ticket()).as_posix()), check=False,
+            source = git._git("show", "%s:%s" % (self.plan_rev(), Path(self.ticket()).as_posix()), check=False,
                               cwd=self.folder)
         except OSError:
             return False
@@ -308,7 +308,7 @@ class Workspace:
         """commands.md as it was at the base commit, or "" when it was not there."""
         rel = proof.repo_relative(self.commands, cwd=self.folder)
         try:
-            return git.show_text("%s:%s" % (self.get("base"), rel), cwd=self.folder)
+            return git.show_text("%s:%s" % (self.plan_rev(), rel), cwd=self.folder)
         except RuntimeError:
             return ""
 
@@ -345,14 +345,19 @@ class Workspace:
         return ("the conductor judged this ticket small (%d files, %d lines): one review covers the spec and "
                 "quality passes" % (files, lines))
 
+    def plan_rev(self):
+        """The commit the ticket's text and commands.md are read at: the base, or after a plan repair kept an earlier
+        base, the repaired plan's commit (plan_sha)."""
+        return self.get("plan_sha") or self.get("base")
+
     def ticket_at_base(self):
-        """The ticket text as it was at the base commit, so a builder cannot change what is checked."""
+        """The ticket text as it was at the base commit (or plan_sha), so a builder cannot change what is checked."""
         rel = proof.repo_relative(self.ticket(), cwd=self.folder)
-        listed = git._git("ls-tree", "--name-only", self.get("base"), "--", rel, check=False, cwd=self.folder)
+        listed = git._git("ls-tree", "--name-only", self.plan_rev(), "--", rel, check=False, cwd=self.folder)
         if listed.returncode != 0:
             raise Stop("cannot read %s at the base commit: %s" % (rel, listed.stderr.strip()))
         if listed.stdout.strip():
-            return git.show_text("%s:%s" % (self.get("base"), rel), cwd=self.folder)
+            return git.show_text("%s:%s" % (self.plan_rev(), rel), cwd=self.folder)
         text = self.at(self.ticket()).read_text(encoding="utf-8")
         return text.split("\n## Answer", 1)[0]
 

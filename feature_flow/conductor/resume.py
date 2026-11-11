@@ -145,8 +145,19 @@ def resume(c, num=None, chosen=None):
                    % (c.get("num"), num, c.feature))
     sha, why = _start(c, num, current, chosen)
     commits = own_commits(sha, c.plan)
+    repaired = ""
+    if c.all.get("repair_sha"):  # resume restarts the ticket itself: a pending repair would move its start again
+        repaired = git.head() if git.head() != c.all["repair_sha"] else ""
+        c.all["repair_sha"] = c.all["repair_num"] = ""
+        done.append("took over the pending plan repair: the ticket reads the plan as it is now" if repaired else
+                    "dropped the pending plan repair, which committed nothing")
     if current:  # the ticket is in progress: it carries on from its phase, with fresh attempts
+        if repaired:
+            c.st["plan_sha"] = repaired
+        elif sha != current:
+            c.st["plan_sha"] = c.get("plan_sha") or (current if git.is_ancestor(sha, current) else "")
         c.st["base"] = sha
+        c.st["testfirst_seen"] = ""
         c.st["attempt"] = 0
         c.st["check_rounds"] = 0
         c.snapshot_code()

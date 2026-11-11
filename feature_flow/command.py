@@ -5,11 +5,12 @@ python3 scripts/flow.py, with the copy the installer put there.
 """
 
 import os
+import re
 import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, brainstorm_page, cli, install, evaluate, importer, report, status, suggest, uninstall, view
+from feature_flow import __version__, brainstorm_page, cli, git, install, evaluate, importer, report, status, suggest, uninstall, view
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
@@ -37,6 +38,33 @@ eval records a field run in plans/<feature>/eval.json: cost, tokens, what each c
 """
 
 
+def _parts(version):
+    return tuple(int(n) for n in re.findall(r"\d+", version)[:3])
+
+
+def repo_conductor(top):
+    """The version of the conductor a run in top uses (scripts/flow.py loads feature_flow beside scripts/, or from
+    .feature-flow/), or None when the repo has no conductor of its own (a --user install)."""
+    if not (top / "scripts" / "flow.py").is_file():
+        return None
+    for root in (top, top / ".feature-flow"):
+        init = root / "feature_flow" / "__init__.py"
+        if init.is_file():
+            found = re.search(r'__version__\s*=\s*"([^"]+)"', init.read_text(encoding="utf-8", errors="replace"))
+            return found.group(1) if found else None
+    return None
+
+
+def warn_old_conductor(top, write=sys.stderr.write):
+    """Say so when the run in top uses a conductor older than this feature-flow: the run keeps the repo's copy."""
+    theirs = repo_conductor(Path(top))
+    if theirs and _parts(theirs) < _parts(__version__):
+        write("note: this repo's runs use its own conductor, feature-flow %s, older than this feature-flow %s. a "
+              "fix in the newer version does not reach the run until the repo's copy is updated (feature-flow "
+              "install . in a repo that installed it; in feature-flow's own repo, between features, merge main)\n"
+              % (theirs, __version__))
+
+
 COMMANDS = ("install", "uninstall", "status", "view", "reset", "resume", "report", "eval", "import", "brainstorm-page", "--version",
             "--help")
 
@@ -55,6 +83,8 @@ def main(argv=None):
         return install.main(install.source_root(), rest)
     if command == "uninstall":
         return uninstall.main(rest)
+    if command in ("status", "reset", "resume", "report"):
+        warn_old_conductor(git.toplevel() or Path.cwd())
     if command == "status":
         return status.main(rest)
     if command == "view":

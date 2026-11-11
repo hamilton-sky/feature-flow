@@ -153,7 +153,7 @@ out="$(guard f 03 "" 2>&1)"; expect_has "an empty base commit means the default 
 guard f 03 no-such-commit > /dev/null 2>&1; expect_rc "a bad base commit exits with 128 from the revision lookup" 128 $?
 guard f > /dev/null 2>&1; expect_rc "a missing ticket number is a usage error" 2 $?
 guard > /dev/null 2>&1; expect_rc "no arguments is a usage error" 2 $?
-expect_has "the usage line names the Python command" "usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit]" "$(guard 2>&1)"
+expect_has "the usage line names the Python command" "usage: python3 scripts/floor-guard.py <feature> <NN> [base-commit] [plan-commit]" "$(guard 2>&1)"
 FLOW_DIR=elsewhere guard f 03 "$B2" > /dev/null 2>&1; expect_rc "FLOW_DIR moves the plans folder" 2 $?
 FLOW_TICKETS=issues guard f 03 "$B2" > /dev/null 2>&1; expect_rc "FLOW_TICKETS moves the tickets folder" 2 $?
 
@@ -398,7 +398,7 @@ if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] &&
 LEFT="$(find "$BAR/home" -type f)"
 if [ -z "$LEFT" ]; then ok "the user uninstall leaves no files in the home"; else bad "the user uninstall leaves no files in the home" "$LEFT"; fi
 if [ ! -e "$BAR/home/.feature-flow" ]; then ok "and ~/.feature-flow is gone"; else bad "and ~/.feature-flow is gone"; fi
-expect_has "--version prints the version" "feature-flow 0.39.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
+expect_has "--version prints the version" "feature-flow 0.40.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"
