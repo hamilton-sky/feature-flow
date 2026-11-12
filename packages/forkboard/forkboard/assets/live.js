@@ -302,7 +302,7 @@
         save({ picks: picks, approve: { step: name, by: me, at: at },
                ask: { by: me, at: at, figure: null, version: null, step: name, approve: true, text: 'Approved ' + name + (said.length ? ': ' + said.join('; ') : '') } },
              function () {
-               mine.forEach(function (x) { delete pending[x.key]; x.set.classList.remove('changed'); }); stashChoices();
+               mine.forEach(function (x, i) { if (JSON.stringify(pending[x.key]) === JSON.stringify(picks[i].entry.value)) { delete pending[x.key]; x.set.classList.remove('changed'); } }); stashChoices();
                toast('Approved ' + name + '. Claude takes it from here when its session picks it up.');
              });
       });

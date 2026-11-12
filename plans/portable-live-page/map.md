@@ -52,3 +52,5 @@ Before restart, the independent tester must update acceptance against the newly 
 02 — Successful request acknowledgements clear only the exact submitted draft; eight delayed-response browser regressions preserve newer Talk, diagram, option and ticket drafts on local/native hosts.
 
 02 — Preserve stale-source edits separately on explicit recovery, then resume queued saves without rebasing the old graph.
+
+02 — Approval acknowledgements clear only staged choices matching their submitted snapshot, retaining newer edits.

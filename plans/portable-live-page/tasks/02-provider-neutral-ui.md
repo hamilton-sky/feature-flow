@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -235,6 +235,20 @@ SPEC
 - disclosure: a filtering mistake exposed one author Answer bullet about trusted document metadata. No verdict had been formed before exposure.
 
 REVIEW: PASS
+
+### Approval acknowledgement repair (2026-11-12)
+
+**Built**: Updated `assets/live.js` to clear a staged choice only when it still equals the submitted approval snapshot. Added a delayed native approval browser regression in `page.test.js`.
+
+**Proof**: Starting HEAD was `23ec94dce2ec9fe7e0584d6b530b9a806f3f8c9f`. Test-only commit `f901d90` failed the focused browser regression because the newer staged list disappeared; after the fix it passed, including reload. The test's reload wait was corrected to wait for a hidden toolbar to be attached. Fresh `python3 -m unittest discover -s packages/forkboard/tests -v` passed 62 tests, `OK`, exit 0. Fresh `npm --prefix packages/forkboard/tests/browser test` with the supplied PATH and TAP environment passed 21 tests, `# fail 0`, exit 0. That browser run also passed dirty-edit, polling, conflict, disconnection and explicit-proposal cases. Frozen Python 3.9 syntax Lint passed. Full frozen Test is left to the conductor's gate.
+
+**Decisions**: Compare each current staged value with the submitted snapshot, including list values, so acknowledgement retains intervening edits while clearing unchanged submissions.
+
+**Shortcuts taken**: none.
+
+**Review fixes**: Round-5 blocker reproduced with delayed approval; the regression verifies that the submitted list was saved while the later list remains staged after acknowledgement and reload. Prior findings and their proofs remain documented above. No self-review performed.
+
+**For later tickets**: Approval completion preserves newer staged values; approved state still controls when those choices can be edited or applied.
 
 ## Review findings (round 5, pair review)
 

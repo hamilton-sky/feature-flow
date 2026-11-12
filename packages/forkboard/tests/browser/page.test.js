@@ -535,7 +535,8 @@ test('delayed approval preserves newer staged list choices', async () => {
       return JSON.parse(sessionStorage.getItem(key) || '{}').lens?.includes('artistic');
     }, null, {timeout: 2000});
     await page.reload();
-    await page.waitForSelector('.live-bar');
+    await page.waitForSelector('.live-bar', {state: 'attached'});
+    await page.waitForFunction(() => document.querySelector('fieldset.choice[data-key=lens] input[value=artistic]').checked);
     assert.equal(await lens.locator('input[value=artistic]').isChecked(), true);
     assert.equal(await lens.locator('input[value=security]').isChecked(), false);
     assert.deepEqual(errors, []);
