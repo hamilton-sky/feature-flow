@@ -43,7 +43,11 @@ def state(doc, old=None):
     return dict(old, **{"feature": doc.get("id") or "review", "round": int(old.get("round") or 0) + 1, "figures": figures,
             "asks": old.get("asks") if isinstance(old.get("asks"), list) else [],
             "picks": old.get("picks") if isinstance(old.get("picks"), dict) else {},
-            "approved": approved(old)})
+            "approved": approved(old),
+            "_document": {"steps": doc.get("steps") or [],
+                          "choices": {str(c["key"]): dict(c, step=section.get("step"))
+                                      for section in doc.get("sections") or [] for c in section.get("choices") or []},
+                          "frozen": bool(doc.get("frozen") or doc.get("phase") in ("accepted", "build", "complete", "completed"))}})
 
 
 def approved(st):

@@ -1,7 +1,7 @@
 """forkboard: make a review page from a review document, and read back what people did on it.
 
 usage: forkboard render DOC [--theme NAME] [--fragment] [--out FILE]
-       forkboard live DOC DIR [--theme NAME]
+       forkboard live DOC DIR [--theme NAME] [--provider claude|local] [--agent-label TEXT]
        forkboard serve DIR [--port N]
        forkboard answer-graph STATE <ask number> <graph JSON file>
        forkboard asks STATE
@@ -53,7 +53,7 @@ def read_state(arg, err):
 def main(argv, out=None, err=None):
     out = out or sys.stdout
     err = err or sys.stderr
-    flags = {"--theme": None, "--out": None, "--port": None}
+    flags = {"--theme": None, "--out": None, "--port": None, "--provider": None, "--agent-label": None}
     fragment, args, i = False, [], 0
     while i < len(argv):
         a = argv[i]
@@ -105,7 +105,8 @@ def main(argv, out=None, err=None):
             folder.mkdir(parents=True, exist_ok=True)
             try:
                 st = storage.transaction(folder / "state.json", lambda old: live.state(doc, old), create=True,
-                                         page=page.render(doc, css, name, True, True))
+                                         page=page.render(doc, css, name, flags["--provider"] != "local", True,
+                                                          provider=flags["--provider"] or "claude", agent_label=flags["--agent-label"]))
             except (OSError, ValueError) as e:
                 err.write("cannot generate live page: %s\n" % e)
                 return 1

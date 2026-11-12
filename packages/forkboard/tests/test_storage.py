@@ -244,3 +244,22 @@ class Approvals(unittest.TestCase):
         st = storage.read(self.path)
         st = storage.change(self.path, {'id': 'about', 'change': {'ask': {'text': 'Why?', 'about': '02 CSV writer'}}}, storage.revision(st))
         self.assertEqual(st['asks'][0]['about'], '02 CSV writer')
+
+
+    def test_unknown_choices_and_malformed_compounds_fail_atomically(self):
+        st = self.stepped()
+        for change in (
+                {'pick': {'key': 'unknown', 'entry': {'value': 'anything'}}},
+                dict(self.approval(), ask=None),
+                dict(self.approval(), ask={'step': 'Team', 'approve': True, 'text': ''}),
+                dict(self.approval(), picks=[{'key': [], 'entry': {'value': []}}]),
+                {'unapprove': ['Style', 'Team', 'Options'], 'ask': 'bad'}):
+            before = self.path.read_bytes()
+            with self.assertRaises(ValueError):
+                storage.change(self.path, {'id': 'malformed', 'change': change}, storage.revision(st))
+            self.assertEqual(self.path.read_bytes(), before)
+        st = storage.transaction(self.path, lambda old: live.state(self.doc, old))
+        before = self.path.read_bytes()
+        with self.assertRaises(ValueError):
+            storage.change(self.path, {'id': 'unknown', 'change': {'pick': {'key': 'unknown', 'entry': {'value': 'anything'}}}}, storage.revision(st))
+        self.assertEqual(self.path.read_bytes(), before)

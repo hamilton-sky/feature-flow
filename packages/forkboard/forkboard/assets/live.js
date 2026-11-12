@@ -1,13 +1,13 @@
 
 (function () {
   var wrap = document.querySelector('.wrap');
-  if (!wrap || !wrap.dataset.live || !window.claude || !window.claude.use) return;
+  if (!wrap || !wrap.dataset.live) return;
   var STASH = 'brainstorm-live:' + wrap.dataset.page;
   var main = document.querySelector('main'), panel = document.createElement('section');
   panel.className = 'live-panel'; panel.id = 'talk'; panel.hidden = true;
   main.insertBefore(panel, main.children[1] || null);
   function toast(text) {
-    var t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = text;
+    var t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = agentText(text);
     document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2400);
   }
   function make(tag, attrs, text) {
@@ -16,52 +16,86 @@
     if (text !== undefined) e.textContent = text;
     return e;
   }
-  function hash(text) {
-    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (b) {
-      return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
-    });
-  }
-  var use = function (name) { return window.claude.use(name).catch(function () { return null; }); };
-  Promise.all([fetch('state.json', { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : null; }).catch(function () { return null; }),
-               use('artifact'), use('user'), use('sample')]).then(function (got) {
-    if (!got[0] || !got[1]) return;
-    var text = got[0], artifact = got[1], user = got[2], sample = got[3], st;
-    try { st = JSON.parse(text); } catch (e) { return; }
-    st.figures = st.figures || {}; st.asks = st.asks || [];
-    hash(text).then(function (sha) { (user ? user.id() : Promise.resolve(null)).then(function (me) { start(st, sha, artifact, user, sample, me); }); });
-  });
-
-  function start(st, sha, artifact, user, sample, me) {
-    var writable = !!me, figs = [];
-    function names(ids) {
-      return user ? user.profiles(ids).then(function (ps) { var o = {}; ids.forEach(function (id) { o[id] = id === me ? 'You' : (ps[id] && ps[id].name) || 'Someone'; }); return o; })
-                  : Promise.resolve(ids.reduce(function (o, id) { o[id] = id === me ? 'You' : 'Someone'; return o; }, {}));
-    }
-    function save(change, done) {  // change the state and publish it; a clash with someone else's save reloads and tries once more
-      try {  // kept across the reload a clash causes; a private window may refuse it, and then a clash loses the change
-        var pending = JSON.parse(sessionStorage.getItem(STASH) || '[]'); pending.push(change);
-        sessionStorage.setItem(STASH, JSON.stringify(pending));
-      } catch (e) {}
-      var next = JSON.parse(JSON.stringify(st));  // the page's state changes only once the save lands
-      merge(next, change);
-      var body = JSON.stringify(next, null, 1) + '\n';
-      artifact.publish({ 'state.json': { content: body, contentType: 'application/json', ifMatch: sha } }).then(function (res) {
-        try { sessionStorage.removeItem(STASH); } catch (e) {}
-        merge(st, change);
-        sha = res && res.shas && res.shas['state.json'];
-        if (!sha) hash(body).then(function (h) { sha = h; });
-        render().then(function () { if (done) done(); });
-      }, function (e) {
-        var code = e && e.code;
-        if (code === 'conflict') {  // this view still holds the old state.json: load the new one, then the stash saves the change again
-          toast('Someone saved at the same moment. Reloading, then your change is saved again.');
-          setTimeout(function () { location.reload(); }, 1200);
-          return;
-        }
-        try { sessionStorage.removeItem(STASH); } catch (x) {}
-        if (code === 'not_writer' || code === 'not_granted' || code === 'capability_disabled' || code === 'consent_required') { writable = false; toast('This view is read only: ask the owner for edit access to save.'); render(); }
-        else toast('Could not save (' + (code || 'error') + '). Try again in a moment.');
+  var label = wrap.dataset.agentLabel || 'Claude';
+  function agentText(text) { return String(text).replace(/Claude/g, function () { return label; }); }
+  var boot = make('div', {class: 'live-connection', role: 'status', 'aria-live': 'polite'}, 'Connecting…');
+  main.insertBefore(boot, panel);
+  var bootTimer, bootStopped = false, bootDelay = 2000;
+  window.addEventListener('pagehide', function () { bootStopped = true; clearTimeout(bootTimer); });
+  window.ForkboardProviders(wrap).then(function (provider) {
+    if (!provider) { boot.textContent = 'Live storage unavailable • Read only'; return; }
+    function connect() {
+      provider.readState().then(function (got) {
+        return provider.identity(got.state).then(function (me) { boot.remove(); start(got.state, got.revision, provider, me); });
+      }).catch(function () {
+        boot.textContent = 'Connection lost • Retrying; pending work is kept';
+        if (!bootStopped) bootTimer = setTimeout(connect, bootDelay);
+        bootDelay = Math.min(bootDelay * 2, 30000);
       });
+    }
+    connect();
+  }).catch(function () { boot.textContent = 'Live storage unavailable • Read only'; });
+
+  function start(st, sha, provider, me) {
+    var writable = !!me, figs = [], saving = false, queue = [], stopped = false, timer, delay = 2000, pageRevision, epoch = 0;
+    var connection = make('div', {class: 'live-connection', role: 'status', 'aria-live': 'polite'});
+    var status = make('span', {}, label + (writable ? ' • Connected' : ' • Read only'));
+    var retry = make('button', {type: 'button'}, 'Retry save'); retry.hidden = true;
+    var update = make('button', {type: 'button'}, 'Review update'); update.hidden = true;
+    connection.appendChild(status); connection.appendChild(retry); connection.appendChild(update);
+    main.insertBefore(connection, panel);
+    var updatePage = null;
+    update.addEventListener('click', function () {
+      if (!updatePage) return;
+      var previous = connection.querySelector('.update-preview'); if (previous) previous.remove();
+      var before = make('details', {class: 'update-preview'}), title = make('summary', {}, 'New page available; your edits stay here');
+      var frame = make('iframe', {title: 'Updated review page', sandbox: 'allow-scripts'});
+      frame.srcdoc = updatePage;
+      before.appendChild(title); before.appendChild(frame); connection.appendChild(before); before.open = true;
+      update.hidden = true;
+    });
+    function names(ids) {
+      return provider.profiles(ids).then(function (ps) { var o = {}; ids.forEach(function (id) { o[id] = id === me ? 'You' : (ps[id] && ps[id].name) || 'Someone'; }); return o; });
+    }
+    function remember() {
+      try { sessionStorage.setItem(STASH, JSON.stringify(queue.map(function (x) { return x.envelope; }))); } catch (e) { toast('Browser storage unavailable. Keep this page open to retain pending work.'); }
+    }
+    function accept(got) {
+      st = got.state; sha = got.revision; epoch++;
+      figs.forEach(function (x) { if (st.figures[x.key]) { x.f = st.figures[x.key]; x.refresh(x.f); } });
+    }
+    function sourceMatches(change) {
+      var payload = change.version || (change.ask && change.ask.figure ? change.ask : null);
+      return !payload || !payload.source || (st.figures[payload.figure] && st.figures[payload.figure].source === payload.source);
+    }
+    function flush() {
+      if (saving || !queue.length || !writable) return;
+      saving = true; retry.hidden = true;
+      var item = queue[0];
+      function send(replayed) {
+        if (!sourceMatches(item.envelope.change)) return Promise.reject({code: 'stale_source', message: 'Figure source changed. Keep your edits; review the update before saving.'});
+        return provider.saveChange(item.envelope, sha, st, merge).catch(function (e) {
+          if (e.code !== 'conflict' || replayed) throw e;
+          return provider.readState().then(function (got) { accept(got); return send(true); });
+        });
+      }
+      send(false).then(function (got) {
+        accept(got); queue.shift(); remember(); saving = false;
+        status.textContent = label + ' • Connected';
+        return render().then(function () { if (item.done) item.done(); flush(); });
+      }).catch(function (e) {
+        saving = false; retry.hidden = false;
+        var code = e && e.code;
+        if (['not_writer', 'not_granted', 'capability_disabled', 'consent_required'].indexOf(code) >= 0) {
+          writable = false; status.textContent = label + ' • Read only'; render();
+        } else status.textContent = 'Pending changes kept • ' + (e.message || (code === 'conflict' ? 'Save conflicted again. Retry save.' : 'Connection lost. Retry save.'));
+      });
+    }
+    retry.addEventListener('click', flush);
+    function save(change, done) {
+      var payload = change.version || (change.ask && change.ask.figure ? change.ask : null);
+      if (payload && !payload.source && st.figures[payload.figure]) payload.source = st.figures[payload.figure].source;
+      queue.push({envelope: {id: crypto.randomUUID(), change: change}, done: done}); remember(); flush();
     }
     function merge(s, change) {
       if (change.version) {
@@ -74,22 +108,18 @@
       if (change.approve) { s.approved = s.approved || {}; s.approved[change.approve.step] = { by: change.approve.by, at: change.approve.at }; }
       (change.unapprove || []).forEach(function (name) { if (s.approved) delete s.approved[name]; });
     }
-    // a change saved just before a reload (a clash) is saved again now
-    try {
-      var left = JSON.parse(sessionStorage.getItem(STASH) || '[]');
-      sessionStorage.removeItem(STASH);
-      if (left.length && writable) left.forEach(function (c, i) { if (i === left.length - 1) save(c); else merge(st, c); });
-    } catch (e) {}
+    try { queue = JSON.parse(sessionStorage.getItem(STASH) || '[]').map(function (envelope) { return {envelope: envelope}; }); }
+    catch (e) { toast('Could not restore pending work. Keep this page open.'); }
 
     document.querySelectorAll('figure.graph').forEach(function (fig) {
-      var key = fig.dataset.fig, f = st.figures[key], ed = fig.editor;
+      var key = fig.dataset.fig, f = st.figures[key], ed = fig.editor, source = f && f.source;
       if (!f || !ed) return;
       var bar = make('div', { class: 'live-bar' }), pick = make('select', { 'aria-label': 'Version' });
       var cmp = make('input', { type: 'checkbox' }), saveBtn = make('button', { type: 'button', class: 'go' }, 'Save as my version');
-      var askBtn = make('button', { type: 'button' }, 'Ask Claude to change it'), sum = make('span', { class: 'diff-sum' }), said = make('span', { class: 'said' });
+      var askBtn = make('button', { type: 'button' }, 'Ask ' + label + ' to change it'), sum = make('span', { class: 'diff-sum' }), said = make('span', { class: 'said' });
       var cmpLabel = make('label'); cmpLabel.appendChild(cmp); cmpLabel.appendChild(document.createTextNode('Compare with original'));
       bar.appendChild(make('span', {}, 'Version')); bar.appendChild(pick); bar.appendChild(cmpLabel); bar.appendChild(saveBtn);
-      if (sample) bar.appendChild(askBtn);
+      if (provider.local || provider.propose) bar.appendChild(askBtn);
       bar.appendChild(sum); bar.appendChild(said); said.hidden = true;
       fig.insertBefore(bar, fig.querySelector('.scroll'));
       var hint = fig.querySelector('.hint');
@@ -104,18 +134,18 @@
       cmp.addEventListener('change', diff);
       pick.addEventListener('change', function () {
         var v = pick.value === 'original' ? { graph: f.original, pos: null } : f.versions[pick.value];
-        if (v) { ed.load(v.graph, v.pos); via = []; diff(); }
+        if (v) { ed.load(v.graph, v.pos); source = v.source || f.source; via = []; diff(); }
       });
       saveBtn.addEventListener('click', function () {
         if (!writable) return;
         var now = ed.get();
-        save({ version: { figure: key, by: me, entry: { graph: now.graph, pos: now.pos, at: new Date().toISOString(), via: via.length ? via.slice() : ['hand'] } } },
+        save({ version: { figure: key, by: me, source: source, entry: { graph: now.graph, pos: now.pos, at: new Date().toISOString(), via: via.length ? via.slice() : ['hand'] } } },
              function () { toast('Saved as your version'); pick.value = me; });
       });
       askBtn.addEventListener('click', function () {
         var box = bar.querySelector('input[type=text]');
         if (box) { box.focus(); return; }
-        box = make('input', { type: 'text', placeholder: 'What should change? For example: add a cache before the database', 'aria-label': 'Ask Claude to change this diagram' });
+        box = make('input', { type: 'text', placeholder: 'What should change? For example: add a cache before the database', 'aria-label': 'Ask ' + label + ' to change this diagram' });
         var go = make('button', { type: 'button', class: 'go' }, 'Ask');
         bar.insertBefore(box, said); bar.insertBefore(go, said);
         box.focus();
@@ -123,12 +153,18 @@
           var want = box.value.trim(); if (!want) return;
           go.disabled = true; go.textContent = 'Thinking...';
           var now = ed.get().graph;
-          sample.json('You edit one flowchart in a design review. The flowchart as JSON:\n' + JSON.stringify(now) +
+          if (provider.local) {
+            save({ask: {by: me, text: want, kind: 'diagram', figure: key, source: source, graph: now}}, function () {
+              said.hidden = false; said.textContent = 'Waiting for ' + label; box.value = ''; go.disabled = false; go.textContent = 'Ask';
+            });
+            return;
+          }
+          provider.propose('You edit one flowchart in a design review. The flowchart as JSON:\n' + JSON.stringify(now) +
             '\n\nThe change the reviewer wants: ' + want +
             '\n\nReply with only JSON: {"graph": the whole changed flowchart in the same shape, "reply": one or two sentences on what you changed and why}. ' +
             'Keep the ids of boxes you keep; new ids are short letters and digits. shape is one of rect, round, stadium, diamond, hexagon, circle, cylinder. ' +
-            'colour is "" or one of ' + Object.keys(PALETTE).join(', ') + '. style is one of arrow, open, dotted, thick. dir stays "' + now.dir + '".',
-            { modelTier: 'default' }).then(function (out) {
+            'colour is "" or one of ' + Object.keys(PALETTE).join(', ') + '. style is one of arrow, open, dotted, thick. dir stays "' + now.dir + '".'
+            ).then(function (out) {
             var g = out && out.graph;
             if (!g || !Array.isArray(g.nodes) || !Array.isArray(g.edges)) throw { code: 'invalid_json' };
             var ident = function (x) { return String(x).replace(/[^\w-]/g, ''); }, ids = {};
@@ -136,22 +172,24 @@
             var arrows = g.edges.filter(function (e) { return e && ids[ident(e.from)] && ids[ident(e.to)]; }).map(function (e) { return { from: ident(e.from), to: ident(e.to), label: String(e.label || ''), style: { arrow: 1, open: 1, dotted: 1, thick: 1 }[e.style] ? e.style : 'arrow' }; });
             if (!boxes.length) throw { code: 'invalid_json' };
             ed.load({ dir: now.dir, nodes: boxes, edges: arrows }, null, 'claude');
-            said.hidden = false; said.textContent = 'Claude: ' + String(out.reply || 'Done.') + ' Undo takes it back; Save as my version keeps it.';
+            said.hidden = false; said.textContent = label + ': ' + String(out.reply || 'Done.') + ' Undo takes it back; Save as my version keeps it.';
             box.value = '';
           }).catch(function (e) {
             said.hidden = false;
-            said.textContent = e && e.code === 'rate_limited' ? 'Claude is busy: try again in a minute.' : e && e.code === 'not_granted' ? 'Asking Claude is not allowed in this view.' : 'Claude could not change it this time. Try saying it another way.';
+            said.textContent = e && e.code === 'rate_limited' ? label + ' is busy: try again in a minute.' : e && e.code === 'not_granted' ? 'Asking ' + label + ' is not allowed in this view.' : label + ' could not change it this time. Try saying it another way.';
           }).then(function () { go.disabled = false; go.textContent = 'Ask'; });
         }
         go.addEventListener('click', ask);
         box.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ask(); ev.preventDefault(); } ev.stopPropagation(); });
       });
-      figs.push({ key: key, f: f, pick: pick, save: saveBtn });
+      figs.push({ key: key, f: f, pick: pick, save: saveBtn, editor: ed, ask: askBtn, refresh: function (next) { f = next; }, preview: function (graph, fingerprint) { source = fingerprint; ed.load(graph, null, 'claude'); } });
     });
 
     // the document's choices. In a step, a pick waits on the page until the step's Approve saves them all at once,
     // and that save wakes the session; a choice outside any step is saved as it is picked.
     var sets = [], pending = {};
+    try { pending = JSON.parse(sessionStorage.getItem(STASH + ':choices') || '{}'); } catch (e) { toast('Could not restore staged choices.'); }
+    function stashChoices() { try { sessionStorage.setItem(STASH + ':choices', JSON.stringify(pending)); } catch (e) { toast('Keep this page open to retain staged choices.'); } }
     var order = [].slice.call(document.querySelectorAll('[role=tabpanel][data-step]')).map(function (p) { return p.dataset.step; });
     function stepOf(el) { var p = el.closest && el.closest('[role=tabpanel][data-step]'); return p ? p : null; }
     document.querySelectorAll('fieldset.choice').forEach(function (set) {
@@ -168,13 +206,13 @@
         else buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.value === v)); });
       }
       function limit() {
-        var can = writable && open && !(panel && st.approved && st.approved[panel.dataset.step]);
+        var can = writable && !(st._document && st._document.frozen) && open && !(panel && st.approved && st.approved[panel.dataset.step]);
         var n = boxes.filter(function (b) { return b.checked; }).length;
         boxes.forEach(function (b) { b.disabled = !can || (top !== null && !b.checked && n >= top); });
         buttons.forEach(function (b) { b.disabled = !can; });
       }
       function pick(v, label) {
-        if (panel) { pending[key] = v; set.classList.add('changed'); return; }
+        if (panel) { pending[key] = v; stashChoices(); set.classList.add('changed'); return; }
         save({ pick: { key: key, entry: { by: me, at: new Date().toISOString(), value: v } } },
              function () { toast('Saved: ' + label + '. Claude reads it when its session picks it up.'); });
       }
@@ -193,8 +231,8 @@
     });
     // "Ask Claude about this": on each option, and on a section that names its subjects (a plan's tickets)
     var askers = [];
-    function asker(where, subjects, label) {
-      var row = make('div', { class: 'ask-row' }), open = make('button', { type: 'button', class: 'ask-open' }, label);
+    function asker(where, subjects, title) {
+      var row = make('div', { class: 'ask-row' }), open = make('button', { type: 'button', class: 'ask-open' }, title);
       row.appendChild(open); where.appendChild(row);
       open.addEventListener('click', function () {
         if (row.querySelector('textarea')) { row.querySelector('textarea').focus(); return; }
@@ -205,7 +243,7 @@
           row.appendChild(pick);
         }
         var area = make('textarea', { 'aria-label': 'Your question', placeholder: 'For example: why this order? What would you cut?' });
-        var go = make('button', { type: 'button', class: 'go' }, 'Send to Claude');
+        var go = make('button', { type: 'button', class: 'go' }, 'Send to ' + label);
         row.appendChild(area); row.appendChild(go); area.focus();
         go.addEventListener('click', function () {
           var text = area.value.trim(); if (!text) { area.focus(); return; }
@@ -216,11 +254,11 @@
       });
       askers.push(open);
     }
-    document.querySelectorAll('article.opt[data-about]').forEach(function (a) { asker(a, [a.dataset.about], 'Ask Claude about this option'); });
+    document.querySelectorAll('article.opt[data-about]').forEach(function (a) { asker(a, [a.dataset.about], 'Ask ' + label + ' about this option'); });
     document.querySelectorAll('.ask-about').forEach(function (box) {
       var subjects = []; try { subjects = JSON.parse(box.querySelector('script').textContent); } catch (e) {}
       if (!subjects.length) return;
-      box.hidden = false; asker(box, subjects, 'Ask Claude about a ticket');
+      box.hidden = false; asker(box, subjects, 'Ask ' + label + ' about a ticket');
     });
 
     var approves = [].slice.call(document.querySelectorAll('button.approve[data-approve]'));
@@ -235,7 +273,7 @@
         save({ picks: picks, approve: { step: name, by: me, at: at },
                ask: { by: me, at: at, figure: null, version: null, step: name, approve: true, text: 'Approved ' + name + (said.length ? ': ' + said.join('; ') : '') } },
              function () {
-               mine.forEach(function (x) { delete pending[x.key]; x.set.classList.remove('changed'); });
+               mine.forEach(function (x) { delete pending[x.key]; x.set.classList.remove('changed'); }); stashChoices();
                toast('Approved ' + name + '. Claude takes it from here when its session picks it up.');
              });
       });
@@ -258,19 +296,19 @@
         if (x.key in pending) x.show(pending[x.key]); else if (p) x.show(p.value);
         x.limit();
       });
-      changes.forEach(function (btn) { btn.hidden = !writable; });
+      changes.forEach(function (btn) { btn.hidden = !writable || !!(st._document && st._document.frozen); });
       askers.forEach(function (btn) { btn.hidden = !writable; });
       approves.forEach(function (btn) {
         var done = st.approved && st.approved[btn.dataset.approve], hint = btn.parentNode.querySelector('.approve-hint');
         btn.hidden = !writable;
-        btn.disabled = !writable || !!done;
+        btn.disabled = !writable || !!done || !!(st._document && st._document.frozen);
         btn.textContent = done ? 'Approved' : 'Approve ' + btn.dataset.approve;
         if (hint) hint.textContent = !writable ? 'Reply ok in the chat to take these, or say what to change.'
-          : done ? 'Waiting for Claude: it writes these into its files and opens the next step.'
-          : 'Pick here, then Approve: that saves your picks and wakes Claude. Nothing is saved before you approve.';
+          : done ? 'Waiting for ' + label + ': it writes these into its files and opens the next step.'
+          : 'Pick here, then Approve: that saves your picks and queues a request for ' + label + '.';
       });
       document.querySelectorAll('.choice-hint').forEach(function (h) {
-        h.textContent = writable ? 'What you pick here is saved to this page, and Claude reads it. You can also answer in the chat.' : 'Reply ok in the chat to take these, or say what to change.';
+        h.textContent = writable ? 'What you pick here is saved to this page, and ' + label + ' reads it. You can also answer in the chat.' : 'Reply ok in the chat to take these, or say what to change.';
       });
       var ids = [];
       figs.forEach(function (x) { Object.keys(x.f.versions || {}).forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); }); });
@@ -283,29 +321,41 @@
           x.pick.appendChild(make('option', { value: 'original' }, 'Original'));
           Object.keys(x.f.versions || {}).forEach(function (id) {
             var v = x.f.versions[id];
-            x.pick.appendChild(make('option', { value: id }, (who[id] || 'Someone') + (id === me ? 'r version' : "'s version") + ((v.via || []).indexOf('claude') >= 0 ? ' (with Claude)' : '')));
+            x.pick.appendChild(make('option', { value: id }, (who[id] || 'Someone') + (id === me ? 'r version' : "'s version") + ((v.via || []).indexOf('claude') >= 0 ? ' (with ' + label + ')' : '')));
           });
           x.pick.value = was && (was === 'original' || x.f.versions[was]) ? was : 'original';
-          x.save.disabled = !writable;
+          x.save.disabled = !writable; x.ask.disabled = !writable;
           x.save.title = writable ? '' : 'Ask the owner for edit access to save';
         });
-        while (panel.firstChild) panel.removeChild(panel.firstChild);
+        var oldForm = panel.querySelector('form');
+        [].slice.call(panel.children).forEach(function (child) { if (child !== oldForm) child.remove(); });
         panel.hidden = false;
-        panel.appendChild(make('h2', {}, 'Talk to Claude'));
-        panel.appendChild(make('p', { class: 'who' }, 'Questions and change requests for the Claude session that made this page. It answers here and may update the diagrams; your saved versions stay.'));
+        panel.insertBefore(make('h2', {}, 'Talk to ' + label), oldForm);
+        panel.insertBefore(make('p', { class: 'who' }, 'Questions and change requests for ' + label + '. It answers here and may update the diagrams; your saved versions stay.'), oldForm);
         var list = make('ol');
         st.asks.forEach(function (a) {
           var li = make('li', { class: a.answer ? 'answered' : '' });
           var fig = a.figure && st.figures[a.figure];
           li.appendChild(make('span', { class: 'who' }, (who[a.by] || 'Someone') + (fig ? ' on "' + (fig.title || 'figure ' + a.figure) + '"' : '') + (a.about ? ' about "' + a.about + '"' : '') + (a.version ? ', with ' + (a.version === me ? 'your' : 'their') + ' version' : '')));
           li.appendChild(make('span', {}, a.text));
-          li.appendChild(a.answer ? make('span', { class: 'reply' }, 'Claude: ' + a.answer) : make('span', { class: 'who' }, 'Waiting for Claude'));
+          li.appendChild(a.answer ? make('span', { class: 'reply' }, label + ': ' + a.answer) : make('span', { class: 'who' }, 'Waiting for ' + label));
+          if (a.result && fig) {
+            var preview = make('button', {type: 'button'}, 'Preview proposal');
+            preview.addEventListener('click', function () {
+              var target = figs.filter(function (x) { return x.key === String(a.figure); })[0];
+              if (!target || target.f.source !== a.source) { toast('Figure source changed. This proposal belongs to an older source.'); return; }
+              target.preview(a.result, a.source);
+              toast('Preview only. Save as my version keeps this proposal.');
+            });
+            li.appendChild(preview);
+          }
           list.appendChild(li);
         });
-        if (st.asks.length) panel.appendChild(list);
-        if (!writable) { panel.appendChild(make('p', { class: 'live-note' }, 'You can read this page. To save versions or ask Claude, the owner needs to give you edit access.')); return; }
+        if (st.asks.length) panel.insertBefore(list, oldForm);
+        if (!writable) { if (oldForm) oldForm.remove(); panel.appendChild(make('p', { class: 'live-note' }, 'You can read this page. To save versions or ask ' + label + ', the owner needs to give you edit access.')); return; }
+        if (oldForm) { return; }
         var form = make('form'), area = make('textarea', { 'aria-label': 'Your question or request', placeholder: 'For example: B looks too big for a first version. What would you cut?' });
-        var row = make('div', { class: 'row' }), about = make('select', { 'aria-label': 'About' }), send = make('button', { type: 'submit', class: 'go' }, 'Send to Claude');
+        var row = make('div', { class: 'row' }), about = make('select', { 'aria-label': 'About' }), send = make('button', { type: 'submit', class: 'go' }, 'Send to ' + label);
         about.appendChild(make('option', { value: '' }, 'About the whole page'));
         figs.forEach(function (x) { about.appendChild(make('option', { value: x.key }, 'About: ' + (x.f.title || 'figure ' + x.key) + (x.f.versions[me] ? ' (with my version)' : ''))); });
         row.appendChild(about); row.appendChild(send);
@@ -316,10 +366,32 @@
           var key = about.value, fig = key && st.figures[key];
           send.disabled = true;
           save({ ask: { by: me, at: new Date().toISOString(), figure: key || null, version: fig && fig.versions[me] ? me : null, text: text } },
-               function () { toast('Sent. Claude answers here when its session picks it up.'); });
+               function () { area.value = ''; send.disabled = false; toast('Sent. Claude answers here when its session picks it up.'); });
         });
       });
     }
-    render();
+    render().then(flush);
+    function poll() {
+      if (stopped) return;
+      var observed = epoch;
+      (provider.metadata ? provider.metadata() : Promise.resolve(null)).then(function (meta) {
+        if (meta && pageRevision && meta.revision !== pageRevision) {
+          update.hidden = false;
+          status.textContent = label + ' • New page available; your edits are kept';
+          fetch('./', {cache: 'no-store'}).then(function (r) { return r.text(); }).then(function (text) { updatePage = text; }).catch(function () { status.textContent = 'Could not fetch the update; your edits are kept.'; });
+        }
+        if (meta) pageRevision = meta.revision;
+        if (saving) return null;
+        return provider.readState();
+      }).then(function (got) {
+        delay = 2000;
+        if (got && !saving && observed === epoch) { accept(got); render(); }
+        if (update.hidden && !queue.length) status.textContent = label + (writable ? ' • Connected' : ' • Read only');
+      }).catch(function () {
+        status.textContent = 'Connection lost • Retrying; your edits are kept'; delay = Math.min(delay * 2, 30000);
+      }).then(function () { if (!stopped) timer = setTimeout(poll, delay); });
+    }
+    window.addEventListener('pagehide', function () { stopped = true; clearTimeout(timer); });
+    if (provider.local) poll(); else timer = setTimeout(poll, 2000);
   }
 })();

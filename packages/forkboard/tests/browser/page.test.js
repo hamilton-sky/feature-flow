@@ -303,3 +303,124 @@ test('local staged list choices approve atomically and survive polling', async (
     await context.close();
   } finally { local.stop(); }
 });
+
+test('native capability denial becomes accessible read only and native generation remains a deliberate save', async () => {
+  function denied() {
+    window.claude = {use: async name => name === 'artifact' ? {publish: async () => {throw {code: 'not_granted'};}} : name === 'user' ? {id: async () => 'me', profiles: async () => ({})} : null};
+  }
+  let opened = await open(base, {init: denied});
+  await opened.page.locator('.live-bar button.go').first().click();
+  await opened.page.waitForFunction(() => document.querySelector('.live-connection').textContent.includes('Read only'));
+  assert.ok(await opened.page.locator('.live-bar button.go').first().isDisabled());
+  assert.ok(await opened.page.locator('#talk .live-note').isVisible());
+  assert.deepEqual(opened.errors, []);
+  await opened.context.close();
+  function nativeSample() {
+    window.__publications = [];
+    window.__prompt = null;
+    window.claude = {use: async name => ({
+      artifact: {publish: async files => { window.__publications.push(JSON.parse(files['state.json'].content)); return {shas: {'state.json': 'saved'}}; }},
+      user: {id: async () => 'me', profiles: async () => ({})},
+      sample: {json: async (prompt, options) => {window.__prompt = [prompt, options]; return {graph: {dir: 'TD', nodes: [{id: 'new', label: 'Native proposal', shape: 'bogus'}], edges: []}, reply: 'Proposed.'};}}
+    })[name]};
+  }
+  opened = await open(base, {init: nativeSample});
+  const fig = opened.page.locator('figure.graph').first();
+  await fig.getByRole('button', {name: 'Ask Claude to change it', exact: true}).click();
+  await fig.locator('.live-bar input[type=text]').fill('Simplify');
+  await fig.getByRole('button', {name: 'Ask', exact: true}).click();
+  await opened.page.waitForFunction(() => document.querySelector('figure.graph').textContent.includes('Native proposal'));
+  assert.equal(await opened.page.evaluate(() => window.__publications.length), 0);
+  assert.equal(await fig.evaluate(f => f.editor.get().graph.dir), 'LR');
+  assert.equal(await fig.evaluate(f => f.editor.get().graph.nodes[0].shape), 'rect');
+  assert.deepEqual(await opened.page.evaluate(() => window.__prompt[1]), {modelTier: 'default'});
+  await fig.getByRole('button', {name: 'Save as my version', exact: true}).click();
+  await opened.page.waitForFunction(() => window.__publications.length === 1);
+  assert.deepEqual(await opened.page.evaluate(() => window.__publications[0].figures['1'].versions.me.via), ['claude']);
+  assert.deepEqual(opened.errors, []);
+  await opened.context.close();
+});
+
+test('local repeated conflict retains an idempotent queue through reload and serializes retry', async () => {
+  const local = await localServer();
+  try {
+    const {page, context} = await open(local.url);
+    let calls = 0, ids = [];
+    await page.route('**/api/change', async route => {
+      const envelope = route.request().postDataJSON(); ids.push(envelope.id); calls++;
+      if (calls <= 2) await route.fulfill({status: 412, contentType: 'application/json', body: JSON.stringify({error: 'concurrent writer'})});
+      else await route.continue();
+    });
+    await page.locator('#talk textarea').fill('Retain this question');
+    await page.locator('#talk button.go').click();
+    await page.getByRole('button', {name: 'Retry save', exact: true}).waitFor();
+    assert.equal(calls, 2);
+    assert.equal(ids[0], ids[1]);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Retain this question');
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#talk')?.textContent.includes('Retain this question'));
+    const st = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.equal(st.asks.length, 1);
+    assert.equal(st.asks[0].id, ids[0]);
+    assert.ok(ids.every(id => id === ids[0]));
+    await context.close();
+  } finally {local.stop();}
+});
+
+test('local dirty edits, forms and staged picks survive disconnect and unsafe regeneration', async () => {
+  const local = await localServer('steps');
+  try {
+    const {page, context} = await open(local.url);
+    const lens = page.locator('fieldset[data-key=lens]');
+    await page.waitForFunction(() => !document.querySelector('button.approve').disabled);
+    await lens.locator('input[value=security]').check();
+    await page.locator('#talk textarea').fill('Still typing');
+    await page.locator('#tab-3').click();
+    const fig = page.locator('figure.graph').first();
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Unsaved'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    await page.context().setOffline(true);
+    // An aborted fetch reports an expected transport console error; state and form retention are the assertions.
+    await page.waitForFunction(() => document.querySelector('.live-connection').textContent.includes('Connection lost'));
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Still typing');
+    await page.context().setOffline(false);
+    const updated = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'steps.json'))); updated.title = 'Updated review';
+    const docFile = path.join(local.folder, 'updated.json'); fs.writeFileSync(docFile, JSON.stringify(updated));
+    forkboard('live', docFile, local.folder, '--provider', 'local');
+    await page.getByRole('button', {name: 'Review update', exact: true}).waitFor({timeout: 15000});
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Still typing');
+    await page.locator('#tab-2').click();
+    assert.ok(await lens.locator('input[value=security]').isChecked());
+    await page.locator('button.approve').click();
+    await page.waitForFunction(() => document.querySelector('button.approve').textContent === 'Approved');
+    await page.locator('#tab-1').click();
+    await page.locator('button.change[data-change=Style]').click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Change the step Style'));
+    const st = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.deepEqual(st.approved, {});
+    assert.equal(st.asks.length, 2);
+    await context.close();
+  } finally {local.stop();}
+});
+
+test('local figure source change blocks blind conflict replay without discarding the editor', async () => {
+  const local = await localServer();
+  try {
+    const {page, context} = await open(local.url);
+    const fig = page.locator('figure.graph').first();
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Old edit'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    const doc = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'sketch.json')));
+    doc.sections[0].markdown = doc.sections[0].markdown.replace('Tasks table', 'Different source');
+    const docFile = path.join(local.folder, 'changed.json'); fs.writeFileSync(docFile, JSON.stringify(doc));
+    forkboard('live', docFile, local.folder, '--provider', 'local');
+    await fig.getByRole('button', {name: 'Save as my version', exact: true}).click();
+    await page.waitForFunction(() => document.querySelector('.live-connection').textContent.includes('Figure source changed'));
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))).figures['1'].versions).length, 0);
+    assert.ok(await page.getByRole('button', {name: 'Retry save', exact: true}).isVisible());
+    await context.close();
+  } finally {local.stop();}
+});

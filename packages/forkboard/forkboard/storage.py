@@ -201,8 +201,9 @@ def change(path, envelope, expected):
     _fields(envelope, ('id', 'change'), ('id', 'change'))
     ident = _text(envelope['id'], 'operation id', 200)
     operation = envelope['change']
-    if not isinstance(operation, dict) or len(operation) != 1 or not set(operation) <= {'version', 'ask', 'pick'}:
-        raise ValueError('expected exactly one version, ask or pick operation')
+    if not isinstance(operation, dict) or set(operation) not in (
+            {'version'}, {'ask'}, {'pick'}, {'picks', 'approve', 'ask'}, {'unapprove', 'ask'}):
+        raise ValueError('expected version, ask, pick, compound approval or reopen')
     digest = hashlib.sha256(json.dumps(operation, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
     def apply(st):
@@ -215,15 +216,80 @@ def change(path, envelope, expected):
         if expected != current:
             raise Conflict('state changed; reload state.json and retry your pending operation')
         now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        kind, payload = next(iter(operation.items()))
+        document = st.get('_document') or {}
+        steps = document.get('steps') or []
+        choices = document.get('choices') or {}
+        if any(k in operation for k in ('pick', 'picks', 'approve', 'unapprove')) and document.get('frozen'):
+            raise ValueError('accepted settings are frozen; request an approved re-plan')
+        def pick(payload, step=None):
+            _fields(payload, ('key', 'entry'), ('key', 'entry'))
+            key = _text(payload['key'], 'pick key', 200)
+            entry = payload['entry']
+            _fields(entry, ('by', 'at', 'value'), ('value',))
+            _identity(st, entry)
+            value = entry['value']
+            choice = choices.get(key)
+            if choice:
+                if choice.get('step') != step:
+                    raise ValueError('stepped choices require their atomic approval')
+                values = [str(o['value']) for o in choice['options']]
+                if choice.get('kind') == 'some':
+                    if (not isinstance(value, list) or any(not isinstance(v, str) or v not in values for v in value)
+                            or len(set(value)) != len(value) or len(value) > choice.get('max', len(values))):
+                        raise ValueError('invalid list choice')
+                elif value not in values:
+                    raise ValueError('invalid choice value')
+            elif '_document' in st or step:
+                raise ValueError('unknown choice')
+            elif not isinstance(value, (str, bool, int)) or len(str(value)) > 2000:
+                raise ValueError('pick value must be bounded text, boolean or integer')
+            st.setdefault('picks', {})[key] = {'by': st['identity']['id'], 'at': now, 'value': value}
+        if 'ask' in operation and not isinstance(operation['ask'], dict):
+            raise ValueError('ask must be an object')
+        if 'approve' in operation:
+            approval = operation['approve']
+            _fields(approval, ('step', 'by', 'at'), ('step',))
+            _identity(st, approval)
+            step = approval['step']
+            if not any(s['name'] == step and s.get('state') == 'current' for s in steps):
+                raise ValueError('only the current step can be approved')
+            items = operation['picks']
+            expected_keys = {k for k, c in choices.items() if c.get('step') == step}
+            if (not isinstance(items, list) or not expected_keys or len(items) != len(expected_keys)
+                    or any(not isinstance(p, dict) for p in items) or any(not isinstance(p.get('key'), str) for p in items) or {p.get('key') for p in items} != expected_keys):
+                raise ValueError('approval must include every choice in this step exactly once')
+            if operation['ask'].get('step') != step or operation['ask'].get('approve') is not True:
+                raise ValueError('approval requires its step approval ask')
+            for item in items:
+                pick(item, step)
+            st.setdefault('approved', {})[step] = {'by': st['identity']['id'], 'at': now}
+        if 'unapprove' in operation:
+            names = [s['name'] for s in steps]
+            step = operation['ask'].get('step')
+            if (step not in names or operation['unapprove'] != names[names.index(step):]
+                    or not any(s['name'] == step and (s.get('state') == 'done' or step in st.get('approved', {})) for s in steps)
+                    or operation['ask'].get('approve')):
+                raise ValueError('reopen must name the completed step and every following step')
+            for name in operation['unapprove']:
+                st.setdefault('approved', {}).pop(name, None)
+        kind = 'ask' if 'ask' in operation else next(iter(operation))
+        payload = operation[kind]
         if kind == 'ask':
-            _fields(payload, ('by', 'at', 'text', 'figure', 'version', 'step', 'kind', 'source', 'graph'), ('text',))
+            _fields(payload, ('by', 'at', 'text', 'figure', 'version', 'step', 'kind', 'source', 'graph', 'about', 'approve'), ('text',))
             _identity(st, payload)
             ask = {'id': ident, 'by': st['identity']['id'], 'at': now, 'text': _text(payload['text'], 'ask text'),
                    'figure': None, 'version': None, 'kind': payload.get('kind') or ('step' if payload.get('step') else 'question')}
             if ask['kind'] not in ('question', 'diagram', 'step'):
                 raise ValueError('invalid request kind')
+            if 'approve' in payload:
+                if 'approve' not in operation or payload['approve'] is not True:
+                    raise ValueError('approval asks require an atomic approval')
+                ask['approve'] = True
+            if payload.get('about'):
+                ask['about'] = _text(payload['about'], 'about', 2000)
             if payload.get('step'):
+                if not any(s['name'] == payload['step'] for s in steps):
+                    raise ValueError('unknown step')
                 ask['step'] = _text(payload['step'], 'step', 200)
             if payload.get('figure'):
                 number, fig = _figure(st, payload)
@@ -259,14 +325,7 @@ def change(path, envelope, expected):
             fig['versions'][st['identity']['id']] = {'graph': model, 'pos': _position(entry.get('pos') or {}, model),
                                                     'at': now, 'via': via, 'source': fig['source']}
         else:
-            _fields(payload, ('key', 'entry'), ('key', 'entry'))
-            key = _text(payload['key'], 'pick key', 200)
-            entry = payload['entry']
-            _fields(entry, ('by', 'at', 'value'), ('value',))
-            _identity(st, entry)
-            if not isinstance(entry['value'], (str, bool, int)) or len(str(entry['value'])) > 2000:
-                raise ValueError('pick value must be bounded text, boolean or integer')
-            st.setdefault('picks', {})[key] = {'by': st['identity']['id'], 'at': now, 'value': entry['value']}
+            pick(payload)
         operations[ident] = digest
         return st
 

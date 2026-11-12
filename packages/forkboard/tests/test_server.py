@@ -33,7 +33,9 @@ class HTTP(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.folder = Path(self.tmp.name)
         self.path = self.folder / 'state.json'
-        storage.transaction(self.path, lambda old: live.state(helpers.fixture('sketch'), old), create=True)
+        doc = helpers.fixture('sketch')
+        doc['sections'][0]['choices'] = [{'key': 'profile', 'kind': 'one', 'options': [{'value': 'standard'}]}]
+        storage.transaction(self.path, lambda old: live.state(doc, old), create=True)
         (self.folder / 'index.html').write_text('<h1>Review</h1>')
         (self.folder / 'secret.md').write_text('secret')
         self.httpd = server.create(self.folder)
