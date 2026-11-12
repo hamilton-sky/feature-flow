@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -87,3 +87,23 @@ the build changed paths outside the ticket's `Touches:` line (packages/forkboard
 The clean continuation started at `5c25a7f`. No production or test changes were necessary or made. Reproduced the finding with the real `feature_flow.conductor.buildchecks.Footprint.run`, the prescribed base `5d3f28e6d9c6d2095c393e2bd0d3bacf5963d9e3`, current ticket and lane 0: fast mode emitted `FOOTPRINT-FAIL` and the exact reported outside path, `packages/forkboard/tests/test_server.py`. The same check with fast mode disabled emitted `FOOTPRINT-EXTRA` and returned no failure. `EXTRA.findall` already recognizes the existing `Extra file:` line and its complete reason. The checker permits a single declared exception only when both lane and fast mode are disabled.
 
 The fixture change is necessary: the preexisting concurrency test picks `profile=standard`; trusted document validation now requires that choice to be declared. Its assertions remain intact. Reverting that declaration or weakening validation would break the required behavior. The ticket remains open because this run mode rejects its documented exception. The trusted conductor must rerun in standard, single-ticket mode to evaluate the existing exception and run the remaining checks; no ticket footprint, plan, checker, test or configuration was changed. No self-review performed.
+
+
+### Standard-mode continuation (2026-11-12)
+
+**Built**: Started clean at `c93bc00d6c309b6e380f97e114ebf076b5158caf`. Retained the existing provider/UI/backend implementation and test fixture; no production or test changes were needed. This continuation changes only this ticket's Status/Answer and an appended map decision.
+
+**Proof**:
+
+- Done when 1/check: fresh `python3 -m unittest discover -s packages/forkboard/tests -v` completed with `Ran 62 tests in 3.924s`, `OK`, exit 0. Static/native rendering, provider/label CLI compatibility, approval/reopen validation and the actual concurrent HTTP fixture all passed.
+- Done when 2/check: fresh `NODE_OPTIONS=--test-reporter=tap npm --prefix packages/forkboard/tests/browser test` completed with 12 tests, `# pass 12`, `# fail 0`, zero cancelled/skipped/todo, exit 0 (18754.722958ms). NODE_OPTIONS selects the reporter only, as already documented in learnings; the executed test command and configuration remain unchanged.
+- Done when 3: that fresh browser run passed local queue/reply/proposal, repeated conflict/reload/idempotency, disconnect/regeneration/dirty form and staged-choice retention, and stale figure-source cases. The tests assert no automatic proposal save, preserved editor/text through polling and disconnection, stable retry IDs, and zero saved versions after stale-source replay rejection. Native capability denial and native deliberate proposal save also passed.
+- Frozen Python 3.9 syntax Lint: exit 0. Full frozen Test remains left to the conductor's gate. No self-review performed.
+
+**Decisions**: Retain the single necessary declared fixture extension. Fast mode is now off per the trusted conductor; a fresh direct execution of `feature_flow.conductor.buildchecks.Footprint.run` with the prescribed base `5d3f28e6d9c6d2095c393e2bd0d3bacf5963d9e3`, lane 0 and fast false emitted `FOOTPRINT-EXTRA` and returned `(None, '', [exception note])`. No checker, plan, conductor state or test configuration was changed.
+
+**Shortcuts taken**: none in this continuation; the implementation's deliberate separate update preview remains documented above.
+
+**Review fixes**: Round-1 footprint finding: reproduced and verified the existing `Extra file:` declaration under standard single-ticket mode. `test_server.py` changes only its trusted fixture to declare the `profile=standard` choice already used by the concurrency scenario; its stale-write/retry assertions remain intact. The fresh 62-test run passed that scenario. The historical fast-mode Attempt note is superseded by this standard-mode proof; independent review still judges the necessity of the exception.
+
+**For later tickets**: No new contract changes. Ticket 03 should use the existing trusted document/frozen metadata and shared transaction seam described above.
