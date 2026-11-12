@@ -40,3 +40,5 @@ Before restart, the independent tester must update acceptance against the newly 
 01 — Reverified the restored source-fingerprint fixes with 55 Forkboard regressions and the full frozen gate; versions require matching source and legacy versions retain their previous source through regeneration.
 
 01 — Verified the restored backend against the corrected preimplementation base: 55 Forkboard tests pass and the isolated test-only commit fails before production; preserve explicit source fingerprints and the shared transaction seam.
+
+01 — Diagram request graphs require matching source context; selecting a stale saved version fails without mutation instead of receiving the current source.

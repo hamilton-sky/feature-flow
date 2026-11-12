@@ -230,7 +230,12 @@ def change(path, envelope, expected):
                 version = payload.get('version')
                 if version is not None and version != 'original' and version not in fig['versions']:
                     raise ValueError('unknown requested diagram version')
-                model = payload.get('graph') or (fig['versions'].get(version) or {}).get('graph') or fig['original']
+                if 'graph' in payload and (not isinstance(payload.get('source'), str) or not payload['source']):
+                    raise ValueError('diagram snapshot requires a source fingerprint')
+                saved = fig['versions'].get(version) if version != 'original' else None
+                if saved and saved.get('source', fig['source']) != fig['source']:
+                    raise Conflict('requested diagram version source changed; keep your edits and reload')
+                model = payload['graph'] if 'graph' in payload else (saved or {}).get('graph') or fig['original']
                 ask.update(figure=number, version=version, source=fig['source'], graph=graph(model), title=fig.get('title', ''))
             elif ask['kind'] == 'diagram' or 'graph' in payload or 'source' in payload or payload.get('version'):
                 raise ValueError('diagram context requires a figure')

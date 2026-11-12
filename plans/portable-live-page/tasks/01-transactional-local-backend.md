@@ -1,7 +1,7 @@
 # Add transactional local storage and the loopback backend
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 Level: 3
@@ -178,3 +178,24 @@ SPEC
 The mandated base ticket unexpectedly contained an existing Answer, which reached me before any verdict. This verdict uses the diff, conductor check and independently run HTTP checks. Working tree remains clean; no files left behind.
 
 REVIEW: PASS
+
+
+### Diagram-request source repair (2026-11-12)
+
+**Built**: Starting at `755264e7f59c8d91e5daefa155137b36e6bc51e6`, changed `storage.py` to require an explicit matching source whenever an ask submits a graph, and reject requests selecting saved versions from an older source. Added regression coverage in `test_storage.py`, and supplied source context in its existing graph-proposal test.
+
+**Proof**:
+
+- Test-first commit `bd1d504` contains only `test_storage.py`. Fresh focused command `python3 -m unittest discover -s packages/forkboard/tests -p test_storage.py -v` failed before the fix: missing source and both stale saved-version cases accepted writes instead of raising. The changed state also caused the final current-source request's expected revision to fail; this was a consequence of the reproduced unsafe commits.
+- Done when 1/check: fresh `python3 -m unittest discover -s packages/forkboard/tests -v` passed all 56 tests (`OK`, exit 0, 3.932s). Includes rejection of omitted/null/empty/numeric/stale source, rejection of stale saved versions even when a fresh source is supplied, unchanged committed bytes on rejection, and successful current-source graph requests.
+- Done when 2: the same run passed actual CLI startup/restart/busy-port tests, hostile resources and symlink/corrupted-state tests. URL/state location and committed persistence are asserted by the CLI test.
+- Done when 3: the same run passed stale-browser/retry and HTTP-versus-subprocess answer/regeneration races, verifying 412 without mutation and retained answers and source snapshots.
+- Build `python3 -m build --outdir dist` with the supplied build venv: exit 0, wheel and sdist successfully built. Frozen Python 3.9 syntax Lint: exit 0. `git diff --check`: exit 0. Full Test remains left to the conductor's gate.
+
+**Decisions**: Reject stale saved-version requests rather than relabel their graphs; users must reload and choose current context. Figure-only questions still snapshot the backend's current original without requiring a client-supplied graph or fingerprint. Explicit graph values are validated rather than truthiness-falling back to a different graph.
+
+**Shortcuts taken**: none.
+
+**Review fixes**: Latest round-1 quality finding: reproduced both source-relabeling paths, added the failing regression first, then enforced graph-source presence/currentness and saved-version source currentness under the transaction lock. Prior version-source and legacy-version pinning regressions also passed in the fresh suite. No self-review performed.
+
+**For later tickets**: Every local ask containing `graph` must include its current `source`. A selected stale saved version is rejected even with a freshly fetched revision/current source; preserve user edits and show the conflict.
