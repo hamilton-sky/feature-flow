@@ -1,7 +1,7 @@
 # Add transactional local storage and the loopback backend
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: —
 Test first: yes
 Level: 3
@@ -156,3 +156,25 @@ The supplied start `e3cb17340c691668273dc218b7d998e3adfc62fd` already contains t
 - Test-first finding: the prescribed base now precedes `8aa2f9a`, whose entire diff from that base is the test paths listed above; production follows in `709d962`. The isolated failing-test run proves that the test commit precedes working implementation. Independent review remains the conductor's responsibility.
 
 **For later tickets**: Use `storage.transaction` for FeatureFlow-managed writers, and preserve explicit source fingerprints in browser version operations. This continuation introduces no new backend contract changes.
+
+## Review findings (round 1, pair review)
+
+QUALITY
+1. major packages/forkboard/forkboard/storage.py:233-234: Diagram asks can relabel stale graphs with the current source. In-memory probes confirmed both a graph submitted without source and a saved version carrying an older source receive the regenerated figure’s fingerprint. Require matching source for submitted graph snapshots and preserve or reject stale saved-version context; add regression tests.
+
+Probed HTTP paths/methods, Host/Origin, content headers, JSON, revision preconditions, operation IDs/types, identity/time, ask fields/context, version graph/source/provenance/positions, pick fields, persisted state, locking, replacement, CLI and refresh callback through the 55-test suite and focused in-memory probes. Suite passed. Tests may leave Python bytecode caches; no files were manually changed.
+
+The required base ticket already contained Answer text, exposing it before any verdict was formed. Reviewed 65951d4..e0750e5, current HEAD.
+
+REVIEW: FAIL
+
+SPEC
+- Forkboard unit suite: MET (conductor) - required unittest check passed and printed OK; not rerun.
+- Loopback startup, restart persistence and narrow resources: MET - focused python3 -m unittest test_server -v ran six tests and printed OK, including actual CLI startup/restart, hostile paths and symlinks.
+- Stale requests and concurrent answers/regeneration: MET - same focused run verified 412 without mutation, preserved agent answers and retained request source context.
+- scope: OK - reviewed 65951d4..e0750e5 (HEAD); implementation, tests, stdlib allowlist and plan bookkeeping match the ticket. Acceptance failures stop at provider functionality assigned to dependent tickets.
+- test first: OK - 8aa2f9a changes only tests/checks; new tests import production modules absent at that commit. Conductor observed failure before implementation.
+
+The mandated base ticket unexpectedly contained an existing Answer, which reached me before any verdict. This verdict uses the diff, conductor check and independently run HTTP checks. Working tree remains clean; no files left behind.
+
+REVIEW: PASS
