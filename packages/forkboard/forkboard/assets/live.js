@@ -41,8 +41,11 @@
     var connection = make('div', {class: 'live-connection', role: 'status', 'aria-live': 'polite'});
     var status = make('span', {}, label + (writable ? ' • Connected' : ' • Read only'));
     var retry = make('button', {type: 'button'}, 'Retry save'); retry.hidden = true;
+    var unblock = make('button', {type: 'button'}, 'Keep edit and unblock saves'); unblock.hidden = true;
+    var preserved = make('div', {}), savedEdits = [];
+    try { savedEdits = JSON.parse(sessionStorage.getItem(STASH + ':preserved') || '[]'); } catch (e) { toast('Could not restore preserved edits.'); }
     var update = make('button', {type: 'button'}, 'Review update'); update.hidden = true;
-    connection.appendChild(status); connection.appendChild(retry); connection.appendChild(update);
+    connection.appendChild(status); connection.appendChild(retry); connection.appendChild(unblock); connection.appendChild(update); connection.appendChild(preserved);
     main.insertBefore(connection, panel);
     var updatePage = null;
     update.addEventListener('click', function () {
@@ -70,7 +73,7 @@
     }
     function flush() {
       if (saving || !queue.length || !writable) return;
-      saving = true; retry.hidden = true;
+      saving = true; retry.hidden = true; unblock.hidden = true;
       var item = queue[0];
       function send(replayed) {
         if (!sourceMatches(item.envelope.change)) return Promise.reject({code: 'stale_source', message: 'Figure source changed. Keep your edits; review the update before saving.'});
@@ -86,16 +89,40 @@
       }).catch(function (e) {
         saving = false; retry.hidden = false;
         var code = e && e.code;
+        unblock.hidden = code !== 'stale_source';
         if (['not_writer', 'not_granted', 'capability_disabled', 'consent_required'].indexOf(code) >= 0) {
           writable = false; status.textContent = label + ' • Read only'; render();
         } else status.textContent = 'Pending changes kept • ' + (e.message || (code === 'conflict' ? 'Save conflicted again. Retry save.' : 'Connection lost. Retry save.'));
       });
     }
     retry.addEventListener('click', flush);
-    function save(change, done) {
+    unblock.addEventListener('click', function () {
+      if (saving || !queue.length) return;
+      var item = queue[0], next = savedEdits.concat([item.envelope]);
+      try { sessionStorage.setItem(STASH + ':preserved', JSON.stringify(next)); }
+      catch (e) { status.textContent = 'Could not preserve edit in browser storage. Keep this page open.'; return; }
+      savedEdits = next; queue.shift(); remember();
+      if (item.cancel) item.cancel();
+      unblock.hidden = true; retry.hidden = true; status.textContent = 'Edit preserved • Continuing pending saves';
+      showPreserved(); flush();
+    });
+    function showPreserved() {
+      preserved.replaceChildren();
+      savedEdits.forEach(function (envelope) {
+        var change = envelope.change, payload = change.version || change.ask;
+        var button = make('button', {type: 'button'}, 'Restore preserved edit');
+        button.addEventListener('click', function () {
+          var fig = figs.filter(function (x) { return x.key === payload.figure; })[0];
+          if (!fig) { status.textContent = 'Preserved edit belongs to a figure unavailable on this page.'; return; }
+          fig.restore(payload);
+        });
+        preserved.appendChild(button);
+      });
+    }
+    function save(change, done, cancel) {
       var payload = change.version || (change.ask && change.ask.figure ? change.ask : null);
       if (payload && !payload.source && st.figures[payload.figure]) payload.source = st.figures[payload.figure].source;
-      queue.push({envelope: {id: crypto.randomUUID(), change: change}, done: done}); remember(); flush();
+      queue.push({envelope: {id: crypto.randomUUID(), change: change}, done: done, cancel: cancel}); remember(); flush();
     }
     function merge(s, change) {
       if (change.version) {
@@ -156,7 +183,7 @@
           if (provider.local) {
             save({ask: {by: me, text: want, kind: 'diagram', figure: key, source: source, graph: now}}, function () {
               said.hidden = false; said.textContent = 'Waiting for ' + label; if (box.value === draft) box.value = ''; go.disabled = false; go.textContent = 'Ask';
-            });
+            }, function () { go.disabled = false; go.textContent = 'Ask'; });
             return;
           }
           provider.propose('You edit one flowchart in a design review. The flowchart as JSON:\n' + JSON.stringify(now) +
@@ -182,8 +209,10 @@
         go.addEventListener('click', ask);
         box.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ask(); ev.preventDefault(); } ev.stopPropagation(); });
       });
-      figs.push({ key: key, f: f, pick: pick, save: saveBtn, editor: ed, ask: askBtn, refresh: function (next) { f = next; }, preview: function (graph, fingerprint) { source = fingerprint; ed.load(graph, null, 'claude'); } });
+      figs.push({ key: key, f: f, pick: pick, save: saveBtn, editor: ed, ask: askBtn, refresh: function (next) { f = next; }, preview: function (graph, fingerprint) { source = fingerprint; ed.load(graph, null, 'claude'); }, restore: function (payload) { source = payload.source; ed.load(payload.entry ? payload.entry.graph : payload.graph, payload.entry ? payload.entry.pos : null); if (payload.text) { askBtn.click(); bar.querySelector('input[type=text]').value = payload.text; } } });
     });
+
+    showPreserved();
 
     // the document's choices. In a step, a pick waits on the page until the step's Approve saves them all at once,
     // and that save wakes the session; a choice outside any step is saved as it is picked.

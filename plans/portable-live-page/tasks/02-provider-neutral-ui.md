@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -96,6 +96,20 @@ Extra file: packages/forkboard/tests/test_server.py - its existing concurrency t
 **Review fixes**: Round-3 blocker: reproduced the data loss for all four field types on both hosts before changing logic. Guarded every asynchronous request-field clear, including native sampling, against the exact submitted value; deterministic delayed-response regressions pass. Prior footprint and TAP environment requirements remain documented above.
 
 **For later tickets**: Preserve these conditional clears when changing shared request UI. No provider/backend contracts changed.
+
+### Stale-source queue recovery (2026-11-12)
+
+**Built**: Added an explicit stale-source recovery control in `assets/live.js` and expanded the Chromium stale-source regression. The blocked envelope is preserved in session storage before removal; restoration reloads its graph and source context, and queued unrelated operations continue. Diagram request controls are re-enabled on cancellation.
+
+**Proof**: Test-only commit `579cb02` failed the focused stale-source browser test because the recovery control did not exist. After implementation, the same focused command passed (1 test, # fail 0). Fresh `python3 -m unittest discover -s packages/forkboard/tests -v` passed 62 tests, OK, exit 0. Fresh `npm --prefix packages/forkboard/tests/browser test` with the supplied PATH and TAP environment passed 20 tests, # fail 0, exit 0. The stale-source case verifies the unrelated question persists, the old graph remains intact and restores after reload, and no stale version is saved. The existing browser cases cover dirty edits, polling, conflict, disconnection and deliberate proposal save. Frozen Python syntax lint passed. Full frozen Test is left to the conductor's gate. No self-review performed.
+
+**Decisions**: Recovery is explicit and only available for a stale-source head. Preserved envelopes retain their original source; restoration does not silently rebase or submit them. A storage failure leaves the queue blocked and the editor intact.
+
+**Shortcuts taken**: Preserved edits live in session storage and remain available in that browser tab; they do not survive closing the tab. Durable cross-session recovery would require a persistent storage design and retention policy.
+
+**Review fixes**: Round-4 quality finding: reproduced the missing recovery with a real localhost test, then added explicit preservation and unblocking with restoration after reload.
+
+**For later tickets**: Keep preserved source fingerprints attached to restored edits and retain the explicit recovery step.
 
 ## Review findings (round 1, footprint check)
 

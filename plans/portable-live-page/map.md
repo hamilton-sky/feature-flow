@@ -50,3 +50,5 @@ Before restart, the independent tester must update acceptance against the newly 
 02 — Reverified 62 Python and 12 Chromium tests; the frozen literal browser-output check requires the conductor to inherit NODE_OPTIONS=--test-reporter=tap on this Node installation.
 
 02 — Successful request acknowledgements clear only the exact submitted draft; eight delayed-response browser regressions preserve newer Talk, diagram, option and ticket drafts on local/native hosts.
+
+02 — Preserve stale-source edits separately on explicit recovery, then resume queued saves without rebasing the old graph.
