@@ -2,6 +2,8 @@
 
 usage: forkboard render DOC [--theme NAME] [--fragment] [--out FILE]
        forkboard live DOC DIR [--theme NAME]
+       forkboard serve DIR [--port N]
+       forkboard answer-graph STATE <ask number> <graph JSON file>
        forkboard asks STATE
        forkboard answer STATE <ask number> <text>
        forkboard version STATE <figure> <original or a person id>
@@ -20,7 +22,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, doc as docs, live, page
+from . import __version__, doc as docs, live, page, storage, server
 
 USAGE = __doc__.split("\n\n")[1].strip()
 
@@ -38,7 +40,11 @@ def read_state(arg, err):
     path = Path(arg)
     if path.is_dir():
         path = path / "state.json"
-    st = live.load(path)
+    try:
+        st = storage.read(path)
+    except (OSError, ValueError) as e:
+        err.write("%s\n" % e)
+        st = None
     if st is None:
         err.write("no page state at %s: save the published page's state.json there first\n" % path.as_posix())
     return path, st
@@ -47,7 +53,7 @@ def read_state(arg, err):
 def main(argv, out=None, err=None):
     out = out or sys.stdout
     err = err or sys.stderr
-    flags = {"--theme": None, "--out": None}
+    flags = {"--theme": None, "--out": None, "--port": None}
     fragment, args, i = False, [], 0
     while i < len(argv):
         a = argv[i]
@@ -69,10 +75,17 @@ def main(argv, out=None, err=None):
             args.append(a)
         i += 1
     command, rest = (args[0], args[1:]) if args else ("", [])
-    sizes = {"render": 1, "live": 2, "asks": 1, "answer": 3, "version": 3, "picks": 1, "themes": 0}
+    sizes = {"render": 1, "live": 2, "asks": 1, "answer": 3, "version": 3, "picks": 1, "themes": 0, "serve": 1, "answer-graph": 3}
     if sizes.get(command) != len(rest):
         err.write(USAGE + "\n")
         return 2
+    if command == "serve":
+        try:
+            server.serve(rest[0], int(flags["--port"] or 0), out)
+        except (OSError, ValueError) as e:
+            err.write("cannot serve %s: %s\n" % (rest[0], e))
+            return 1
+        return 0
     if command == "themes":
         names = page.themes()
         width = max(map(len, names)) if names else 0
@@ -90,9 +103,12 @@ def main(argv, out=None, err=None):
         if command == "live":
             folder = Path(rest[1])
             folder.mkdir(parents=True, exist_ok=True)
-            st = live.state(doc, live.load(folder / "state.json"))
-            (folder / "index.html").write_text(page.render(doc, css, name, True, True), encoding="utf-8")
-            (folder / "state.json").write_text(live.dump(st), encoding="utf-8")
+            try:
+                st = storage.transaction(folder / "state.json", lambda old: live.state(doc, old), create=True,
+                                         page=page.render(doc, css, name, True, True))
+            except (OSError, ValueError) as e:
+                err.write("cannot generate live page: %s\n" % e)
+                return 1
             out.write("wrote %s and %s (round %d, %d figures, %d open asks)\n" % (
                 (folder / "index.html").as_posix(), (folder / "state.json").as_posix(), st["round"],
                 len(st["figures"]), sum(1 for a in st["asks"] if not a.get("answer"))))
@@ -113,14 +129,23 @@ def main(argv, out=None, err=None):
             out.write(live.asks(st) + "\n")
         elif command == "picks":
             out.write(json.dumps(live.picks(st), ensure_ascii=False, sort_keys=True) + "\n")
-        elif command == "answer":
+        elif command in ("answer", "answer-graph"):
             if not rest[1].isdigit():
                 raise ValueError("the ask number must be a number, not %s" % rest[1])
-            path.write_text(live.dump(live.answer(st, int(rest[1]), rest[2])), encoding="utf-8")
+            if command == "answer-graph":
+                with Path(rest[2]).open("rb") as stream:
+                    raw = stream.read(storage.MAX_BODY + 1)
+                if len(raw) > storage.MAX_BODY:
+                    raise ValueError("graph proposal exceeds the 1 MiB limit")
+                proposal = json.loads(raw, parse_constant=storage._constant)
+                storage.transaction(path, lambda old: live.answer_graph(old, int(rest[1]), proposal))
+            else:
+                storage._text(rest[2], "answer text")
+                storage.transaction(path, lambda old: live.answer(old, int(rest[1]), rest[2]))
             out.write("answered ask %s in %s\n" % (rest[1], path.as_posix()))
         else:
             out.write(live.mermaid(live.version(st, rest[1], rest[2])[0]) + "\n")
-    except ValueError as e:
+    except (OSError, ValueError, TypeError, RecursionError) as e:
         err.write("%s\n" % e)
         return 1
     return 0

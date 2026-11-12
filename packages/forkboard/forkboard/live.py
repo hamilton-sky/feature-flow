@@ -36,12 +36,14 @@ def state(doc, old=None):
         if graph is None:
             continue
         kept = (old.get("figures") or {}).get(str(n)) or {}
+        versions = {key: dict(value, **({"source": kept["source"]} if "source" not in value and kept.get("source") else {}))
+                    for key, value in (kept.get("versions") or {}).items()}
         figures[str(n)] = {"title": title, "source": fingerprint(source), "original": graph,
-                           "versions": kept.get("versions") or {}}
-    return {"feature": doc.get("id") or "review", "round": int(old.get("round") or 0) + 1, "figures": figures,
+                           "versions": versions}
+    return dict(old, **{"feature": doc.get("id") or "review", "round": int(old.get("round") or 0) + 1, "figures": figures,
             "asks": old.get("asks") if isinstance(old.get("asks"), list) else [],
             "picks": old.get("picks") if isinstance(old.get("picks"), dict) else {},
-            "approved": approved(old)}
+            "approved": approved(old)})
 
 
 def approved(st):
@@ -67,13 +69,16 @@ def asks(st):
             continue
         fig = str(ask.get("figure") or "")
         where = fig and (st.get("figures") or {}).get(fig)
+        if ask.get("graph"):
+            where = {"title": ask.get("title", ""), "versions": {"snapshot": {"graph": ask["graph"], "via": ["request snapshot"]}}}
         lines.append("ask %d from %s at %s%s%s:" % (i, ask.get("by") or "someone", ask.get("at") or "?",
                                                       (" about figure %s (%s)" % (fig, where.get("title", "")) if where else "")
                                                       + (' about "%s"' % ask["about"] if ask.get("about") else ""),
                                                       (" to approve the step %s" if ask.get("approve") else " to change the step %s")
                                                       % ask["step"] if ask.get("step") else ""))
         lines.append("  " + str(ask.get("text") or "").replace("\n", "\n  "))
-        version = where and ask.get("version") and where["versions"].get(ask["version"])
+        version = (where["versions"]["snapshot"] if ask.get("graph") else
+                   where and ask.get("version") and where["versions"].get(ask["version"]))
         if version:
             lines.append("  their version of the figure (%s):" % ", ".join(version.get("via") or ["by hand"]))
             lines.append("    " + mermaid(version["graph"]).replace("\n", "\n    "))
@@ -88,6 +93,20 @@ def answer(st, number, text):
     return st
 
 
+def answer_graph(st, number, proposal):
+    """Attach a validated proposal to its request, leaving source and saved versions intact."""
+    from .storage import graph
+    items = st.get("asks") or []
+    if not 1 <= number <= len(items):
+        raise ValueError("no ask %d: there are %d" % (number, len(items)))
+    ask = items[number - 1]
+    if not ask.get("figure") or not ask.get("graph") or not ask.get("source"):
+        raise ValueError("ask has no diagram request snapshot; request a diagram change first")
+    ask["result"] = graph(proposal)
+    ask.setdefault("answer", "Diagram proposal attached.")
+    return st
+
+
 def version(st, figure, name):
     """(the graph of that version of a figure, the figure's source fingerprint); name is original or a person id."""
     fig = (st.get("figures") or {}).get(str(figure))
@@ -97,7 +116,7 @@ def version(st, figure, name):
     if graph is None:
         raise ValueError("figure %s has no version %s: it has original%s" % (
             figure, name, "".join(", " + v for v in sorted(fig["versions"]))))
-    return graph, fig.get("source")
+    return graph, (fig["versions"].get(name) or {}).get("source", fig.get("source"))
 
 
 def load(path):
