@@ -1,7 +1,7 @@
 # Expose all live phases and reuse agent commands safely
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 01, 02
 Test first: yes
 Level: 3
@@ -54,3 +54,22 @@ prints # fail 0
 **Shortcuts taken**: Regeneration uses the storage module's lock, validation and atomic-replacement primitives directly because its transaction helper takes a precomputed page; a shared helper that accepts a page computed under the lock would remove that duplication if the storage API is extended.
 
 **For later tickets**: The page uses the same existing status aliases; documentation should include `--serve`, `--port`, `--provider`, `--agent-label`, and `--answer-graph`. Preserve the shared lock and latest-state composition when adjusting regeneration.
+
+## Review findings (round 1, pair review)
+
+QUALITY
+1. major feature_flow/brainstorm_page.py: A POST can arrive after plan acceptance but before the next /api/page refresh. It is then checked against the old, unfrozen document and can record picks or an approval after acceptance. Refresh and validate the accepted-plan state under the same lock as the mutation.
+2. major feature_flow/brainstorm_page.py: Regeneration replaces state.json before index.html. If the second replacement fails or the process stops, the new state is paired with the old page. Use recoverable, coordinated publication of both files.
+
+Probed inputs: feature and path arguments, provider and port, state and page files, source and plan files, answers and graph proposals, picks, approvals, and concurrent refresh and browser writes. All three specified checks passed.
+
+REVIEW: FAIL
+
+SPEC
+- Page tests: MET (conductor) — the conductor reported the check passed.
+- Flow plan tests: MET (conductor) — the conductor reported the check passed.
+- Browser tests: MET (conductor) — the conductor reported the check passed.
+- Scope: OK.
+- Test first: OK — the diff adds tests, and the conductor observed the test command fail before the production change.
+
+REVIEW: PASS
