@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -76,3 +76,7 @@ Extra file: packages/forkboard/tests/test_server.py - its existing concurrency t
 - Ticket 03 should supply `doc['frozen'] = True` on accepted-plan/build documents (or a recognized `doc['phase']`: accepted/build/complete/completed), and continue regenerating with `live.state` inside `storage.transaction` so the trusted available controls stay current. The shared UI and local API both respect `_document.frozen`; questions remain allowed. Accepted Plan Approve is intent only and executes no work.
 - Renderer signature is additive: `render(..., fragment=False, live=False, provider='claude', agent_label=None)`. Old positional callers are unchanged. Local CLI renders a full HTML document; native keeps its fragment. New assets ship through existing asset globs.
 - Local queued graph asks include the editor's original source context. Never replace it with a newly polled source when retrying. Graph proposals retain the ask's fingerprint and require explicit preview then Save as my version.
+
+## Review findings (round 1, footprint check)
+
+the build changed paths outside the ticket's `Touches:` line (packages/forkboard/forkboard/assets/providers.js (new) packages/forkboard/forkboard/assets/live.js packages/forkboard/forkboard/assets/live.css packages/forkboard/forkboard/page.py packages/forkboard/forkboard/cli.py packages/forkboard/tests/test_page.py packages/forkboard/tests/test_cli.py packages/forkboard/tests/browser/page.test.js packages/forkboard/forkboard/storage.py packages/forkboard/forkboard/live.py packages/forkboard/tests/test_storage.py packages/forkboard/tests/test_live.py): packages/forkboard/tests/test_server.py. tickets run side by side because their Touches do not overlap, so change only what Touches names. if the ticket cannot be done inside it, say so in the Answer and stop: the plan has to change, not the footprint. one file the ticket truly needs (a test that pins the old behaviour, a generator) may be named in the Answer as `Extra file: <path> - <why>`, when it is the only one
