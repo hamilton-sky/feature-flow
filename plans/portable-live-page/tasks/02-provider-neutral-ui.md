@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -107,3 +107,34 @@ The fixture change is necessary: the preexisting concurrency test picks `profile
 **Review fixes**: Round-1 footprint finding: reproduced and verified the existing `Extra file:` declaration under standard single-ticket mode. `test_server.py` changes only its trusted fixture to declare the `profile=standard` choice already used by the concurrency scenario; its stale-write/retry assertions remain intact. The fresh 62-test run passed that scenario. The historical fast-mode Attempt note is superseded by this standard-mode proof; independent review still judges the necessity of the exception.
 
 **For later tickets**: No new contract changes. Ticket 03 should use the existing trusted document/frozen metadata and shared transaction seam described above.
+
+## Review findings (round 2, done when)
+
+$ npm --prefix packages/forkboard/tests/browser test
+  wanted: exit 0 and output containing '# fail 0'
+  got: exit 0
+  the last lines of its output:
+
+> test
+> node --test page.test.js
+
+✔ the editor adds, connects, renames, deletes, undoes and resets (461.632792ms)
+✔ Arrange lays the boxes out four ways, without overlaps, and undo puts them back (417.787917ms)
+✔ every theme draws the page, and a theme shapes the boxes (920.810875ms)
+✔ at phone width nothing scrolls sideways (63.816125ms)
+✔ the live page saves a version, and a clash reloads and saves the change again (293.617792ms)
+✔ a live page with steps shows them as tabs, saves picks only on Approve, and Change takes an approval back (450.486625ms)
+✔ local queue, reply and explicit proposal preserve dirty edits and typed text during polling (5129.259834ms)
+✔ local staged list choices approve atomically and survive polling (2680.415125ms)
+✔ native capability denial becomes accessible read only and native generation remains a deliberate save (267.840083ms)
+✔ local repeated conflict retains an idempotent queue through reload and serializes retry (356.20175ms)
+✔ local dirty edits, forms and staged picks survive disconnect and unsafe regeneration (6773.249375ms)
+✔ local figure source change blocks blind conflict replay without discarding the editor (345.404292ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18484.033
