@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -233,5 +233,23 @@ SPEC
 - range: base through d7c1948, which equals HEAD. Working tree remains clean; targeted tests cleaned their temporary files.
 - acceptance failures: reported stale retransmission behavior already exists at the base; other inspected acceptance expectations use obsolete Setup/immediate-pick controls rather than this ticket’s five tabs and staged approval.
 - disclosure: a filtering mistake exposed one author Answer bullet about trusted document metadata. No verdict had been formed before exposure.
+
+REVIEW: PASS
+
+## Review findings (round 5, pair review)
+
+QUALITY
+1. blocker packages/forkboard/forkboard/assets/live.js: Choices remain editable while an approval save is pending, but its completion callback unconditionally deletes their staged values. A newer choice made during the save is lost on the next render. Clear only values that still match the submitted snapshot, or prevent edits until the save completes.
+
+Probed operation IDs, identity and timestamps, choice values, approval and reopen payloads, ask context, figure sources, graph data, provider configuration, and the save/retry queue. Both Done when test commands passed. The test run left no tracked changes.
+
+REVIEW: FAIL
+
+SPEC
+- Python unit tests: MET (conductor) — command passed and printed OK.
+- Browser tests: MET (conductor) — command passed and printed # fail 0.
+- Dirty edits, typed requests, and explicit proposal preview/save: MET (conductor) — the passing browser suite covers polling, disconnection, conflict recovery, and proposal preview.
+- scope: OK — test_server.py fixture change supports validation of declared choices; plan map and learnings record ticket work.
+- test first: OK — conductor observed test fail before production change; diff adds tests.
 
 REVIEW: PASS
