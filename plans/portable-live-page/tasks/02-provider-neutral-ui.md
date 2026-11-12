@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -158,3 +158,25 @@ $ npm --prefix packages/forkboard/tests/browser test
 **Review fixes**: Round-2 done-when finding: read the recorded default-reporter failure (exit 0, all 12 passing, wrong output marker), then reran the exact npm command under the supplied TAP environment and observed the required marker. This is an execution-environment requirement, not a claim that the default reporter now passes the check. The conductor must retain this environment for its own check and gate. Round-1 standard-mode fixture exception remains documented above.
 
 **For later tickets**: Retain the documented TAP reporter environment for literal-output browser checks. No implementation contracts changed.
+
+## Review findings (round 3, pair review)
+
+QUALITY
+1. blocker packages/forkboard/forkboard/assets/live.js:369: Successful saves erase newer unsent text. Chromium reproduction: delay publish, submit “first request”, type “second unsent request”, then complete publish; only the first request persists and the textarea becomes empty. The diagram and option-question callbacks have the same pattern. Clear fields only when their contents still match the submitted draft.
+
+Both Done when suites passed: 62 Python tests and 12 browser tests. Boundary checks covered operation fields, identity, revisions, source fingerprints, choices, compound approvals, frozen controls, graph validation, routes, Host/Origin and escaped labels. The test_server.py fixture adjustment supports trusted-choice validation without weakening concurrency assertions.
+
+REVIEW: FAIL
+
+SPEC
+- Python suite: MET (conductor) - python3 -m unittest discover -s packages/forkboard/tests -v passed and printed OK; not rerun.
+- Chromium suite: MET (conductor) - npm --prefix packages/forkboard/tests/browser test passed with supplied TAP environment and printed # fail 0; not rerun.
+- Dirty diagrams, typed requests, conflicts/disconnection and deliberate proposal preview/save: MET (conductor) - inspected the passing browser cases and their assertions for these behaviors.
+- scope: OK - test_server.py necessarily declares the choice exercised by its existing concurrency test after trusted-document validation; map/learnings changes are ticket bookkeeping.
+- test first: OK - new browser/storage tests require the production changes; conductor observed the Test command fail before implementation.
+
+Reviewed through 5bd7ad914cd8d29805f7dc58babc0f719ed74f45, currently HEAD. Acceptance failures include future FeatureFlow work and obsolete fixture assumptions; the stale duplicate-operation expectation also contradicts the ticket's idempotent retry requirement.
+
+Author-written reporter proof embedded under Review findings was encountered; no verdict had formed before that exposure. No files changed.
+
+REVIEW: PASS
