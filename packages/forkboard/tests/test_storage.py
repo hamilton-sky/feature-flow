@@ -197,3 +197,50 @@ storage.transaction(Path(sys.argv[1]), lambda old: dict(old, round=200))
             storage.transaction(self.path, lambda old: old, timeout=.03)
         self.path.with_name('state.json.lock').rmdir()  # the writer is confirmed dead
         self.assertEqual(storage.transaction(self.path, lambda old: old)['round'], 1)
+
+
+class Approvals(unittest.TestCase):
+    setUp = Transactions.setUp
+
+    def stepped(self):
+        return storage.transaction(self.path, lambda old: live.state(helpers.fixture('steps'), old))
+
+    def approval(self):
+        return {'picks': [{'key': 'lens', 'entry': {'value': ['ux', 'security']}}],
+                'approve': {'step': 'Team'}, 'ask': {'step': 'Team', 'approve': True, 'text': 'Approved Team'}}
+
+    def test_atomic_approval_reopen_identity_and_retry(self):
+        st = self.stepped()
+        env = {'id': 'approve', 'change': self.approval()}
+        st = storage.change(self.path, env, storage.revision(st))
+        self.assertEqual(st['picks']['lens']['value'], ['ux', 'security'])
+        self.assertEqual(st['approved']['Team']['by'], st['identity']['id'])
+        self.assertTrue(st['asks'][-1]['approve'])
+        self.assertNotEqual(st['asks'][-1]['at'], 'forged')
+        again = storage.change(self.path, env, 'stale')
+        self.assertEqual(len(again['asks']), 1)
+        st = storage.change(self.path, {'id': 'reopen', 'change': {'unapprove': ['Style', 'Team', 'Options', 'Plan', 'Build'],
+              'ask': {'step': 'Style', 'text': 'Change Style'}}}, storage.revision(st))
+        self.assertEqual(st['approved'], {})
+        self.assertEqual(st['asks'][-1]['step'], 'Style')
+
+    def test_invalid_compounds_and_frozen_controls_never_mutate(self):
+        st = self.stepped()
+        bad = self.approval(); bad['picks'][0]['entry']['value'] = ['unknown']
+        for change in (bad, {'pick': {'key': 'lens', 'entry': {'value': ['ux']}}},
+                       {'approve': {'step': 'Build'}}, {'unapprove': ['Style'], 'ask': {'step': 'Style', 'text': 'partial'}}):
+            before = self.path.read_bytes()
+            with self.assertRaises(ValueError):
+                storage.change(self.path, {'id': 'bad', 'change': change}, storage.revision(st))
+            self.assertEqual(self.path.read_bytes(), before)
+        doc = helpers.fixture('steps'); doc['phase'] = 'accepted'
+        st = storage.transaction(self.path, lambda old: live.state(doc, old))
+        before = self.path.read_bytes()
+        with self.assertRaises(ValueError):
+            storage.change(self.path, {'id': 'frozen', 'change': self.approval()}, storage.revision(st))
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_about_context_is_retained(self):
+        st = storage.read(self.path)
+        st = storage.change(self.path, {'id': 'about', 'change': {'ask': {'text': 'Why?', 'about': '02 CSV writer'}}}, storage.revision(st))
+        self.assertEqual(st['asks'][0]['about'], '02 CSV writer')

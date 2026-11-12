@@ -32,6 +32,16 @@ class Command(unittest.TestCase):
         finally:
             sys.stdin = old
 
+    def test_local_provider_and_label_flags_keep_native_default(self):
+        folder = self.dir / 'local'
+        code, _, err = self.run_cli('live', str(self.doc), str(folder), '--provider', 'local', '--agent-label', '<Codex>')
+        self.assertEqual(code, 0, err)
+        html = (folder / 'index.html').read_text()
+        self.assertTrue(html.startswith('<!doctype html>'))
+        self.assertIn('data-provider="local"', html)
+        self.assertIn('data-agent-label="&lt;Codex&gt;"', html)
+        self.assertEqual(self.run_cli('live', str(self.doc), str(folder), '--provider', 'other')[0], 1)
+
     def test_render_writes_the_page_beside_the_document_or_to_stdout(self):
         code, out, err = self.run_cli("render", str(self.doc), "--theme", "blueprint")
         self.assertEqual(code, 0, err)
