@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -138,3 +138,23 @@ $ npm --prefix packages/forkboard/tests/browser test
 ℹ skipped 0
 ℹ todo 0
 ℹ duration_ms 18484.033
+
+
+### Reporter-output send-back (2026-11-12)
+
+**Built**: Started clean at `bdc7ffce83bbfee1b553de63e5f8183bea0564c7`. No production, test or configuration changes were required. Updated only this ticket bookkeeping and appended a map decision.
+
+**Proof**:
+
+- Done when 1/check: fresh `python3 -m unittest discover -s packages/forkboard/tests -v` with the supplied venv on PATH passed all 62 tests, `Ran 62 tests in 3.965s`, `OK`, exit 0.
+- Done when 2/check: fresh `NODE_OPTIONS=--test-reporter=tap npm --prefix packages/forkboard/tests/browser test` passed all 12 tests, `# pass 12`, literal `# fail 0`, zero cancelled/skipped/todo, exit 0, 18640.403292ms.
+- Done when 3: that browser run passed the local queue/reply/explicit proposal case, repeated conflict/reload/idempotency case, dirty edits/forms/staged picks through disconnection/regeneration case, and changed-source replay rejection case. Native denial and deliberate native proposal save passed too.
+- Frozen Python 3.9 syntax Lint: exit 0. Full frozen Test is left to the conductor's gate; fast OFF does not mean gate OFF. No self-review performed.
+
+**Decisions**: The conductor must inherit `NODE_OPTIONS=--test-reporter=tap` when evaluating the unchanged browser command/check on this installed Node. The default spec reporter reports `ℹ fail 0`, while the frozen check explicitly requires `# fail 0`; successful tests alone do not satisfy that literal-output check. Environment-only TAP selection preserves every test and assertion.
+
+**Shortcuts taken**: none.
+
+**Review fixes**: Round-2 done-when finding: read the recorded default-reporter failure (exit 0, all 12 passing, wrong output marker), then reran the exact npm command under the supplied TAP environment and observed the required marker. This is an execution-environment requirement, not a claim that the default reporter now passes the check. The conductor must retain this environment for its own check and gate. Round-1 standard-mode fixture exception remains documented above.
+
+**For later tickets**: Retain the documented TAP reporter environment for literal-output browser checks. No implementation contracts changed.

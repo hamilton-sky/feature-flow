@@ -46,3 +46,5 @@ Before restart, the independent tester must update acceptance against the newly 
 02 — Share Claude/local capability adapters and a persistent conditional save queue; validate compound approvals/reopen against trusted document controls and freeze accepted settings, preserving dirty edits through polling and explicit update previews.
 
 02 — Standard single-ticket verification accepts the declared concurrency-fixture exception; 62 Python and 12 Chromium tests pass with provider, dirty-edit, queue, conflict and approval behavior retained.
+
+02 — Reverified 62 Python and 12 Chromium tests; the frozen literal browser-output check requires the conductor to inherit NODE_OPTIONS=--test-reporter=tap on this Node installation.
