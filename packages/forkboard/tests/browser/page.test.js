@@ -476,6 +476,16 @@ for (const host of ['local', 'native']) {
           const saved = local ? JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))) : await page.evaluate(() => window.__saved.at(-1));
           assert.deepEqual(saved.asks.map(ask => ask.text), ['first request']);
         }
+        // Unchanged drafts, including surrounding whitespace, still clear after success.
+        if (local) await page.unroute('**/api/change');
+        else await page.evaluate(() => { window.__release = null; });
+        await input.fill('  unchanged draft  ');
+        await send.click();
+        if (!local) {
+          await page.waitForFunction(() => !!window.__release);
+          await page.evaluate(() => window.__release());
+        }
+        await page.waitForFunction(element => element.value === '', await input.elementHandle());
         assert.deepEqual(errors, []);
       } finally {
         if (context) await context.close();

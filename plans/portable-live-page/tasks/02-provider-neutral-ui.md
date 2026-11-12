@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -76,6 +76,26 @@ Extra file: packages/forkboard/tests/test_server.py - its existing concurrency t
 - Ticket 03 should supply `doc['frozen'] = True` on accepted-plan/build documents (or a recognized `doc['phase']`: accepted/build/complete/completed), and continue regenerating with `live.state` inside `storage.transaction` so the trusted available controls stay current. The shared UI and local API both respect `_document.frozen`; questions remain allowed. Accepted Plan Approve is intent only and executes no work.
 - Renderer signature is additive: `render(..., fragment=False, live=False, provider='claude', agent_label=None)`. Old positional callers are unchanged. Local CLI renders a full HTML document; native keeps its fragment. New assets ship through existing asset globs.
 - Local queued graph asks include the editor's original source context. Never replace it with a newly polled source when retrying. Graph proposals retain the ask's fingerprint and require explicit preview then Save as my version.
+
+### Delayed-save draft repair (2026-11-12)
+
+**Built**: Started clean at `73988b1e608fe48b30638646d597a2a6adb85e32`. Changed `assets/live.js` so Talk, local diagram asks, native diagram proposals, option asks and ticket asks capture the exact submitted draft and clear only when the current field still equals it. Added eight Chromium regressions spanning all four fields on local and native providers.
+
+**Proof**:
+
+- Test-only commit `d1f02a0` preceded the production fix. Fresh focused command `node --test --test-name-pattern='delayed' packages/forkboard/tests/browser/page.test.js` with supplied PATH/TAP environment failed all eight cases before the fix: actual field `''`, expected `second unsent request`. After the fix the same eight passed. Tests explicitly gate request/proposal completion, rather than relying on sleeps.
+- Done when 1/check: fresh `python3 -m unittest discover -s packages/forkboard/tests -v` passed 62 tests, `OK`, exit 0, 4.239s, with supplied venv on PATH.
+- Done when 2/check: fresh `npm --prefix packages/forkboard/tests/browser test` with supplied PATH and `NODE_OPTIONS=--test-reporter=tap` passed 20 tests, `# pass 20`, `# fail 0`, no cancelled/skipped/todo, exit 0, 20584.503417ms. Each new case preserves a newer draft after success, verifies only the first request was saved (where applicable), and verifies an unchanged draft with surrounding whitespace still clears after success.
+- Done when 3: the same browser run passed existing dirty diagram/polling/reply/explicit proposal tests, disconnection/regeneration retention, conflict/retry/reload and stale-source protection, plus delayed-response draft retention for both providers.
+- Frozen Python 3.9 syntax Lint and `git diff --check`: exit 0. Full frozen Test is left to the conductor's gate; fast OFF does not mean gate OFF. No self-review performed.
+
+**Decisions**: Compare against the raw draft captured before trimming; the persisted request remains trimmed, while unmodified whitespace-bearing fields still clear normally. Successful callbacks continue to re-enable controls and show acknowledgement even when a newer draft remains.
+
+**Shortcuts taken**: none.
+
+**Review fixes**: Round-3 blocker: reproduced the data loss for all four field types on both hosts before changing logic. Guarded every asynchronous request-field clear, including native sampling, against the exact submitted value; deterministic delayed-response regressions pass. Prior footprint and TAP environment requirements remain documented above.
+
+**For later tickets**: Preserve these conditional clears when changing shared request UI. No provider/backend contracts changed.
 
 ## Review findings (round 1, footprint check)
 

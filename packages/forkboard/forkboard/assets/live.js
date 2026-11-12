@@ -150,12 +150,12 @@
         bar.insertBefore(box, said); bar.insertBefore(go, said);
         box.focus();
         function ask() {
-          var want = box.value.trim(); if (!want) return;
+          var draft = box.value, want = draft.trim(); if (!want) return;
           go.disabled = true; go.textContent = 'Thinking...';
           var now = ed.get().graph;
           if (provider.local) {
             save({ask: {by: me, text: want, kind: 'diagram', figure: key, source: source, graph: now}}, function () {
-              said.hidden = false; said.textContent = 'Waiting for ' + label; box.value = ''; go.disabled = false; go.textContent = 'Ask';
+              said.hidden = false; said.textContent = 'Waiting for ' + label; if (box.value === draft) box.value = ''; go.disabled = false; go.textContent = 'Ask';
             });
             return;
           }
@@ -173,7 +173,7 @@
             if (!boxes.length) throw { code: 'invalid_json' };
             ed.load({ dir: now.dir, nodes: boxes, edges: arrows }, null, 'claude');
             said.hidden = false; said.textContent = label + ': ' + String(out.reply || 'Done.') + ' Undo takes it back; Save as my version keeps it.';
-            box.value = '';
+            if (box.value === draft) box.value = '';
           }).catch(function (e) {
             said.hidden = false;
             said.textContent = e && e.code === 'rate_limited' ? label + ' is busy: try again in a minute.' : e && e.code === 'not_granted' ? 'Asking ' + label + ' is not allowed in this view.' : label + ' could not change it this time. Try saying it another way.';
@@ -246,10 +246,10 @@
         var go = make('button', { type: 'button', class: 'go' }, 'Send to ' + label);
         row.appendChild(area); row.appendChild(go); area.focus();
         go.addEventListener('click', function () {
-          var text = area.value.trim(); if (!text) { area.focus(); return; }
+          var draft = area.value, text = draft.trim(); if (!text) { area.focus(); return; }
           go.disabled = true;
           save({ ask: { by: me, at: new Date().toISOString(), figure: null, version: null, about: pick ? pick.value : subjects[0], text: text } },
-               function () { area.value = ''; go.disabled = false; toast('Sent. Claude answers in Talk to Claude when its session picks it up.'); });
+               function () { if (area.value === draft) area.value = ''; go.disabled = false; toast('Sent. Claude answers in Talk to Claude when its session picks it up.'); });
         });
       });
       askers.push(open);
@@ -362,11 +362,11 @@
         form.appendChild(area); form.appendChild(row); panel.appendChild(form);
         form.addEventListener('submit', function (ev) {
           ev.preventDefault();
-          var text = area.value.trim(); if (!text) { area.focus(); return; }
+          var draft = area.value, text = draft.trim(); if (!text) { area.focus(); return; }
           var key = about.value, fig = key && st.figures[key];
           send.disabled = true;
           save({ ask: { by: me, at: new Date().toISOString(), figure: key || null, version: fig && fig.versions[me] ? me : null, text: text } },
-               function () { area.value = ''; send.disabled = false; toast('Sent. Claude answers here when its session picks it up.'); });
+               function () { if (area.value === draft) area.value = ''; send.disabled = false; toast('Sent. Claude answers here when its session picks it up.'); });
         });
       });
     }
