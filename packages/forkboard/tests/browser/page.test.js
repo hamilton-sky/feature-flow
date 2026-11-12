@@ -424,3 +424,63 @@ test('local figure source change blocks blind conflict replay without discarding
     await context.close();
   } finally {local.stop();}
 });
+
+for (const host of ['local', 'native']) {
+  for (const field of ['talk', 'diagram', 'option', 'ticket']) {
+    test(`${host} delayed ${field} acknowledgement preserves a newer draft`, async () => {
+      const local = host === 'local' ? await localServer('steps') : null;
+      function delayedRuntime() {
+        window.__saved = [];
+        const wait = () => new Promise(resolve => { window.__release = resolve; });
+        window.claude = {use: async name => ({
+          artifact: {publish: async files => {await wait(); window.__saved.push(JSON.parse(files['state.json'].content)); return {shas: {'state.json': 'saved'}};}},
+          user: {id: async () => 'me', profiles: async () => ({})},
+          sample: {json: async () => {await wait(); return {graph: {nodes: [{id: 'a', label: 'Proposal'}], edges: []}, reply: 'Done'};}}
+        })[name]};
+      }
+      let context;
+      try {
+        const opened = await open(local ? local.url : base + 'steps/', local ? {} : {init: delayedRuntime});
+        const {page, errors} = opened; context = opened.context;
+        let started, release;
+        const waiting = new Promise(resolve => {started = resolve;});
+        if (local) await page.route('**/api/change', async route => {
+          await new Promise(resolve => {release = resolve; started();});
+          await route.continue();
+        });
+        let input, send;
+        if (field === 'talk') {
+          input = page.locator('#talk textarea'); send = page.locator('#talk button.go');
+        } else {
+          await page.locator('#tab-3').click();
+          if (field === 'diagram') {
+            const fig = page.locator('figure.graph').first();
+            await fig.getByRole('button', {name: /Ask .* to change it/}).click();
+            input = fig.locator('.live-bar input[type=text]'); send = fig.getByRole('button', {name: 'Ask', exact: true});
+          } else {
+            const box = field === 'option' ? page.locator('article.opt[data-about="B. In the background"]') : page.locator('.ask-about');
+            await box.locator('button.ask-open').click();
+            input = box.locator('textarea'); send = box.locator('.ask-row button.go');
+          }
+        }
+        await input.fill('  first request  ');
+        await send.click();
+        if (local) await waiting;
+        else await page.waitForFunction(() => !!window.__release);
+        await input.fill('second unsent request');
+        if (local) release(); else await page.evaluate(() => window.__release());
+        await page.waitForFunction(selector => !document.querySelector(selector).disabled,
+          field === 'talk' ? '#talk button.go' : field === 'diagram' ? 'figure.graph .live-bar input[type=text] + button' : field === 'option' ? 'article.opt[data-about="B. In the background"] .ask-row button.go' : '.ask-about button.go');
+        assert.equal(await input.inputValue(), 'second unsent request');
+        if (field !== 'diagram' || local) {
+          const saved = local ? JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))) : await page.evaluate(() => window.__saved.at(-1));
+          assert.deepEqual(saved.asks.map(ask => ask.text), ['first request']);
+        }
+        assert.deepEqual(errors, []);
+      } finally {
+        if (context) await context.close();
+        if (local) local.stop();
+      }
+    });
+  }
+}
