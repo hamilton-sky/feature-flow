@@ -1,7 +1,7 @@
 # Route the shared live UI through Claude and local adapters
 
 Type: task
-Status: resolved
+Status: open
 Blocked by: 01
 Test first: yes
 Level: 3
@@ -198,5 +198,26 @@ SPEC
 Reviewed through 5bd7ad914cd8d29805f7dc58babc0f719ed74f45, currently HEAD. Acceptance failures include future FeatureFlow work and obsolete fixture assumptions; the stale duplicate-operation expectation also contradicts the ticket's idempotent retry requirement.
 
 Author-written reporter proof embedded under Review findings was encountered; no verdict had formed before that exposure. No files changed.
+
+REVIEW: PASS
+
+## Review findings (round 4, pair review)
+
+QUALITY
+1. major packages/forkboard/forkboard/assets/live.js:76: A stale-source operation permanently blocks the save queue. Retry and reload retain the same impossible head operation, preventing subsequent questions, choices and valid diagram saves. An in-memory probe using the actual flush functions left both operations pending with zero provider calls after retry. Add explicit cancellation/recovery that preserves the old edit while allowing unrelated operations through.
+
+Probed source fingerprints, queued envelopes, retry/reload persistence, identity/time, compound approval/reopen fields, choice values, frozen controls, provider configuration and escaped labels. Both Done commands passed: 62 Python tests and 20 Chromium tests. Working tree remains clean; no retained artifacts observed. The concurrency fixture adjustment supports the stricter trusted-choice validation.
+
+REVIEW: FAIL
+
+SPEC
+- Python suite: MET (conductor) — python3 -m unittest discover -s packages/forkboard/tests -v passed.
+- Browser suite: MET (conductor) — npm --prefix packages/forkboard/tests/browser test passed.
+- Dirty diagrams, typed requests and explicit proposals: MET — targeted Chromium runs covering polling/proposal, repeated conflict, disconnection/regeneration and stale source printed # pass 3, # pass 1, and # fail 0.
+- scope: OK — test_server.py fixture adjustment is necessary because trusted document validation now rejects undeclared choices. Remaining changes implement the ticket or update its tracking files.
+- test first: OK — added browser/storage tests require production changes; conductor observed the test command fail before implementation.
+- range: base through d7c1948, which equals HEAD. Working tree remains clean; targeted tests cleaned their temporary files.
+- acceptance failures: reported stale retransmission behavior already exists at the base; other inspected acceptance expectations use obsolete Setup/immediate-pick controls rather than this ticket’s five tabs and staged approval.
+- disclosure: a filtering mistake exposed one author Answer bullet about trusted document metadata. No verdict had been formed before exposure.
 
 REVIEW: PASS
