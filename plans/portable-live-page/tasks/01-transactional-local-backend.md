@@ -1,7 +1,7 @@
 # Add transactional local storage and the loopback backend
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: —
 Test first: yes
 Level: 3
@@ -131,3 +131,28 @@ The supplied start `771915391496fb48e2c75dd73fc6e8ab5868c1a2` already includes t
 ## Attempt note (supplied base e3cb173)
 
 The supplied start `e3cb17340c691668273dc218b7d998e3adfc62fd` already contains the fingerprint fixes and their test-only commit `df22edfe01f943547ca76a60b6cd678d561be80b` (verified ancestor, exit 0). `feature_flow.proof._candidates` returned `[]` for this start. A test-only commit on this base would run against already-fixed production code; reverting the fixes first would make the candidate differ from the base in production files. No code or tests were changed. A base preceding the existing test-only commit or a correction to the test-first gate is needed. The ticket remains open.
+
+
+### Current-base verification (2026-11-12)
+
+**Built**: The clean checkout began this continuation at `709d962a56da3a2ea780ee087dae388756b4130c`, with implementation already committed after the prescribed base `65951d4cf7029240439aedd9342f8fb66daced6a`. Production changes are in `709d962`; the preceding `8aa2f9aeff97195435bce839f1a3eab70a0420cd` changes only Forkboard tests and the allowed stdlib test membership list. This continuation changes only this ticket's Status/Answer and an appended map decision; no production or test changes were needed.
+
+**Proof**:
+
+- Done when 1/check: fresh `python3 -m unittest discover -s packages/forkboard/tests -v` printed `Ran 55 tests in 4.054s` and `OK`, exit 0. Includes legacy state, queue deduplication, bounded lock contention, interrupted replacement, process death, cross-process answer/regeneration transactions and source-fingerprint regressions.
+- Done when 2: the same fresh command passed `test_cli_server_prints_url_restarts_and_rejects_busy_port`, which launches the real CLI twice on port 0, checks its actual loopback URL and state path, retains committed state through both restarts and rejects a busy explicit port. `test_host_origin_routes_methods_and_hostile_operations_do_not_mutate` and `test_symlink_and_corrupt_state_fail_closed` passed, proving narrow resources and unchanged state for rejected operations.
+- Done when 3: the same fresh command passed `test_two_browsers_stale_answer_and_retry`, asserting 412 with unchanged bytes and preserved concurrent answers, and `test_http_save_waits_for_agent_then_rejects_stale_context`, racing actual HTTP saves with separate-process answer/regeneration writers and rejecting an old source even after fetching a fresh revision. Request snapshots retain their original source context.
+- Re-ran the ticket test command against an isolated `git archive 8aa2f9a` inside the checkout: exit 1, `Ran 38 tests`, `FAILED (failures=1, errors=3)`. The legacy-source regression fails on the old fingerprint; imports fail because the storage/server modules do not yet exist. The archive was removed after the check. This verifies the existing failing-test history; no new test-first claim or fabricated failure is needed.
+- Build `python3 -m build --outdir dist`: exit 0, successfully built the wheel and sdist. Frozen Lint (Python 3.9 syntax parsing): exit 0. `git diff --check`: exit 0. Full frozen Test: left to the conductor's gate.
+
+**Decisions**: Retain the existing transaction and narrow HTTP implementation, including both restored source-fingerprint fixes. The fresh evidence above supersedes historical proof for this continuation. Compound approval/reopen and FeatureFlow integration remain with dependent tickets.
+
+**Shortcuts taken**: none.
+
+**Review fixes**:
+
+- Round-1 quality finding 1: retained the explicit matching-source validation in `storage.change`; fresh `test_version_requires_explicit_matching_source_even_with_fresh_revision` passed for missing/null/empty/numeric/stale sources, valid source locations and mismatched dual sources.
+- Round-1 quality finding 2: retained legacy version pinning before regeneration; fresh `test_regeneration_pins_legacy_versions_to_the_previous_source` passed, preserving both untagged and already tagged version provenance across repeated regeneration.
+- Test-first finding: the prescribed base now precedes `8aa2f9a`, whose entire diff from that base is the test paths listed above; production follows in `709d962`. The isolated failing-test run proves that the test commit precedes working implementation. Independent review remains the conductor's responsibility.
+
+**For later tickets**: Use `storage.transaction` for FeatureFlow-managed writers, and preserve explicit source fingerprints in browser version operations. This continuation introduces no new backend contract changes.

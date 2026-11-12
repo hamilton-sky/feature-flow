@@ -38,3 +38,5 @@ Five tickets remain; no folds. 01 stays open pending fingerprint-fix review. 02 
 Before restart, the independent tester must update acceptance against the newly approved spec: browser.cjs Setup selectors and immediate pick persistence become Style/Team tabs plus staged picks/Approve; Change targets the actual tab; test_portable.py proposal-only wording must distinguish valid compound Plan approval intent from forbidden executable/forged writes. Add atomic approve/reopen, about context, accepted freeze and read-only reality coverage. Preserve hostile-input, stale-source and concurrency checks. Do not have builders edit acceptance. Existing acceptance remains untouched until that tester handoff.
 
 01 — Reverified the restored source-fingerprint fixes with 55 Forkboard regressions and the full frozen gate; versions require matching source and legacy versions retain their previous source through regeneration.
+
+01 — Verified the restored backend against the corrected preimplementation base: 55 Forkboard tests pass and the isolated test-only commit fails before production; preserve explicit source fingerprints and the shared transaction seam.
