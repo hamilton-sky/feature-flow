@@ -13,6 +13,9 @@ The page is the guided flow's one page (feature_flow/flow_page.py): Style, Team,
 """
 
 import os
+import json
+import importlib
+import secrets
 import re
 import sys
 from pathlib import Path
@@ -95,20 +98,33 @@ def main(argv, out=None, err=None):
     out = out or sys.stdout
     err = err or sys.stderr
     args, style, fragment, target, live, tool, extra = [], None, False, None, None, None, []
+    provider, agent_label, port = "claude", None, 0
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--fragment":
             fragment = True
-        elif a in ("--live", "--asks", "--picks") and i + 1 < len(argv) and tool is None and live is None:
+        elif a in ("--live", "--serve", "--asks", "--picks") and i + 1 < len(argv) and tool is None and live is None:
             live, tool = argv[i + 1], a[2:]
             i += 1
-        elif a == "--answer" and i + 3 < len(argv) and tool is None:
-            live, tool, extra = argv[i + 1], "answer", argv[i + 2:i + 4]
+        elif a in ("--answer", "--answer-graph") and i + 3 < len(argv) and tool is None:
+            live, tool, extra = argv[i + 1], a[2:], argv[i + 2:i + 4]
             i += 3
         elif a == "--apply" and i + 3 < len(argv) and tool is None:
             live, tool, extra = argv[i + 1], "apply", argv[i + 2:i + 4]
             i += 3
+        elif a in ("--provider", "--agent-label", "--port") and i + 1 < len(argv):
+            if a == "--provider":
+                provider = argv[i + 1]
+            elif a == "--agent-label":
+                agent_label = argv[i + 1]
+            else:
+                try:
+                    port = int(argv[i + 1])
+                except ValueError:
+                    err.write("invalid port\n")
+                    return 2
+            i += 1
         elif a in ("--style", "--out") and i + 1 < len(argv):
             if a == "--style":
                 style = argv[i + 1]
@@ -127,17 +143,24 @@ def main(argv, out=None, err=None):
     feature = args[0]
     top = git.toplevel() or os.getcwd()
     path = source(top, feature)
-    if path is None:
-        err.write("no brainstorm for %s: write .feature-flow/state/brainstorm-%s.md first (brainstorm guide)\n"
-                  % (feature, feature))
+    plans = flow_page.folders(top, feature)
+    if path is None and not any(plans) and tool not in ("asks", "answer", "answer-graph"):
+        err.write("no brainstorm for %s and no plan found\n" % feature)
         return 1
     fb = studio.load()
     if fb is None:
         err.write(studio.MISSING)
         return 1
-    text = path.read_text(encoding="utf-8", errors="replace")
-    if tool in ("asks", "answer", "apply", "picks"):
-        return live_tool(fb, tool, path, text, Path(live), extra, out, err, flow_page.folders(top, feature))
+    importlib.import_module("forkboard.storage")
+    importlib.import_module("forkboard.server")
+    text = path.read_text(encoding="utf-8", errors="replace") if path else ""
+    if tool in ("asks", "answer", "answer-graph", "apply", "picks"):
+        return live_tool(fb, tool, path, text, Path(live), extra, out, err, plans)
+    if provider not in ("claude", "local"):
+        err.write("provider must be claude or local\n")
+        return 2
+    if tool == "serve":
+        provider = "local"
     names = fb.page.themes()
     _, meta, _, _ = parse(text)
     name = (style or meta.get("style") or os.environ.get("FLOW_STYLE") or DEFAULT_STYLE).strip().lower()
@@ -145,35 +168,78 @@ def main(argv, out=None, err=None):
         err.write("no style %s: pick one of %s (Forkboard's themes)\n" % (name, ", ".join(names) or "none installed"))
         return 1
     css = fb.page.theme_css(name)
-    old_state = fb.live.load(Path(live) / "state.json") if tool == "live" else None
-    approved = None
-    if tool == "live":  # the steps the user approved on the page move it on, one Approve at a time
-        approved = set(fb.live.approved(old_state or {})) if hasattr(fb.live, "approved") else set()
-    try:
-        doc = flow_page.document(document(text, feature), text, top=top, feature=feature, approved=approved)
-    except brainstorm_mode.BadMode as e:
-        err.write("%s. fix the header of %s\n" % (e, path.as_posix()))
-        return 1
-    if tool == "live":  # the page and its state, to publish together as an artifact that saves itself
+
+    def compose(old):
+        current_path = source(top, feature)
+        current_text = current_path.read_text(encoding="utf-8", errors="replace") if current_path else ""
+        base = document(current_text, feature) if current_path else {
+            "schema": studio.MAJOR, "id": feature, "kind": "Plan", "title": feature,
+            "meta": {}, "intro": "", "sections": []}
+        approved = set(fb.live.approved(old or {})) if tool in ("live", "serve") else None
+        doc = flow_page.document(base, current_text, top=top, feature=feature, approved=approved)
+        draft, plan = flow_page.folders(top, feature)
+        if not current_path:
+            for step in doc["steps"][:3]:
+                step.update(state="done", summary="not used")
+            doc["sections"] = [section for section in doc["sections"] if section.get("step") not in ("Style", "Team", "Options")]
+            doc["sections"][:0] = [{"title": step, "kind": "text", "markdown": "Not used", "items": [], "step": step} for step in ("Style", "Team", "Options")]
+        if plan:
+            doc["frozen"] = True
+            doc["phase"] = "complete" if doc["steps"][4]["state"] == "done" else "build"
+        elif draft:
+            doc["phase"] = "draft"
+        else:
+            doc["phase"] = "brainstorm"
+        return doc
+
+    def regenerate(force=False):
         folder = Path(live)
         folder.mkdir(parents=True, exist_ok=True)
-        st = fb.live.state(doc, old_state)
-        (folder / "index.html").write_text(fb.page.render(doc, css, name, True, True), encoding="utf-8")
-        (folder / "state.json").write_text(fb.live.dump(st), encoding="utf-8")
-        out.write("wrote %s and %s (round %d, %d figures, %d open asks)\n" % (
-            (folder / "index.html").as_posix(), (folder / "state.json").as_posix(), st["round"], len(st["figures"]),
-            sum(1 for a in st["asks"] if not a.get("answer"))))
+        state_path = folder / "state.json"
+        with fb.storage.lock(state_path):
+            old = fb.storage.read(state_path, missing=True)
+            doc = compose(old)
+            html = fb.page.render(doc, css, name, provider != "local", True, provider=provider, agent_label=agent_label)
+            page_path = folder / "index.html"
+            if not force and page_path.is_file() and page_path.read_text(encoding="utf-8") == html:
+                return old
+            st = fb.storage._validate(fb.live.state(doc, old))
+            st["phase"] = doc["phase"]
+            st.setdefault("identity", {"id": "local_" + secrets.token_hex(12), "label": "You"})
+            data = fb.live.dump(st)
+            if len(data.encode("utf-8")) > fb.storage.MAX_STATE:
+                raise ValueError("page state exceeds the 8 MiB limit")
+            fb.storage.replace(state_path, data)
+            fb.storage.replace(page_path, html)
+            return st
+
+    try:
+        if tool in ("live", "serve"):
+            st = regenerate(force=True)
+            out.write("wrote %s and %s (round %d, %d figures, %d open asks)\n" % (
+                (Path(live) / "index.html").as_posix(), (Path(live) / "state.json").as_posix(), st["round"],
+                len(st["figures"]), sum(1 for a in st["asks"] if not a.get("answer"))))
+            if tool == "serve":
+                fb.server.serve(live, port, out, refresh=regenerate)
+            return 0
+        doc = compose(None)
+        dest = Path(target) if target else path.with_suffix(".html") if path else (plans[1] or plans[0]) / "index.html"
+        dest.write_text(fb.page.render(doc, css, name, fragment), encoding="utf-8")
+        out.write("wrote %s\n" % dest.as_posix())
         return 0
-    dest = Path(target) if target else path.with_suffix(".html")
-    dest.write_text(fb.page.render(doc, css, name, fragment), encoding="utf-8")
-    out.write("wrote %s\n" % dest.as_posix())
-    return 0
+    except (OSError, ValueError, brainstorm_mode.BadMode) as e:
+        err.write("%s\n" % e)
+        return 1
 
 
 def live_tool(fb, tool, path, text, state_path, extra, out, err, plans=(None, None)):
     if state_path.is_dir():
         state_path = state_path / "state.json"
-    st = fb.live.load(state_path)
+    try:
+        st = fb.storage.read(state_path)
+    except (OSError, ValueError) as e:
+        err.write("%s\n" % e)
+        return 1
     if st is None:
         err.write("no page state at %s: read the published page's state.json into it first (brainstorm guide)\n"
                   % state_path.as_posix())
@@ -181,10 +247,19 @@ def live_tool(fb, tool, path, text, state_path, extra, out, err, plans=(None, No
     try:
         if tool == "asks":
             out.write(fb.live.asks(st) + "\n")
-        elif tool == "answer":
+        elif tool in ("answer", "answer-graph"):
             if not extra[0].isdigit():
                 raise ValueError("the ask number must be a number, not %s" % extra[0])
-            state_path.write_text(fb.live.dump(fb.live.answer(st, int(extra[0]), extra[1])), encoding="utf-8")
+            if tool == "answer-graph":
+                with Path(extra[1]).open("rb") as stream:
+                    raw = stream.read(fb.storage.MAX_BODY + 1)
+                if len(raw) > fb.storage.MAX_BODY:
+                    raise ValueError("graph proposal exceeds the 1 MiB limit")
+                proposal = json.loads(raw, parse_constant=fb.storage._constant)
+                fb.storage.transaction(state_path, lambda old: fb.live.answer_graph(old, int(extra[0]), proposal))
+            else:
+                fb.storage._text(extra[1], "answer text")
+                fb.storage.transaction(state_path, lambda old: fb.live.answer(old, int(extra[0]), extra[1]))
             out.write("answered ask %s in %s\n" % (extra[0], state_path.as_posix()))
         elif tool == "picks":
             if not hasattr(fb.live, "picks"):
@@ -195,7 +270,7 @@ def live_tool(fb, tool, path, text, state_path, extra, out, err, plans=(None, No
             option = picks.get(flow_page.OPTION_KEY)
             setup_picks = {k: v for k, v in picks.items() if not flow_page.is_plan_key(k) and k != flow_page.OPTION_KEY}
             if not picks:
-                out.write("no picks on the page: %s is as it was\n" % path.as_posix())
+                out.write("no picks on the page: %s is as it was\n" % (path.as_posix() if path else "plan"))
                 return 0
             if setup_picks and not (draft or plan):  # once the plan is drafted, Style and Team are done
                 try:
@@ -217,13 +292,15 @@ def live_tool(fb, tool, path, text, state_path, extra, out, err, plans=(None, No
                 said = flow_plan.apply_picks(draft, plan_picks)
                 out.write("wrote %s into the draft %s\n" % ("; ".join(said), draft.as_posix()))
         else:
+            if path is None:
+                raise ValueError("diagram apply unavailable: no brainstorm source")
             new, dropped = apply(text, fb, st, extra[0], extra[1])
             path.write_text(new, encoding="utf-8")
             if dropped:
                 err.write("note: figure %s had %s, which the page does not keep; they are gone from the brainstorm now\n"
                           % (extra[0], ", ".join(dropped)))
             out.write("figure %s in %s is now version %s\n" % (extra[0], path.as_posix(), extra[1]))
-    except ValueError as e:
+    except (OSError, ValueError, TypeError, RecursionError) as e:
         err.write("%s\n" % e)
         return 1
     return 0

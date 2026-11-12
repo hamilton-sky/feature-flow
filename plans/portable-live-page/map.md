@@ -54,3 +54,5 @@ Before restart, the independent tester must update acceptance against the newly 
 02 — Preserve stale-source edits separately on explicit recovery, then resume queued saves without rebasing the old graph.
 
 02 — Approval acknowledgements clear only staged choices matching their submitted snapshot, retaining newer edits.
+
+03 — Render plan-only and live Build phases through a trusted refresh, sharing the storage lock with browser and agent writes.

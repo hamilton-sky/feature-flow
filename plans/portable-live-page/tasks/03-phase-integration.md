@@ -1,7 +1,7 @@
 # Expose all live phases and reuse agent commands safely
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 01, 02
 Test first: yes
 Level: 3
@@ -44,3 +44,13 @@ prints # fail 0
 - feature_flow/flow_plan.py (read-only)
 
 ## Answer
+
+**Built**: Updated `feature_flow/brainstorm_page.py` to expose local provider, agent label, server/port, graph answers and plan-only rendering, with shared-lock regeneration and transactional replies. Added phase, validation, accepted-freeze and subprocess concurrency tests in `tests/py/test_portable_live_page.py`, and an actual FeatureFlow browser refresh/answer/dirty-editor fixture in `packages/forkboard/tests/browser/page.test.js`. Existing aliases delegate to the same command.
+
+**Proof**: Starting commit `4486878236f73145db6472786453eaf00e2dde4d`; test-only commit `9e0c39a` failed the new plan-only launch test on the missing provider flag. Fresh `python3 -m unittest discover -s tests/py -p "test_*page.py" -v`: 30 tests, OK, exit 0. Fresh `python3 -m unittest discover -s tests/py -p "test_flow_plan.py" -v`: 6 tests, OK, exit 0. Fresh `npm --prefix packages/forkboard/tests/browser test` with supplied TAP environment: 22 tests, # fail 0, exit 0; the FeatureFlow fixture observes an agent answer and draft-to-complete update while preserving dirty graph and text. The phase tests exercise draft, active and complete with and without brainstorm, invalid gate picks, accepted freeze, and parallel subprocess answers/regenerations. Python 3.9 syntax Lint passed. Full Test left to the conductor's gate.
+
+**Decisions**: Compose the document inside the same cross-process storage lock used by HTTP, using the latest approved state and replacing state and HTML under that lock. The refresh callback compares rendered content before regeneration; it reads the existing phase composition on each poll, including ticket and reality inputs. Accepted plans freeze page choices, while valid draft picks retain the existing validators.
+
+**Shortcuts taken**: Regeneration uses the storage module's lock, validation and atomic-replacement primitives directly because its transaction helper takes a precomputed page; a shared helper that accepts a page computed under the lock would remove that duplication if the storage API is extended.
+
+**For later tickets**: The page uses the same existing status aliases; documentation should include `--serve`, `--port`, `--provider`, `--agent-label`, and `--answer-graph`. Preserve the shared lock and latest-state composition when adjusting regeneration.

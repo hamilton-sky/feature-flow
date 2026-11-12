@@ -24,3 +24,139 @@ class PortablePage(unittest.TestCase):
             self.assertTrue((folder / 'state.json').exists())
             self.assertIn('not used', (folder / 'index.html').read_text().lower())
             self.assertFalse((root / 'plans/demo/brainstorm.md').exists())
+
+    def test_plan_picks_and_accepted_freeze_without_brainstorm(self):
+        import json
+        from feature_flow import studio
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            draft = root / '.feature-flow/state/draft/demo'
+            (draft / 'tasks').mkdir(parents=True)
+            (draft / 'commands.md').write_text('Profile: standard\n')
+            (draft / 'tasks/01-test.md').write_text('# Test\n\nStatus: open\nBlocked by: none\n')
+            folder = root / 'live'
+            with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=str(root)):
+                self.assertEqual(brainstorm_page.main(['demo', '--live', str(folder)], io.StringIO(), io.StringIO()), 0)
+                fb = studio.load()
+                state = fb.storage.read(folder / 'state.json')
+                state['picks'] = {'profile': {'value': 'careful'}, 'full_review': {'value': ['01']}}
+                fb.storage.transaction(folder / 'state.json', lambda old: state)
+                self.assertEqual(brainstorm_page.main(['demo', '--picks', str(folder)], io.StringIO(), io.StringIO()), 0)
+                self.assertIn('careful', (draft / 'commands.md').read_text())
+                plan = root / 'plans/demo'
+                plan.parent.mkdir(parents=True)
+                import shutil
+                shutil.copytree(draft, plan)
+                before = (plan / 'commands.md').read_text()
+                state['picks']['profile']['value'] = 'fast'
+                fb.storage.transaction(folder / 'state.json', lambda old: state)
+                self.assertEqual(brainstorm_page.main(['demo', '--picks', str(folder)], io.StringIO(), io.StringIO()), 0)
+                self.assertEqual((plan / 'commands.md').read_text(), before)
+                self.assertEqual(brainstorm_page.main(['demo', '--live', str(folder)], io.StringIO(), io.StringIO()), 0)
+                self.assertTrue(fb.storage.read(folder / 'state.json')['_document']['frozen'])
+                err = io.StringIO()
+                self.assertEqual(brainstorm_page.main(['demo', '--apply', str(folder), '1', 'original'], io.StringIO(), err), 1)
+                self.assertIn('no brainstorm source', err.getvalue())
+
+    def test_answer_preserves_latest_state_without_source(self):
+        from feature_flow import studio
+        with tempfile.TemporaryDirectory() as root:
+            folder = Path(root) / 'live'
+            folder.mkdir()
+            fb = studio.load()
+            state = fb.live.state({'id': 'demo', 'sections': []})
+            state['asks'] = [{'text': 'Why?', 'about': '01 Test', 'step': 'Plan'}]
+            import importlib
+            importlib.import_module('forkboard.storage')
+            fb.storage.transaction(folder / 'state.json', lambda old: state, create=True)
+            with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=root):
+                self.assertEqual(brainstorm_page.main(['demo', '--answer', str(folder), '1', 'Because'], io.StringIO(), io.StringIO()), 0)
+            ask = fb.storage.read(folder / 'state.json')['asks'][0]
+            self.assertEqual((ask['answer'], ask['about'], ask['step']), ('Because', '01 Test', 'Plan'))
+
+    def test_subprocess_answer_and_regeneration_share_lock(self):
+        import subprocess
+        import sys
+        from feature_flow import studio
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            source = root / 'plans/demo/brainstorm.md'
+            source.parent.mkdir(parents=True)
+            source.write_text('# Demo\n\n## Idea\n\nA review.\n')
+            folder = root / 'live'
+            env = dict(os.environ, PYTHONPATH=str(Path(brainstorm_page.__file__).resolve().parent.parent))
+            cmd = [sys.executable, '-m', 'feature_flow', 'brainstorm-page', 'demo']
+            subprocess.run(cmd + ['--live', str(folder)], cwd=root, env=env, check=True, capture_output=True)
+            fb = studio.load()
+            def add_asks(st):
+                st['asks'] = [{'text': 'Question %d' % i} for i in range(8)]
+                return st
+            fb.storage.transaction(folder / 'state.json', add_asks)
+            writers = [subprocess.Popen(cmd + ['--answer', str(folder), str(i), 'Answer %d' % i], cwd=root, env=env,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE) for i in range(1, 9)]
+            writers += [subprocess.Popen(cmd + ['--live', str(folder)], cwd=root, env=env,
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE) for _ in range(3)]
+            for proc in writers:
+                out, err = proc.communicate(timeout=15)
+                self.assertEqual(proc.returncode, 0, (out, err))
+            state = fb.storage.read(folder / 'state.json')
+            self.assertEqual([a['answer'] for a in state['asks']], ['Answer %d' % i for i in range(1, 9)])
+
+    def test_refresh_tracks_each_phase_with_and_without_brainstorm(self):
+        from feature_flow import studio
+        for with_brainstorm in (False, True):
+            with self.subTest(with_brainstorm=with_brainstorm), tempfile.TemporaryDirectory() as root:
+                root = Path(root)
+                if with_brainstorm:
+                    source = root / '.feature-flow/state/brainstorm-demo.md'
+                    source.parent.mkdir(parents=True)
+                    source.write_text('# Demo\n\n## Idea\n\nHello.\n')
+                draft = root / '.feature-flow/state/draft/demo'
+                (draft / 'tasks').mkdir(parents=True)
+                (draft / 'commands.md').write_text('Profile: standard\n')
+                ticket = draft / 'tasks/01-test.md'
+                ticket.write_text('# Test\n\nStatus: open\nBlocked by: none\n')
+                folder = root / 'live'
+                fb = studio.load()
+                import importlib
+                importlib.import_module('forkboard.server')
+                callbacks = []
+                def serve(folder, port, out, refresh):
+                    callbacks.append(refresh)
+                with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=str(root)), mock.patch.object(fb.server, 'serve', side_effect=serve):
+                    self.assertEqual(brainstorm_page.main(['demo', '--serve', str(folder)], io.StringIO(), io.StringIO()), 0)
+                    read = lambda: fb.storage.read(folder / 'state.json')
+                    self.assertEqual(read()['phase'], 'draft')
+                    import shutil
+                    plan = root / 'plans/demo'
+                    plan.parent.mkdir(parents=True)
+                    shutil.copytree(draft, plan)
+                    callbacks[0]()
+                    self.assertEqual(read()['phase'], 'build')
+                    (plan / 'tasks/01-test.md').write_text('# Test\n\nStatus: resolved\nBlocked by: none\n')
+                    callbacks[0]()
+                    self.assertEqual(read()['phase'], 'complete')
+                    self.assertTrue(read()['_document']['frozen'])
+                    self.assertEqual(source.exists() if with_brainstorm else (plan / 'brainstorm.md').exists(), with_brainstorm)
+
+    def test_invalid_plan_pick_does_not_write(self):
+        from feature_flow import studio
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            draft = root / '.feature-flow/state/draft/demo'
+            (draft / 'tasks').mkdir(parents=True)
+            commands = draft / 'commands.md'
+            commands.write_text('Profile: standard\n')
+            (draft / 'tasks/01-test.md').write_text('# Test\n\nStatus: open\nBlocked by: none\n')
+            folder = root / 'live'
+            with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=str(root)):
+                self.assertEqual(brainstorm_page.main(['demo', '--live', str(folder)], io.StringIO(), io.StringIO()), 0)
+                fb = studio.load()
+                def pick(st):
+                    st['picks'] = {'gate': {'value': 'off unsafe'}}
+                    return st
+                fb.storage.transaction(folder / 'state.json', pick)
+                err = io.StringIO()
+                self.assertEqual(brainstorm_page.main(['demo', '--picks', str(folder)], io.StringIO(), err), 1)
+                self.assertEqual(commands.read_text(), 'Profile: standard\n')
+                self.assertIn('gate', err.getvalue())

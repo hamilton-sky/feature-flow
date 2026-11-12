@@ -542,3 +542,46 @@ test('delayed approval preserves newer staged list choices', async () => {
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
+
+test('FeatureFlow refreshes draft to completed build while retaining a dirty editor', async () => {
+  const root = fs.mkdtempSync(path.join(dir, 'feature-'));
+  const draft = path.join(root, '.feature-flow', 'state', 'draft', 'demo');
+  fs.mkdirSync(path.join(draft, 'tasks'), {recursive: true});
+  fs.writeFileSync(path.join(draft, 'commands.md'), 'Profile: standard\n');
+  fs.writeFileSync(path.join(draft, 'tasks', '01-test.md'), '# Test\n\nStatus: open\nBlocked by: none\n');
+  const folder = path.join(root, 'live');
+  const repo = path.resolve(PACKAGE, '..', '..');
+  const proc = spawn(PYTHON, ['-u', '-m', 'feature_flow', 'brainstorm-page', 'demo', '--serve', folder],
+    {cwd: root, env: {...process.env, PYTHONPATH: repo}});
+  try {
+    const url = await new Promise((resolve, reject) => {
+      let output = ''; let errors = '';
+      proc.stderr.on('data', chunk => { errors += chunk; });
+      proc.stdout.on('data', chunk => { output += chunk; const m = output.match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) resolve(m[0]); });
+      proc.on('exit', code => reject(new Error('server exited ' + code + ': ' + errors)));
+    });
+    const {page, context} = await open(url);
+    await page.locator('#talk textarea').fill('Why this ticket?');
+    await page.locator('#talk button.go').click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Why this ticket?'));
+    execFileSync(PYTHON, ['-m', 'feature_flow', 'brainstorm-page', 'demo', '--answer', folder, '1', 'Because it is needed'],
+      {cwd: root, env: {...process.env, PYTHONPATH: repo}});
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Because it is needed'));
+    await page.locator('#tab-4').click();
+    const fig = page.locator('figure.graph').first();
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Unsaved'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    await page.locator('#talk textarea').fill('Still typing');
+    const plan = path.join(root, 'plans', 'demo');
+    fs.mkdirSync(path.dirname(plan), {recursive: true});
+    fs.cpSync(draft, plan, {recursive: true});
+    fs.writeFileSync(path.join(plan, 'tasks', '01-test.md'), '# Test\n\nStatus: resolved\nBlocked by: none\n');
+    await page.getByRole('button', {name: 'Review update', exact: true}).waitFor({timeout: 15000});
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Still typing');
+    const state = JSON.parse(fs.readFileSync(path.join(folder, 'state.json')));
+    assert.equal(state.phase, 'complete');
+    assert.equal(state._document.frozen, true);
+    await context.close();
+  } finally { proc.kill(); }
+});
