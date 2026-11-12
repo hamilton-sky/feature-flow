@@ -3,7 +3,7 @@
 // usage: node --test page.test.js   (needs python3 on PATH and playwright; see package.json)
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
@@ -233,4 +233,73 @@ test('a live page with steps shows them as tabs, saves picks only on Approve, an
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth) <= 1280, true);
   assert.deepEqual(errors, []);
   await context.close();
+});
+
+
+async function localServer(fixture = 'sketch', label = 'Codex') {
+  const folder = fs.mkdtempSync(path.join(dir, 'local-'));
+  forkboard('live', path.join(FIXTURES, fixture + '.json'), folder, '--provider', 'local', '--agent-label', label);
+  const proc = spawn(PYTHON, ['-u', '-m', 'forkboard', 'serve', folder], { env: { ...process.env, PYTHONPATH: PACKAGE } });
+  const url = await new Promise((resolve, reject) => {
+    let output = '';
+    proc.stdout.on('data', chunk => { output += chunk; const m = output.match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) resolve(m[0]); });
+    proc.on('exit', code => reject(new Error('server exited ' + code)));
+  });
+  return { folder, url, stop: () => proc.kill() };
+}
+
+test('local queue, reply and explicit proposal preserve dirty edits and typed text during polling', async () => {
+  const local = await localServer('sketch', '<Codex>');
+  try {
+    const { page, errors, context } = await open(local.url);
+    const fig = page.locator('figure.graph').first();
+    await page.locator('#talk textarea').fill('Unsent question');
+    await fig.getByRole('button', { name: 'Ask <Codex> to change it', exact: true }).click();
+    await fig.locator('.live-bar input[type=text]').fill('Add a cache');
+    await fig.getByRole('button', { name: 'Ask', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Waiting for <Codex>'));
+    const state = () => JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.equal(state().asks.length, 1);
+    assert.equal(state().asks[0].kind, 'diagram');
+    assert.ok(state().asks[0].source);
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Dirty'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    const proposal = state().asks[0].graph;
+    proposal.nodes[0].label = 'Proposed';
+    const file = path.join(local.folder, 'proposal.json'); fs.writeFileSync(file, JSON.stringify(proposal));
+    forkboard('answer-graph', local.folder, '1', file);
+    await page.getByRole('button', { name: 'Preview proposal', exact: true }).waitFor();
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Unsent question');
+    assert.equal(Object.keys(state().figures['1'].versions).length, 0);
+    await page.getByRole('button', { name: 'Preview proposal', exact: true }).click();
+    assert.ok((await fig.locator('g.node text').allTextContents()).includes('Proposed'));
+    assert.equal(Object.keys(state().figures['1'].versions).length, 0);
+    await fig.getByRole('button', { name: 'Save as my version', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('Saved'));
+    assert.equal(Object.keys(state().figures['1'].versions).length, 1);
+    assert.deepEqual(errors, []);
+    await context.close();
+  } finally { local.stop(); }
+});
+
+test('local staged list choices approve atomically and survive polling', async () => {
+  const local = await localServer('steps');
+  try {
+    const { page, errors, context } = await open(local.url);
+    const lens = page.locator('fieldset[data-key=lens]');
+    await page.waitForFunction(() => !document.querySelector('button.approve').disabled);
+    await lens.locator('input[value=security]').check();
+    await page.waitForTimeout(2400);
+    assert.ok(await lens.locator('input[value=security]').isChecked());
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))).picks, {});
+    await page.locator('button.approve').click();
+    await page.waitForFunction(() => document.querySelector('button.approve').textContent === 'Approved');
+    const st = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.deepEqual(st.picks.lens.value, ['ux', 'security']);
+    assert.equal(st.asks.length, 1);
+    assert.equal(st.approved.Team.by, st.identity.id);
+    assert.deepEqual(errors, []);
+    await context.close();
+  } finally { local.stop(); }
 });

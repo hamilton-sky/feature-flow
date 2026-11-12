@@ -219,7 +219,7 @@ class Approvals(unittest.TestCase):
         self.assertNotEqual(st['asks'][-1]['at'], 'forged')
         again = storage.change(self.path, env, 'stale')
         self.assertEqual(len(again['asks']), 1)
-        st = storage.change(self.path, {'id': 'reopen', 'change': {'unapprove': ['Style', 'Team', 'Options', 'Plan', 'Build'],
+        st = storage.change(self.path, {'id': 'reopen', 'change': {'unapprove': ['Style', 'Team', 'Options'],
               'ask': {'step': 'Style', 'text': 'Change Style'}}}, storage.revision(st))
         self.assertEqual(st['approved'], {})
         self.assertEqual(st['asks'][-1]['step'], 'Style')
