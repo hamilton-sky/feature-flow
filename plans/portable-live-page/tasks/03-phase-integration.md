@@ -73,3 +73,7 @@ SPEC
 - Test first: OK — the diff adds tests, and the conductor observed the test command fail before the production change.
 
 REVIEW: PASS
+
+## Attempt note
+
+Reproduced both findings: an operation against the draft revision was accepted after copying the accepted plan into place, and an injected index.html replacement failure left state.json changed while index.html stayed old. The HTTP mutation path is in `packages/forkboard/forkboard/server.py`, and shared transaction/recovery paths are in `packages/forkboard/forkboard/storage.py`; neither is in Touches. Coordinating refresh and validation with mutation and recovering publication on all readers and writers requires both paths, exceeding the one-extra-file exception. Ticket remains open; widen the footprint or add a prerequisite ticket for the storage/server transaction seam before retrying.
