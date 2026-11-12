@@ -505,3 +505,39 @@ for (const host of ['local', 'native']) {
     });
   }
 }
+
+test('delayed approval preserves newer staged list choices', async () => {
+  function delayedApproval() {
+    window.__saved = [];
+    window.claude = {use: async name => ({
+      artifact: {publish: async files => {
+        await new Promise(resolve => { window.__release = resolve; });
+        window.__saved.push(JSON.parse(files['state.json'].content));
+        return {shas: {'state.json': 'saved'}};
+      }},
+      user: {id: async () => 'me', profiles: async () => ({})},
+    })[name]};
+  }
+  const {page, errors, context} = await open(base + 'steps/', {init: delayedApproval});
+  try {
+    const lens = page.locator('fieldset.choice[data-key=lens]');
+    await page.waitForFunction(() => !document.querySelector('button.approve').disabled);
+    await lens.locator('input[value=security]').check();
+    await page.locator('button.approve[data-approve=Team]').click();
+    await page.waitForFunction(() => !!window.__release);
+    await lens.locator('input[value=security]').uncheck();
+    await lens.locator('input[value=artistic]').check();
+    await page.evaluate(() => window.__release());
+    await page.waitForFunction(() => document.querySelector('button.approve').textContent === 'Approved');
+    assert.deepEqual(await page.evaluate(() => window.__saved[0].picks.lens.value), ['ux', 'security']);
+    await page.waitForFunction(() => {
+      const key = 'brainstorm-live:' + document.querySelector('.wrap').dataset.page + ':choices';
+      return JSON.parse(sessionStorage.getItem(key) || '{}').lens?.includes('artistic');
+    }, null, {timeout: 2000});
+    await page.reload();
+    await page.waitForSelector('.live-bar');
+    assert.equal(await lens.locator('input[value=artistic]').isChecked(), true);
+    assert.equal(await lens.locator('input[value=security]').isChecked(), false);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
