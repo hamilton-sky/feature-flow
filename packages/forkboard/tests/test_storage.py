@@ -90,7 +90,7 @@ storage.transaction(p,update)
     def test_graph_proposal_uses_request_snapshot_and_never_replaces_versions(self):
         st = storage.read(self.path)
         graph = st['figures']['1']['original']
-        st = storage.change(self.path, {'id': 'diagram', 'change': {'ask': {'kind': 'diagram', 'figure': '1', 'text': 'Change it', 'graph': graph}}}, storage.revision(st))
+        st = storage.change(self.path, {'id': 'diagram', 'change': {'ask': {'kind': 'diagram', 'figure': '1', 'text': 'Change it', 'source': st['figures']['1']['source'], 'graph': graph}}}, storage.revision(st))
         source = st['asks'][0]['source']
         storage.transaction(self.path, lambda old: live.state(self.doc, old))
         st = storage.transaction(self.path, lambda old: live.answer_graph(old, 1, graph))
@@ -156,6 +156,30 @@ class Validation(unittest.TestCase):
             with self.assertRaises(storage.Conflict):
                 storage.change(self.path, {'id': 'mismatch', 'change': {'version': payload}}, storage.revision(current))
             self.assertEqual(self.path.read_bytes(), before)
+
+    def test_ask_graph_requires_matching_source_and_rejects_stale_saved_versions(self):
+        original = storage.read(self.path)['figures']['1']
+        storage.transaction(self.path, lambda old: dict(old, figures=dict(old['figures'], **{
+            '1': dict(old['figures']['1'], versions={'saved': {'graph': original['original'], 'source': original['source']}})})))
+        altered = helpers.fixture('sketch')
+        altered['sections'][0]['markdown'] = altered['sections'][0]['markdown'].replace('Tasks table', 'New source')
+        current = storage.transaction(self.path, lambda old: live.state(altered, old))
+        source = current['figures']['1']['source']
+        before = self.path.read_bytes()
+        payloads = [dict(figure='1', text='Change', graph=original['original'], **fields)
+                    for fields in ({}, {'source': None}, {'source': ''}, {'source': 12}, {'source': original['source']})]
+        payloads += [dict(figure='1', text='Change saved', version='saved', **fields)
+                     for fields in ({}, {'source': source})]
+        for index, payload in enumerate(payloads):
+            self.path.write_bytes(before)
+            with self.subTest(payload=payload):
+                with self.assertRaises(ValueError):
+                    storage.change(self.path, {'id': 'unsafe-ask-%d' % index, 'change': {'ask': payload}}, storage.revision(current))
+                self.assertEqual(self.path.read_bytes(), before)
+        current = storage.change(self.path, {'id': 'safe-ask', 'change': {'ask': {
+            'figure': '1', 'text': 'Change current', 'source': source, 'graph': current['figures']['1']['original']}}}, storage.revision(current))
+        self.assertEqual(current['asks'][0]['source'], source)
+        self.assertEqual(current['asks'][0]['graph'], current['figures']['1']['original'])
 
     def test_process_death_before_replace_retains_previous_commit_and_lock(self):
         before = self.path.read_bytes()
