@@ -421,6 +421,17 @@ test('local figure source change blocks blind conflict replay without discarding
     assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
     assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))).figures['1'].versions).length, 0);
     assert.ok(await page.getByRole('button', {name: 'Retry save', exact: true}).isVisible());
+    await page.locator('#talk textarea').fill('Unrelated question');
+    await page.locator('#talk button.go').click();
+    await page.getByRole('button', {name: 'Keep edit and unblock saves', exact: true}).click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Unrelated question'));
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    await page.reload();
+    await page.getByRole('button', {name: 'Restore preserved edit', exact: true}).click();
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    const saved = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.deepEqual(saved.asks.map(a => a.text), ['Unrelated question']);
+    assert.equal(Object.keys(saved.figures['1'].versions).length, 0);
     await context.close();
   } finally {local.stop();}
 });
