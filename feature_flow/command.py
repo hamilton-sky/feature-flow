@@ -24,7 +24,8 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]
        feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]
        feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]
-       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version>
+       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE
+       feature-flow brainstorm-page <feature> --serve DIR [--port N] [--agent-label NAME] | --answer-graph STATE <n> <graph.json>
        feature-flow --version
 install copies the skill, its roles, scripts and guides into a repo; --user installs them once for every repo, in ~/.claude, ~/.agents and ~/.feature-flow, and writes nothing into a repo. feature-flow install --help says more.
 uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude, ~/.agents and ~/.feature-flow.

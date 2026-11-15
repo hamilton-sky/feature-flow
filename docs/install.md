@@ -78,6 +78,8 @@ To remove it, run `feature-flow uninstall` (or `uvx feature-flow-cli uninstall`)
 
 ## Upgrading
 
+Upgrade between features. If you upgraded in the middle of a ticket and the run stops with `STOP flow code changed while building`, run `feature-flow resume <feature> --dry-run` to see what it would accept, then `feature-flow resume <feature> --accept-code` to carry on from where the ticket started ([more](speed.md#when-a-run-stops)). `feature-flow doctor <feature>` says where any run stands. A repo with its own copy of the conductor (an install into the repo, or the feature-flow repo itself) runs that copy, so `status`, `resume` and `report` warn when it is older than the feature-flow you installed.
+
 Earlier versions had seven skills and an unattended loop. The five flow skills are gone, and `/feature-flow` replaces them:
 
 - `plan-feature` → `/feature-flow <feature>` before a plan exists.
