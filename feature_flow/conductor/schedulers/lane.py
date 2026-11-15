@@ -1,7 +1,7 @@
 """Lanes: tickets side by side in their own worktrees. A passed ticket waits in the merge phase and is merged into
 the feature branch, in the integration worktree, before a new ticket is leased."""
 
-from feature_flow import lanes
+from feature_flow.conductor import lanes
 from feature_flow.verify import checks, gate
 from feature_flow.plan import tickets
 from feature_flow.infra import git, state

@@ -8,7 +8,7 @@ import hashlib
 import shlex
 from pathlib import Path
 
-from feature_flow import codeintel as code_intel
+from feature_flow.conductor import codeintel as code_intel
 
 MAX = 3  # most scouts for one phase
 LINES = 60  # most lines of one reply that go into the prompt

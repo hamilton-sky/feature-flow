@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-# a separate tool the scouts and reviewers ask when it is installed (feature_flow/codeintel.py); never imported
+# a separate tool the scouts and reviewers ask when it is installed (feature_flow/conductor/codeintel.py); never imported
 codeintel = ["codecortex>=0.29"]
 
 [project.urls]

@@ -1,6 +1,6 @@
 """The build of a ticket: handed to a builder, then judged by the check pipeline and the review policy."""
 
-from feature_flow import lanes, prompts, scouts
+from feature_flow.conductor import lanes, prompts, scouts
 from feature_flow.verify import checks, gate, proof
 from feature_flow.plan import tickets
 from feature_flow.infra import git

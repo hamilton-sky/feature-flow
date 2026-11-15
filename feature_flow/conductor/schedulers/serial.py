@@ -1,6 +1,6 @@
 """One ticket at a time: hand out the lowest ready ticket, and end through the shared end of run."""
 
-from feature_flow import lanes
+from feature_flow.conductor import lanes
 from feature_flow.verify import checks, floorguard
 from feature_flow.plan import tickets
 from feature_flow.infra import git

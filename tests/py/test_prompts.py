@@ -8,7 +8,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import codehash, prompts  # the package under test, from this checkout
+from feature_flow.conductor import codehash, prompts  # the package under test, from this checkout
 
 GUIDE = "Run `python3 scripts/flow-status.py <feature> --next` for <feature>."
 ROLE = "Planner: `python3 scripts/flow-status.py <feature> --check`."

@@ -232,7 +232,7 @@ class Started(Base):
         runner = load_runner()
         sys.path.insert(0, str(helpers.ROOT))
         try:
-            from feature_flow import prompts
+            from feature_flow.conductor import prompts
         finally:
             sys.path.remove(str(helpers.ROOT))
         self.assertEqual(set(runner.ROLES), set(prompts.ROLES.values()))
