@@ -11,7 +11,8 @@ import shlex
 import shutil
 import sys
 
-from feature_flow import builders, suggest, tickets
+from feature_flow import builders, tickets
+from feature_flow.infra import suggest
 
 USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint [--baseline <commit>] | --doctor [--trust <digest>] | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --fix <diagnosis.md> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]"
 

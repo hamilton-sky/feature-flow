@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from feature_flow import proc
+from feature_flow.infra import proc
 from feature_flow import status
 from feature_flow import gate as gate_module
 from feature_flow import floorguard

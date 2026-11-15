@@ -6,7 +6,8 @@ import unittest
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import reality, report, state  # the package under test, from this checkout
+from feature_flow import reality, report  # the package under test, from this checkout
+from feature_flow.infra import state
 
 T1 = "plans/f/tasks/01-a.md"
 

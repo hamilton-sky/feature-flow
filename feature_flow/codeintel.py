@@ -15,7 +15,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from feature_flow import state
+from feature_flow.infra import state
 
 CACHE = "codeintel.json"
 FRESH = 3600  # seconds the doctor's answer is kept

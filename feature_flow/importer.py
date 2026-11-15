@@ -24,7 +24,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import feature_flow
-from feature_flow import git, plan_lock
+from feature_flow.infra import git, plan_lock
 
 USAGE = "usage: feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]"
 TASK = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s+(.*\S)\s*$")

@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import feature_flow
-from feature_flow import codehash, git, state, tickets
+from feature_flow import codehash, tickets
+from feature_flow.infra import git, state
 
 USAGE = "usage: feature-flow doctor <feature> [--trust <digest>]"
 MOVED_NOT = ("STOP",)  # log events that are not a step of the run (nor are failed checks: -FAIL, -BLOCKED, -SAME)

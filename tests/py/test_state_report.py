@@ -14,7 +14,7 @@ import helpers
 from helpers import Repo
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import state  # the package under test, from this checkout
+from feature_flow.infra import state  # the package under test, from this checkout
 
 T1 = "plans/f/tasks/01-a.md"
 STATE = ".feature-flow/state/flow-f.state"

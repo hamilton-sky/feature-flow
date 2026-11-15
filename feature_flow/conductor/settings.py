@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
-from feature_flow import brainstorm_mode, profiles, state, tickets
+from feature_flow import brainstorm_mode, profiles, tickets
+from feature_flow.infra import state
 from feature_flow.conductor.errors import Stop
 
 

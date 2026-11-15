@@ -9,7 +9,8 @@ import unittest
 from helpers import ROOT, Repo
 
 sys.path.insert(0, str(ROOT))
-from feature_flow import conductor, report, state, status, tickets  # the package under test, from this checkout
+from feature_flow import conductor, report, status, tickets  # the package under test, from this checkout
+from feature_flow.infra import state
 
 PYTHON = '"%s"' % sys.executable
 T1 = "plans/f/tasks/01-a.md"

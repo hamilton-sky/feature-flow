@@ -9,7 +9,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import evaluate, state  # the package under test, from this checkout
+from feature_flow import evaluate  # the package under test, from this checkout
+from feature_flow.infra import state
 
 LOG = """2026-10-23T10:00:00Z,-,START
 2026-10-23T10:00:10Z,01,BUILD

@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path
 
-from feature_flow import git, state, suggest
+from feature_flow.infra import git, state, suggest
 
 USAGE = "usage: feature-flow report <feature>"
 FAILS = ("GATE-FAIL", "GUARD-FAIL", "DONEWHEN-FAIL", "TESTFIRST-FAIL", "VERDICT-FAIL")

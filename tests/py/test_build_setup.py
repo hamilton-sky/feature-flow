@@ -13,7 +13,8 @@ from helpers import ROOT, Repo
 
 import sys
 sys.path.insert(0, str(ROOT))
-from feature_flow import evaluate, floorguard, gate, report, state  # the modules under test, from this checkout
+from feature_flow import evaluate, floorguard, gate, report  # the modules under test, from this checkout
+from feature_flow.infra import state
 from feature_flow.conductor.policy import limits
 
 T1 = "plans/f/tasks/01-a.md"

@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 
 import feature_flow
-from feature_flow import git, prompts
+from feature_flow import prompts
+from feature_flow.infra import git
 
 # feature-flow's own scripts; any other .py file in the same folder is the repo's own code
 SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.py", "flow-trust.py")

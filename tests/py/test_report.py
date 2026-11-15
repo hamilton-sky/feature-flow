@@ -8,7 +8,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import report, state  # the package under test, from this checkout
+from feature_flow import report  # the package under test, from this checkout
+from feature_flow.infra import state
 
 LOG = """10:00:00,-,START
 10:00:01,01,BUILD

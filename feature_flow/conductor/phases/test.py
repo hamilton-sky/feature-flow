@@ -1,7 +1,8 @@
 """The tester: writes the acceptance tests from spec.md before the build, or fixes the ones the product owner
 ruled wrong. It is no ticket's phase and has no lane; the conductor judges its tests itself."""
 
-from feature_flow import checks, gate, git, prompts
+from feature_flow import checks, gate, prompts
+from feature_flow.infra import git
 from feature_flow.conductor import guards
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases.base import Outcome, Phase

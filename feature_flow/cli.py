@@ -5,7 +5,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from feature_flow import git, state, suggest
+from feature_flow.infra import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 from feature_flow.conductor.planning import Planner
 from feature_flow.conductor import budget as time_budget, repair as run_repair, resume as run_resume

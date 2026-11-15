@@ -12,7 +12,8 @@ import contextlib
 import os
 from pathlib import Path
 
-from feature_flow import checks, codehash, codeintel, floorguard, git, proof, scouts, state, tickets
+from feature_flow import checks, codehash, codeintel, floorguard, proof, scouts, tickets
+from feature_flow.infra import git, state
 from feature_flow.conductor import budget as time_budget
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases import REGISTRY, Phase

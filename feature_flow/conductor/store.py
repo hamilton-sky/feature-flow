@@ -6,7 +6,7 @@ the same dict and the same file; the keys and the format never change. This modu
 `feature_flow.lanes`, which re-exports RUN_KEYS and Scoped from here.
 """
 
-from feature_flow import state
+from feature_flow.infra import state
 from feature_flow.conductor.errors import Stop
 
 # the run's own state keys; every other key belongs to one lane and is stored as L<k>.<key>

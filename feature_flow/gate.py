@@ -22,7 +22,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from feature_flow import proc
+from feature_flow.infra import proc
 
 KEYS = ("Build", "Test", "Lint", "Typecheck", "Security")
 PATH_CHECK = re.compile(r"^Check[ \t]+([^:\s]+):[ \t]*(.*)$")
@@ -85,7 +85,7 @@ def log_path(feature, cwd=None):
     """The gate's log for feature, .feature-flow/state/gate-<feature>.log at the top of the git worktree that holds
     cwd (None: the working folder), the folder made with its ignore rule; None outside a git worktree or when the
     folder cannot be made."""
-    from feature_flow import git, state  # here, so scripts/gate.py stays quick to load
+    from feature_flow.infra import git, state  # here, so scripts/gate.py stays quick to load
     try:
         top = git.toplevel(cwd)
         return None if top is None else state.state_dir(top) / ("gate-%s.log" % feature)

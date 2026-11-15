@@ -308,7 +308,8 @@ class PortablePage(unittest.TestCase):
     def test_picks_wait_for_acceptance_then_leave_both_plans_unchanged(self):
         import shutil
         import threading
-        from feature_flow import plan_lock, studio
+        from feature_flow import studio
+        from feature_flow.infra import plan_lock
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             draft = root / '.feature-flow/state/draft/demo'

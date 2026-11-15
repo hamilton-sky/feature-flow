@@ -13,7 +13,8 @@ import json
 import os
 from pathlib import Path
 
-from feature_flow import state, tickets
+from feature_flow import tickets
+from feature_flow.infra import state
 
 
 def log_rows(top, feature):
