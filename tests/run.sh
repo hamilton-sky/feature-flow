@@ -597,7 +597,7 @@ else
 fi
 out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py feature_flow/conductor/*.py feature_flow/conductor/*/*.py packages/forkboard/forkboard/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor and Forkboard parse as Python 3.9" 0 $?
-out="$(cd "$ROOT" && grep -rlE --include='*.py' '^(import|from) ' feature_flow packages/forkboard/forkboard | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat|traceback|fnmatch|contextlib|html|importlib|math|http)(\b|\s)')"
+out="$(cd "$ROOT" && grep -rlE --include='*.py' '^(import|from) ' feature_flow packages/forkboard/forkboard | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat|traceback|fnmatch|contextlib|html|importlib|math|http|socket)(\b|\s)')"
 if [ -z "$out" ]; then ok "the conductor and Forkboard import only the standard library"; else bad "the conductor and Forkboard import only the standard library" "$out"; fi
 
 flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and feature_flow/
