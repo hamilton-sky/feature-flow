@@ -80,6 +80,7 @@ class SettingsLoad(unittest.TestCase):
 
     def load(self, **env):
         env.setdefault("FLOW_DIR", str(self.dir))
+        env.setdefault("FLOW_INTERNAL", "1")  # reads the retired settings, which these tests set by hand
         return Settings.load("f", env), env
 
     def test_settings_are_frozen(self):

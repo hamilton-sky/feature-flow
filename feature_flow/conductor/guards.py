@@ -43,7 +43,7 @@ def before_start(c):
     if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
         raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
                    % (c.feature, owner[:8]))
-    for line in profiles.warnings(os.environ, c.settings.filled):  # retired settings set by hand
+    for line in profiles.warnings(os.environ, c.settings.ignored):  # retired settings set by hand
         print(line, file=sys.stderr)
     if c.settings.mode:
         c.log("MODE-%s" % c.settings.mode.upper())

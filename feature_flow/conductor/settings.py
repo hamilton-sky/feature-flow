@@ -67,6 +67,7 @@ class Settings:
     profile: str  # the profile that holds the mode's settings, "" for none
     mode: str  # fix, small, feature, careful or explore; "" for none (a plan from before modes)
     filled: Tuple[str, ...]  # the keys the profile filled into the environment
+    ignored: Tuple[str, ...]  # "KEY=value" of the retired settings set by hand, which the run ignored
     max_retries: int
     max_rounds: int
     gate_timeout: int
@@ -94,6 +95,7 @@ class Settings:
         checked them: the profile, the scout levels, then the whole numbers. Fills the profile's settings into environ."""
         environ = os.environ if environ is None else environ
         root = Path(environ.get("FLOW_DIR") or "plans")
+        ignored = profiles.strip_retired(environ)
         try:
             commands = root / feature / "commands.md"
             run_mode, profile = profiles.resolve(environ, tickets.commands_value(commands, "Mode"),
@@ -115,6 +117,7 @@ class Settings:
             profile=profile,
             mode=run_mode,
             filled=tuple(filled),
+            ignored=tuple(ignored),
             max_retries=_env_int("FLOW_MAX_RETRIES", 2, environ),
             max_rounds=_env_int("FLOW_MAX_REVIEW_ROUNDS", 3, environ),
             gate_timeout=_env_int("FLOW_GATE_TIMEOUT", 30, environ),

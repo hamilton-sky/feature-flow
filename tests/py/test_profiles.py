@@ -77,14 +77,24 @@ class ModeTests(unittest.TestCase):
             profiles.resolve({"FLOW_MODE": "turbo"})
         self.assertEqual(str(caught.exception), "the mode must be fix, small, feature, careful, explore, not turbo")
 
-    def test_retired_settings_set_by_hand_warn_and_filled_ones_do_not(self):
-        env = {"FLOW_REVIEWERS": "1", "FLOW_ROUND_REVIEW": "on", "FLOW_GATE": "off", "FLOW_PROFILE": "fast"}
-        lines = profiles.warnings(env, ["FLOW_ROUND_REVIEW"])
-        self.assertEqual(len(lines), 3, lines)
-        self.assertTrue(lines[0].startswith("feature-flow: FLOW_REVIEWERS is set; from 0.44.0 only the mode sets it"))
-        self.assertIn("FLOW_PROFILE is now FLOW_MODE", lines[1])
+    def test_retired_settings_set_by_hand_are_taken_out_and_named(self):
+        env = {"FLOW_REVIEWERS": "1", "FLOW_ROUND_REVIEW": "on", "FLOW_GATE": "off", "FLOW_PROFILE": "fast",
+               "FLOW_LANES": "2"}
+        ignored = profiles.strip_retired(env)
+        self.assertEqual(ignored, ["FLOW_REVIEWERS=1", "FLOW_ROUND_REVIEW=on", "FLOW_GATE=off"])
+        self.assertEqual(env, {"FLOW_PROFILE": "fast", "FLOW_LANES": "2"})
+        lines = profiles.warnings(env, ignored)
+        self.assertEqual(len(lines), 4, lines)
+        self.assertTrue(lines[0].startswith("feature-flow: FLOW_REVIEWERS=1 is ignored since 0.44.0; the mode sets it"))
         self.assertIn("`Gate: off unsafe`", lines[2])
-        self.assertEqual(profiles.warnings({"FLOW_MODE": "small", "FLOW_FAST": "1"}, ["FLOW_FAST"]), [])
+        self.assertIn("FLOW_PROFILE is now FLOW_MODE", lines[3])
+        self.assertEqual(profiles.warnings({"FLOW_MODE": "small"}, []), [])
+
+    def test_flow_internal_keeps_the_retired_settings(self):
+        env = {"FLOW_INTERNAL": "1", "FLOW_REVIEWERS": "1", "FLOW_GATE": "off"}
+        self.assertEqual(profiles.strip_retired(env), [])
+        self.assertEqual(env["FLOW_REVIEWERS"], "1")
+        self.assertEqual(env["FLOW_GATE"], "off")
 
     def test_env_profile_reads_flow_mode_too(self):
         self.assertEqual(profiles.env_profile({"FLOW_MODE": "careful"}), "careful")
