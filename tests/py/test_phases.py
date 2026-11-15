@@ -124,7 +124,7 @@ class Session:
 
     def call(self, *args):
         env = {k: v for k, v in os.environ.items() if not k.startswith("FLOW_")}
-        env.update(self.env, FLOW_TRUSTED="1")
+        env.update(self.env, FLOW_TRUSTED="1", FLOW_INTERNAL="1")
         out = io.StringIO()
         here = os.getcwd()
         os.chdir(str(self.repo.dir))

@@ -10,7 +10,7 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, brainstorm_page, cli, doctor, git, install, evaluate, importer, report, status, suggest, uninstall, view
+from feature_flow import __version__, brainstorm_page, cli, config, doctor, git, install, evaluate, importer, report, status, suggest, uninstall, view
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
@@ -20,6 +20,7 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow reset <feature> [NN]
        feature-flow resume <feature> [NN] [--from <commit>] [--accept-code] [--dry-run]
        feature-flow doctor <feature> [--trust <digest>]
+       feature-flow config [<feature>] [--all]
        feature-flow report <feature>
        feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]
        feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]
@@ -36,6 +37,8 @@ starts just before the ticket's failing test commit, or at --from), and with --a
 now. --dry-run says what it would do and changes nothing. Every check still runs.
 doctor says where a run stands and the safe next command: phase, ticket, owner, the last step, pending findings, uncommitted
 changes, the flow code, and with --trust a TRUST digest's diagnosis. Read-only.
+config prints the mode and every setting a run of <feature> will use, its value and where it came from (without a
+feature, what a new plan gets); --all adds the internal ones. Read-only.
 report prints what a run did (builds, reviews, failed checks, stops) from its log in .feature-flow/state/. Read-only.
 given a Spec Kit or OpenSpec task list, `import` starts plans/<feature>/ with one ticket per phase or section.
 brainstorm-page writes the feature's brainstorm as a review page beside it: a section sidebar, a theme switch, diagrams you can edit. --live writes a page and its state.json to publish as an artifact that people save versions in and ask Claude through; --asks, --answer and --apply are the session's side of it.
@@ -70,7 +73,7 @@ def warn_old_conductor(top, write=sys.stderr.write):
               % (theirs, __version__))
 
 
-COMMANDS = ("install", "uninstall", "status", "view", "reset", "resume", "doctor", "report", "eval", "import", "brainstorm-page", "--version",
+COMMANDS = ("install", "uninstall", "status", "view", "reset", "resume", "doctor", "config", "report", "eval", "import", "brainstorm-page", "--version",
             "--help")
 
 
@@ -92,6 +95,8 @@ def main(argv=None):
         warn_old_conductor(git.toplevel() or Path.cwd())
     if command == "doctor":
         return doctor.main(rest)
+    if command == "config":
+        return config.main(rest)
     if command == "status":
         return status.main(rest)
     if command == "view":

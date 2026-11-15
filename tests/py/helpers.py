@@ -96,6 +96,7 @@ class Repo:
             if key.startswith("FLOW_"):
                 del full[key]
         full["FLOW_TRUSTED"] = "1"
+        full["FLOW_INTERNAL"] = "1"  # fixtures set retired settings such as FLOW_FAST directly
         full.update(env)
         result = subprocess.run([sys.executable, self.script, "f"] + list(args), cwd=str(self.dir),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,

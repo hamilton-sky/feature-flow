@@ -42,10 +42,31 @@ Each mode stands on one of the old profiles, so a plan made before modes runs ex
 
 ## Settings the mode now sets alone
 
-These settings still work in 0.43.0, but `start` prints a warning when one is set by hand. From 0.44.0 only the mode sets them:
+Since 0.44.0 only the mode sets these, and a run ignores them when they are set by hand (0.43.0 warned):
 
 `FLOW_FAST`, `FLOW_REVIEWERS`, `FLOW_ROUND_REVIEW`, `FLOW_BASE_GATE`, `FLOW_GATE_FULL`, `FLOW_BATCH`, `FLOW_MAX_RETRIES`, `FLOW_MAX_REVIEW_ROUNDS`.
 
-`FLOW_GATE=off` also warns: from 0.44.0 only `Gate: off unsafe` in the approved `commands.md` turns the gate off, so it always shows in the plan.
+`FLOW_GATE=off` is ignored too: only `Gate: off unsafe` in the approved `commands.md` turns the gate off, so it always shows in the plan. `start` prints one line for each setting it ignored, and `feature-flow config` lists them on its `Ignored:` line.
 
 The settings that stay yours to override: `FLOW_MODE`, `FLOW_LANES`, `FLOW_SCOUTS`, `FLOW_BUDGET`, `FLOW_CODEINTEL`, `FLOW_GATE_TIMEOUT`, `FLOW_TICKETS_PER_SESSION`, `FLOW_DIR` and `FLOW_TICKETS` ([all settings](commands-and-settings.md)).
+
+## See what a run will use
+
+`feature-flow config <feature>` prints the plan's mode and where it came from, then every setting the run will use, its value and where that came from: the mode, `commands.md`, your shell, or built in. Without a feature it shows what a new plan gets from the template. `--all` adds the settings the mode keeps to itself. It is read-only, and it reads the settings the way the conductor does, so the two cannot disagree.
+
+```
+$ feature-flow config checkout-retry
+Feature: checkout-retry
+Mode: small        commands.md (Mode: small)
+
+setting               value                                       from
+reviews per ticket    one review of the whole feature at the end  mode small
+round review          off                                         mode small
+full gate and review  at the end                                  mode small
+gate at the base      off                                         mode small
+lanes                 1                                           built-in
+scouts                off                                         mode small
+...
+Plan lines: Build, Test, Lint, Smoke
+```
+

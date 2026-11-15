@@ -129,7 +129,7 @@ Each ticket has a **level**, set by the planner and approved by you with the pla
 | `careful` | code where a wrong "done" is expensive: the full test suite and two reviewers for every ticket |
 | `explore` | an idea you are not sure of yet: a brainstorm first, then built as `feature` |
 
-Name one in the command (`/feature-flow csv-export careful`), or let the session guess it from your words and say "ok". You can change it on the plan's yes. A level 3 ticket keeps its own review in every mode. [docs/modes.md](docs/modes.md) has what each mode sets. When the full checks run can also be set on its own, every ticket or every few tickets, and tickets that touch different files can build side by side. [docs/speed.md](docs/speed.md) covers all of it.
+Name one in the command (`/feature-flow csv-export careful`), or let the session guess it from your words and say "ok". You can change it on the plan's yes. A level 3 ticket keeps its own review in every mode. [docs/modes.md](docs/modes.md) has what each mode sets. When the full checks run can also be set on its own, every ticket or every few tickets, and tickets that touch different files can build side by side. [docs/speed.md](docs/speed.md) covers all of it. `feature-flow config <feature>` shows the mode and every setting a run will use, and where each came from.
 
 ## Optional extras
 

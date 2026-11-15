@@ -43,7 +43,7 @@ class Run:
             repo.path(T % slug).write_text(ticket(slug, header), encoding="utf-8")
         repo.commit("plan")
         self.env = dict({k: v for k, v in os.environ.items() if not k.startswith("FLOW_")},
-                        FLOW_TRUSTED="1", **env)
+                        FLOW_TRUSTED="1", FLOW_INTERNAL="1", **env)
         stack = contextlib.ExitStack()
         test.addCleanup(stack.close)
         here = os.getcwd()

@@ -4,8 +4,10 @@ The word comes from FLOW_MODE, else FLOW_PROFILE, else a `Mode:` line in the pla
 `Profile:` line (approved with the plan, and frozen like the rest of it). Each mode stands on one of the
 profiles below, which hold the settings: `fix` on normal, `small` on fast, `feature` and `explore` on
 standard, `careful` on careful. The old profile names are still read (fast is small, standard is feature).
-A mode only fills settings that are not set: a FLOW_ variable given on the command line always wins, though
-the ones in RETIRED print a warning, as the mode is to set them alone from 0.44.0.
+A mode only fills settings that are not set: a FLOW_ variable given on the command line wins. The ones in
+RETIRED are the mode's alone since 0.44.0: set by hand they are ignored, with a warning, and so is FLOW_GATE=off
+(only `Gate: off unsafe` in the approved commands.md turns the gate off). FLOW_INTERNAL=1 reads them again, for
+the test suite and debugging; it is not a setting for runs.
 """
 
 PROFILES = {
@@ -41,7 +43,7 @@ MODES = {  # the mode -> the profile that holds its settings
 ORDER = ("fix", "small", "feature", "careful", "explore")
 OLD_NAMES = {"fast": "small", "standard": "feature", "careful": "careful", "normal": ""}  # a profile -> its mode
 
-# settings the mode is to set alone: from 0.44.0 they are not read from the environment
+# settings the mode sets alone: since 0.44.0 they are not read from the environment (unless FLOW_INTERNAL=1)
 RETIRED = ("FLOW_FAST", "FLOW_REVIEWERS", "FLOW_ROUND_REVIEW", "FLOW_BASE_GATE", "FLOW_GATE_FULL", "FLOW_BATCH",
            "FLOW_MAX_RETRIES", "FLOW_MAX_REVIEW_ROUNDS")
 
@@ -92,13 +94,33 @@ def apply(environ, name):
     return filled
 
 
-def warnings(environ, filled):
-    """One line per retired setting set by hand (not filled by the mode), and for FLOW_PROFILE and FLOW_GATE=off."""
-    out = ["feature-flow: %s is set; from 0.44.0 only the mode sets it (Mode: in commands.md, or FLOW_MODE). "
-           "See docs/modes.md" % key for key in RETIRED if environ.get(key) and key not in filled]
+def strip_retired(environ):
+    """Take the retired settings set by hand out of environ, before the mode fills its own: ["KEY=value"] of
+    what was ignored. FLOW_INTERNAL=1 keeps them (the test suite, debugging)."""
+    if environ.get("FLOW_INTERNAL") == "1":
+        return []
+    ignored = []
+    for key in RETIRED:
+        if environ.get(key):
+            ignored.append("%s=%s" % (key, environ[key]))
+            del environ[key]
+    if environ.get("FLOW_GATE") == "off":
+        ignored.append("FLOW_GATE=off")
+        del environ["FLOW_GATE"]
+    return ignored
+
+
+def warnings(environ, ignored):
+    """One line per retired setting that was ignored, and one for the old name FLOW_PROFILE."""
+    out = []
+    for item in ignored:
+        key = item.split("=", 1)[0]
+        if key == "FLOW_GATE":
+            out.append("feature-flow: FLOW_GATE=off is ignored since 0.44.0; only `Gate: off unsafe` in the approved "
+                       "commands.md turns the gate off")
+        else:
+            out.append("feature-flow: %s is ignored since 0.44.0; the mode sets it (Mode: in commands.md, or "
+                       "FLOW_MODE). See docs/modes.md" % item)
     if environ.get("FLOW_PROFILE") and not environ.get("FLOW_MODE"):
         out.append("feature-flow: FLOW_PROFILE is now FLOW_MODE (fast is small, standard is feature)")
-    if environ.get("FLOW_GATE") == "off":
-        out.append("feature-flow: FLOW_GATE=off is read for the last time in this release; from 0.44.0 only "
-                   "`Gate: off unsafe` in the approved commands.md turns the gate off")
     return out

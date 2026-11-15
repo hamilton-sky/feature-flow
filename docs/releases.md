@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.44: feature-flow config
+
+| Version | Added |
+|---|---|
+| 0.44.0 | **`feature-flow config [<feature>] [--all]`** ([docs](modes.md#see-what-a-run-will-use)): the plan's mode, then every setting a run will use, its value and where it came from (the mode, `commands.md`, your shell or built in), the plan lines it has, and an `Ignored:` line. Without a feature it shows what a new plan gets. Read-only, and it reads the settings the way the conductor does. **Fewer settings**: the eight settings 0.43.0 warned about (`FLOW_FAST`, `FLOW_REVIEWERS`, `FLOW_ROUND_REVIEW`, `FLOW_BASE_GATE`, `FLOW_GATE_FULL`, `FLOW_BATCH`, `FLOW_MAX_RETRIES`, `FLOW_MAX_REVIEW_ROUNDS`) and `FLOW_GATE=off` are now ignored when set by hand; the mode sets them, and only `Gate: off unsafe` turns the gate off. `start` names each one it ignored. |
+
 ## 0.43: modes
 
 | Version | Added |
