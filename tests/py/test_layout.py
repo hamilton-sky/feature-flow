@@ -38,7 +38,6 @@ FLAT = {
 
 # the upward imports allowed today, (importer, imported); each move empties some of them
 UPWARD = {
-    ("feature_flow.reality", "feature_flow.report"),  # report.parse moves into infra/state
     ("feature_flow.status", "feature_flow.brainstorm_page"),  # status.main moves into commands/flow_status
     ("feature_flow.status", "feature_flow.clean"),
     ("feature_flow.status", "feature_flow.doctor"),

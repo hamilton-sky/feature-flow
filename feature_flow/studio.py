@@ -11,6 +11,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import feature_flow
+
 MAJOR = "bundle/1"  # the review document format this feature-flow writes
 
 
@@ -18,7 +20,7 @@ def load():
     """The forkboard package, or None when there is none or it reads another major of the document format."""
     module = sys.modules.get("forkboard")
     if module is None:
-        here = Path(__file__).resolve().parent
+        here = Path(feature_flow.__file__).resolve().parent
         for folder in (here / "_forkboard", here.parent / "packages" / "forkboard" / "forkboard"):
             if (folder / "__init__.py").is_file():
                 spec = importlib.util.spec_from_file_location("forkboard", str(folder / "__init__.py"),

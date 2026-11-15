@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import feature_flow
 from feature_flow import codehash, git, state, tickets
 
 USAGE = "usage: feature-flow doctor <feature> [--trust <digest>]"
@@ -74,11 +75,11 @@ def code_check(run, scripts, top):
         return "unknown", "cannot determine: %s" % err
     if whole == run["code_sha"]:
         return "same", "unchanged since the ticket was picked"
-    marker = codehash._name(Path(codehash.__file__).resolve().parent / "__init__.py", top.resolve())
+    marker = codehash._name(Path(feature_flow.__file__).resolve().parent / "__init__.py", top.resolve())
     if not saved or marker not in saved:
         return "unknown", ("cannot determine: this doctor reads feature-flow from %s, and the run's snapshot names "
                            "other files (the run uses its own copy). run `python3 scripts/flow-status.py <feature> "
-                           "--doctor` for the run's own copy" % Path(codehash.__file__).resolve().parent)
+                           "--doctor` for the run's own copy" % Path(feature_flow.__file__).resolve().parent)
     names = codehash.changed(saved, each)
     return "changed", "changed since the ticket was picked: %s" % ", ".join(names[:8]) + (
         " and %d more" % (len(names) - 8) if len(names) > 8 else "")

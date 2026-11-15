@@ -13,7 +13,7 @@ from helpers import ROOT, Repo
 
 import sys
 sys.path.insert(0, str(ROOT))
-from feature_flow import evaluate, floorguard, gate, report  # the modules under test, from this checkout
+from feature_flow import evaluate, floorguard, gate, report, state  # the modules under test, from this checkout
 from feature_flow.conductor.policy import limits
 
 T1 = "plans/f/tasks/01-a.md"
@@ -129,7 +129,7 @@ class UnsafeGate(unittest.TestCase):
         self.assertIn("GATE-OFF-UNSAFE", repo.log())
 
     def test_the_report_and_eval_say_so(self):
-        rows = report.parse("2026-11-01T10:00:00Z,-,GATE-OFF-UNSAFE\n2026-11-01T10:00:00Z,-,FLOOR-RELAXED-CONFIG\n"
+        rows = state.parse_log("2026-11-01T10:00:00Z,-,GATE-OFF-UNSAFE\n2026-11-01T10:00:00Z,-,FLOOR-RELAXED-CONFIG\n"
                             "2026-11-01T10:00:01Z,-,START\n")
         self.assertIn("gate off (unsafe), floor relaxed: config", report.render("f", rows).splitlines()[0])
         self.assertEqual(evaluate.rebuilds_by_lane([(None, "01", "LEASE-2", ""), (None, "01", "REBUILD", ""),

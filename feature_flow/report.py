@@ -19,18 +19,6 @@ FAILS = ("GATE-FAIL", "GUARD-FAIL", "DONEWHEN-FAIL", "TESTFIRST-FAIL", "VERDICT-
 RUN_EVENTS = ("START", "TAKEOVER", "RESET", "HANDOFF", "STOP")
 
 
-def parse(text):
-    """[(ticket, event, detail)] for each well formed line; a bad line is skipped."""
-    rows = []
-    for line in text.splitlines():
-        parts = line.split(",", 2)
-        if len(parts) != 3 or not parts[2].strip():
-            continue
-        event, _, detail = parts[2].strip().partition(" ")
-        rows.append((parts[1].strip(), event, detail.strip()))
-    return rows
-
-
 def summarize(rows):
     """(per-ticket dict in first-seen order, run-level counts, STOP reasons)."""
     tickets = {}
@@ -95,9 +83,9 @@ def main(argv, out=None, err=None):
         err.write("no run log for %s (%s)\n" % (feature, path))
         err.write(suggest.hint(feature, [p.name[5:-4] for p in path.parent.glob("flow-*.log")]))
         return 2
-    out.write(render(feature, parse(text)))
+    out.write(render(feature, state.parse_log(text)))
     plan = Path(top) / os.environ.get("FLOW_DIR", "plans") / feature
     if (plan / "tasks").is_dir():
         from feature_flow import reality  # plan vs reality, from the same log
-        out.write("\n" + reality.text(*reality.collect(plan, parse(text))))
+        out.write("\n" + reality.text(*reality.collect(plan, state.parse_log(text))))
     return 0

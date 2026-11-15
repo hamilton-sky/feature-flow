@@ -6,7 +6,7 @@ import unittest
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import reality, report  # the package under test, from this checkout
+from feature_flow import reality, report, state  # the package under test, from this checkout
 
 T1 = "plans/f/tasks/01-a.md"
 
@@ -27,7 +27,7 @@ class RealityFromRows(unittest.TestCase):
         self.repo.close()
 
     def test_differences_come_from_the_log(self):
-        rows = report.parse("\n".join([
+        rows = state.parse_log("\n".join([
             "t,01,BUILD", "t,01,CHANGED [\"app/a.py\", \"docs/x.md\", \"plans/f/tasks/01-a.md\"]",
             "t,01,FOOTPRINT-FAIL", "t,01,BUILD", "t,01,CHANGED [\"app/a.py\"]", "t,01,LEVEL-3", "t,01,DECISION",
             "t,01,FOLLOWUPS 2", "t,-,REPLAN"]))
@@ -50,13 +50,13 @@ class RealityFromRows(unittest.TestCase):
         self.assertIn("| 01 A | app/, tests/test_a.py | app/a.py |", md)
 
     def test_a_change_outside_touches_is_named(self):
-        rows = report.parse('t,01,CHANGED ["app/a.py", "web/b.js"]')
+        rows = state.parse_log('t,01,CHANGED ["app/a.py", "web/b.js"]')
         items, _ = reality.collect(self.repo.path("plans/f"), rows)
         self.assertEqual(items[0]["unplanned"], ["web/b.js"])
         self.assertIn("changed outside Touches: web/b.js", reality.notes(items[0]))
 
     def test_no_touches_line_still_shows_what_changed(self):
-        rows = report.parse('t,02,CHANGED ["x.py"]')
+        rows = state.parse_log('t,02,CHANGED ["x.py"]')
         items, _ = reality.collect(self.repo.path("plans/f"), rows)
         self.assertIsNone(items[1]["touches"])
         self.assertEqual(reality.notes(items[1]), [])
