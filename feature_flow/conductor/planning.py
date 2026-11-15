@@ -52,15 +52,23 @@ class Planner:
         self.brainstorm_helpers = conductor.settings.brainstorm_helpers
         self.log = conductor.log
 
-    def consult_prompt(self, role, question_file):
-        """A consultant's prompt for a question the planner raised. Stateless, like the other plan commands."""
-        self.no_plan_yet()
+    def consult_prompt(self, role, question_file, repair=None):
+        """A consultant's prompt for a question the planner raised. Stateless, like the other plan commands. With
+        repair (the stopped ticket, or "" between tickets) the question is about repairing the plan that exists."""
+        if repair is None:
+            self.no_plan_yet()
         if "ask-" + role not in prompts.ROLES:
             raise Stop("consult takes architect, designer or po, not %s" % role)
         question = self.read_text(question_file, "question").strip("\n")
         if not question:
             raise Stop("the question %s is empty" % question_file)
-        if self.brief_file.is_file():
+        if repair is not None:
+            source = ("the planner repairing the plan of the feature `%s` in `%s/` while it is being built%s. The plan "
+                      "exists and stays: the question is about the repair. Read the plan%s and the repository."
+                      % (self.feature, self.plan.as_posix(),
+                         " (the build stopped on `%s`)" % repair if repair else "",
+                         ", that ticket's Attempt notes and findings" if repair else ""))
+        elif self.brief_file.is_file():
             source = ("the planner of the feature `%s`, who is drafting its plan from the brief in `%s`. Read the brief "
                       "and the repository." % (self.feature, self.brief_file.as_posix()))
         else:
@@ -72,7 +80,7 @@ class Planner:
             role_text = prompts.role(self.scripts, prompts.ROLES["ask-" + role])
         except FileNotFoundError as err:
             raise Stop(str(err))
-        self.log("CONSULT-%s" % role.upper())
+        self.log("CONSULT-%s%s" % (role.upper(), "-REPAIR" if repair is not None else ""))
         return "%s\n\n---\n\n%s\n" % (role_text, task)
 
     def asked(self, stop):

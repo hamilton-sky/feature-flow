@@ -10,7 +10,7 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, brainstorm_page, cli, git, install, evaluate, importer, report, status, suggest, uninstall, view
+from feature_flow import __version__, brainstorm_page, cli, doctor, git, install, evaluate, importer, report, status, suggest, uninstall, view
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]
@@ -18,7 +18,8 @@ usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [-
        feature-flow status <feature> [--next | --counts | --check | --mermaid [plain] | --json]
        feature-flow view <feature> [--watch] [--no-open] [--out FILE]
        feature-flow reset <feature> [NN]
-       feature-flow resume <feature> [NN] [--from <commit>]
+       feature-flow resume <feature> [NN] [--from <commit>] [--accept-code] [--dry-run]
+       feature-flow doctor <feature> [--trust <digest>]
        feature-flow report <feature>
        feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR]
        feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]
@@ -29,8 +30,11 @@ install copies the skill, its roles, scripts and guides into a repo; --user inst
 uninstall removes exactly what install wrote (files you edited are kept); --user removes the personal install in ~/.claude, ~/.agents and ~/.feature-flow.
 status and view read plans/<feature>/ in the current directory, like scripts/flow-status.py and scripts/flow-view.py.
 reset reopens a half-built ticket (or ticket NN), commits that, and clears the run, like scripts/flow.py <feature> reset.
-resume carries on after an upgrade, a change to the flow's code or a reset: it accepts the flow code as it is now and keeps
-where the ticket started (else it starts just before the ticket's failing test commit, or at --from). Every check still runs.
+resume carries on after an upgrade, a change to the flow's code or a reset: it keeps where the ticket started (else it
+starts just before the ticket's failing test commit, or at --from), and with --accept-code accepts the flow code as it is
+now. --dry-run says what it would do and changes nothing. Every check still runs.
+doctor says where a run stands and the safe next command: phase, ticket, owner, the last step, pending findings, uncommitted
+changes, the flow code, and with --trust a TRUST digest's diagnosis. Read-only.
 report prints what a run did (builds, reviews, failed checks, stops) from its log in .feature-flow/state/. Read-only.
 given a Spec Kit or OpenSpec task list, `import` starts plans/<feature>/ with one ticket per phase or section.
 brainstorm-page writes the feature's brainstorm as a review page beside it: a section sidebar, a theme switch, diagrams you can edit. --live writes a page and its state.json to publish as an artifact that people save versions in and ask Claude through; --asks, --answer and --apply are the session's side of it.
@@ -65,7 +69,7 @@ def warn_old_conductor(top, write=sys.stderr.write):
               % (theirs, __version__))
 
 
-COMMANDS = ("install", "uninstall", "status", "view", "reset", "resume", "report", "eval", "import", "brainstorm-page", "--version",
+COMMANDS = ("install", "uninstall", "status", "view", "reset", "resume", "doctor", "report", "eval", "import", "brainstorm-page", "--version",
             "--help")
 
 
@@ -83,8 +87,10 @@ def main(argv=None):
         return install.main(install.source_root(), rest)
     if command == "uninstall":
         return uninstall.main(rest)
-    if command in ("status", "reset", "resume", "report"):
+    if command in ("status", "reset", "resume", "report", "doctor"):
         warn_old_conductor(git.toplevel() or Path.cwd())
+    if command == "doctor":
+        return doctor.main(rest)
     if command == "status":
         return status.main(rest)
     if command == "view":
@@ -103,7 +109,7 @@ def main(argv=None):
             return 2
         return cli.main(rest[:1] + ["reset"] + rest[1:], scripts=Path.cwd() / "scripts")
     if command == "resume":
-        if not rest or len(rest) > 4:
+        if not rest or len(rest) > 6:
             sys.stderr.write(USAGE)
             return 2
         return cli.main(rest[:1] + ["resume"] + rest[1:], scripts=Path.cwd() / "scripts")

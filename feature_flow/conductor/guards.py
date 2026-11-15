@@ -8,8 +8,8 @@ import os
 import re
 from pathlib import Path
 
-from feature_flow import checks, floorguard, gate, git, prompts, status, tickets
-from feature_flow.conductor import budget, planning
+from feature_flow import checks, floorguard, gate, git, prompts, repaircheck, status, tickets
+from feature_flow.conductor import budget, planning, repair
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.settings import MAX_LANES, _env_int, mode_ok
 
@@ -107,7 +107,7 @@ def handoff(c):
     return c.emit("HANDOFF %s %s" % (c.invoke, c.feature))
 
 
-def replan_prompt(c, mode=None):
+def replan_prompt(c, mode=None, consulted=None):
     """The feature-planner's prompt to fold the open tickets into fewer, only between tickets; or with mode `repair`,
     to repair the plan around the ticket in progress (its Touches, a missing ticket, commands.md), which `next`
     then builds again from the repaired plan."""
@@ -118,17 +118,23 @@ def replan_prompt(c, mode=None):
         raise Stop("replan-prompt takes nothing, or repair, not %s" % mode)
     if c.lane_sched().busy_lanes():
         raise Stop("lanes hold tickets. run replan-prompt once no lane is busy")
+    if consulted is not None and mode != "repair":
+        raise Stop("replan-prompt takes a consultant's answers only with repair: replan-prompt repair <file>")
     if mode == "repair":
         if c.all.get("phase") not in ("", "build", "ask"):
             raise Stop("a %s is pending. run replan-prompt repair when next stops on a ticket, or between tickets"
                        % c.all.get("phase"))
-        c.all["repair_sha"] = git.head()
-        c.all["repair_num"] = c.get("num") if c.all.get("phase") else ""
+        notes = planning.Planner(c).read_text(consulted, "consultants' answers") if consulted else ""
+        if not c.all.get("repair_sha"):  # a later round, even after a blocked commit, keeps the first baseline
+            c.all["repair_sha"] = git.head()
+            c.all["repair_num"] = c.get("num") if c.all.get("phase") else ""
+            c.all["repair_plan"] = repaircheck.plan_tree(c.all["repair_sha"], repair.plan_rel(c)) or ""
         c.save()
         c.log("REPAIR-PROMPT")
         try:
             return prompts.replan(c.scripts, c.feature, c.plan.as_posix(), [], (c.plan / planning.BRAINSTORM).is_file(),
-                                  repair=c.ticket() if c.all.get("phase") else "")
+                                  repair=c.ticket() if c.all.get("phase") else "", baseline=c.all["repair_sha"],
+                                  consulted=notes)
         except FileNotFoundError as err:
             raise Stop(str(err))
     if c.all.get("phase"):
@@ -156,14 +162,10 @@ def check_replan(c, key="replan_sha"):
         return
     folder = (c.plan / (os.environ.get("FLOW_TICKETS") or "tasks")).as_posix()
     changed = git._git("diff", "--name-only", sha, "HEAD", "--", folder, check=False).stdout.split()
-    for path in changed:
-        try:
-            before = git.show_text("%s:%s" % (sha, path))
-        except RuntimeError:
-            continue  # a new ticket
-        if re.search(r"^Status:[ \t]*(resolved|done|closed)\b", before, re.MULTILINE | re.IGNORECASE):
-            raise Stop("the re-plan changed %s, which was resolved before it. put it back with `git checkout %s "
-                       "-- %s` and commit" % (path, sha[:12], path))
+    path = repair.resolved_changed(c, sha)
+    if path:
+        raise Stop("the re-plan changed %s, which was resolved before it. put it back with `git checkout %s "
+                   "-- %s` and commit" % (path, sha[:12], path))
     c.all[key] = ""
     if changed:
         c.log("REPLAN")
@@ -178,7 +180,10 @@ def after_repair(c):
     if not sha or git.head() == sha:
         return None
     started = c.get("base") if num and c.get("num") == num and c.all.get("phase") in ("build", "ask") else ""
+    if c.all.get("repair_plan"):  # a repair started before 0.41.0 has no baseline: it is checked as before
+        repair.committed(c)
     check_replan(c, "repair_sha")
+    c.all["repair_plan"] = ""
     c.all["repair_num"] = ""
     c.log("REPAIR")
     if not num or c.get("num") != num or c.all.get("phase") not in ("build", "ask"):
