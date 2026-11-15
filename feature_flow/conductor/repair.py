@@ -5,7 +5,8 @@ repair is pending. The comparison itself is feature_flow/repaircheck.py."""
 import os
 import re
 
-from feature_flow import proof, repaircheck
+from feature_flow import proof
+from feature_flow.plan import repaircheck
 from feature_flow.infra import git
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.planning import Planner

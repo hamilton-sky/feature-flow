@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
-from feature_flow import brainstorm_mode, profiles, tickets
+from feature_flow.plan import brainstorm_mode, modes, tickets
 from feature_flow.infra import state
 from feature_flow.conductor.errors import Stop
 
@@ -97,14 +97,14 @@ class Settings:
         checked them: the profile, the scout levels, then the whole numbers. Fills the profile's settings into environ."""
         environ = os.environ if environ is None else environ
         root = Path(environ.get("FLOW_DIR") or "plans")
-        ignored = profiles.strip_retired(environ)
+        ignored = modes.strip_retired(environ)
         try:
             commands = root / feature / "commands.md"
-            run_mode, profile = profiles.resolve(environ, tickets.commands_value(commands, "Mode"),
+            run_mode, profile = modes.resolve(environ, tickets.commands_value(commands, "Mode"),
                                              tickets.commands_value(commands, "Profile"))
-        except profiles.UnknownProfile as err:
+        except modes.UnknownProfile as err:
             raise Stop(str(err))
-        filled = profiles.apply(environ, profile)
+        filled = modes.apply(environ, profile)
         try:
             plan_gate, every = gate_every(tickets.commands_value(root / feature / "commands.md", "Gate"), profile)
         except ValueError as err:

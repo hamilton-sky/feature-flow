@@ -11,7 +11,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from feature_flow import install, profiles, tickets
+from feature_flow import install
+from feature_flow.plan import modes, tickets
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.settings import GATE_DEFAULTS, MAX_LANES, Settings
 
@@ -34,9 +35,9 @@ def _mode_source(environ, commands):
 
 def _source(key, user, s):
     """Where one FLOW_ setting's value came from: the shell, else the mode for a setting the mode governs."""
-    if user.get(key) and key not in s.filled and not (key in profiles.RETIRED and s.ignored):
+    if user.get(key) and key not in s.filled and not (key in modes.RETIRED and s.ignored):
         return "%s=%s (env)" % (key, user[key])
-    if key in s.filled or (s.profile and key in profiles.RETIRED):
+    if key in s.filled or (s.profile and key in modes.RETIRED):
         return "mode %s" % (s.mode or s.profile)
     return "built-in"
 

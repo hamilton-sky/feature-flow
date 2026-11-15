@@ -9,7 +9,8 @@ import re
 import sys
 from pathlib import Path
 
-from feature_flow import checks, floorguard, gate, profiles, prompts, repaircheck, status, tickets
+from feature_flow import checks, floorguard, gate, prompts
+from feature_flow.plan import modes, repaircheck, status, tickets
 from feature_flow.infra import git
 from feature_flow.conductor import budget, planning, repair
 from feature_flow.conductor.errors import Stop
@@ -44,7 +45,7 @@ def before_start(c):
     if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
         raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
                    % (c.feature, owner[:8]))
-    for line in profiles.warnings(os.environ, c.settings.ignored):  # retired settings set by hand
+    for line in modes.warnings(os.environ, c.settings.ignored):  # retired settings set by hand
         print(line, file=sys.stderr)
     if c.settings.mode:
         c.log("MODE-%s" % c.settings.mode.upper())

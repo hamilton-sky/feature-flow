@@ -20,7 +20,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from feature_flow import __version__, brainstorm_mode, codeintel, lanes, report, tickets
+from feature_flow import __version__, codeintel, lanes, report
+from feature_flow.plan import brainstorm_mode, tickets
 from feature_flow.infra import git, state, suggest
 
 USAGE = "usage: feature-flow eval <feature> [--later] [--out DIR] [--claude-home DIR] [--compare <eval.json> ...]"

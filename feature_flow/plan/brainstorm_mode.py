@@ -17,7 +17,7 @@ The file is `.feature-flow/state/brainstorm-<feature>.md` until the plan exists 
 import re
 from pathlib import Path
 
-from feature_flow import profiles
+from feature_flow.plan import modes
 
 LEVELS = ("off", "light", "normal", "deep")
 KINDS = ("code", "web")  # code: flow-scout, web: flow-web
@@ -54,8 +54,8 @@ def _check(key, value):
     value = value.strip().lower()
     if key == "type" and value not in TYPES:
         raise BadMode("Type: must be %s, not %s" % (", ".join(TYPES), value or "empty"))
-    if key == "mode" and value not in profiles.MODES:
-        raise BadMode("Mode: must be %s, not %s" % (", ".join(profiles.ORDER), value or "empty"))
+    if key == "mode" and value not in modes.MODES:
+        raise BadMode("Mode: must be %s, not %s" % (", ".join(modes.ORDER), value or "empty"))
     if key in KINDS and value not in LEVELS:
         raise BadMode("Scouts: %s= must be %s, not %s" % (key, ", ".join(LEVELS), value or "empty"))
     return value
@@ -139,7 +139,7 @@ def read(plan_dir, state_dir, feature):
 def helper_profile(environ, brainstorm):
     """The row of LIMITS a brainstorm's helpers count against: careful when FLOW_MODE (or FLOW_PROFILE) says
     careful, or, with neither set, when the brainstorm's own `Mode:` line does; else normal."""
-    named = profiles.env_profile(environ)
+    named = modes.env_profile(environ)
     if named:
         return "careful" if named == "careful" else "normal"
     return "careful" if (brainstorm or {}).get("mode") == "careful" else "normal"

@@ -22,7 +22,8 @@ import sys
 import tempfile
 import time
 
-from feature_flow import status, tickets
+from feature_flow.plan import status
+from feature_flow.plan import tickets
 
 USAGE = "usage: python3 scripts/flow-view.py <feature> [--watch] [--no-open] [--out FILE]"
 REFRESH = b'<meta http-equiv="refresh" content="3">'

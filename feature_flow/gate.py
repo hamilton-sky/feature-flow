@@ -136,7 +136,7 @@ def run(feature, out, err, timeout=None, quick=False, cwd=None, changed=None, pr
     if not path.is_file():
         out("gate: no commands.md for " + feature + ", nothing to run\n")
         return 0
-    from feature_flow import tickets  # here, so scripts/gate.py stays quick to load
+    from feature_flow.plan import tickets  # here, so scripts/gate.py stays quick to load
     quick_cmd = command(path, "Quick") if quick else ""
     todo = []
     for key in KEYS:

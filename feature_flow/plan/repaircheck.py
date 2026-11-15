@@ -14,7 +14,8 @@ import shutil
 import subprocess
 import tempfile
 
-from feature_flow import status, tickets
+from feature_flow.plan import lint
+from feature_flow.plan import tickets
 
 
 class BaselineError(Exception):
@@ -115,7 +116,7 @@ def split(now, before):
 
 def _problems(plan_dir, top):
     """The lint's (errors, warnings) of plan_dir (absolute), the files its tickets name read under top."""
-    return status.plan_problems(os.path.abspath(plan_dir), cwd=top)
+    return lint.plan_problems(os.path.abspath(plan_dir), cwd=top)
 
 
 def lines(found, rev, tree=None, extra=()):

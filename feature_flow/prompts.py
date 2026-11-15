@@ -7,7 +7,8 @@ import re
 import shlex
 from pathlib import Path
 
-from feature_flow import builders, codeintel
+from feature_flow import codeintel
+from feature_flow.plan import builders
 
 ROLES = {"build": "ticket-builder.md", "review": "ticket-reviewer.md", "review-quality": "ticket-reviewer.md",
          "review-single": "ticket-reviewer.md",

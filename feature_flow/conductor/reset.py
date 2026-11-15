@@ -3,7 +3,7 @@ counters go."""
 
 import os
 
-from feature_flow import tickets
+from feature_flow.plan import tickets
 from feature_flow.infra import git, state, suggest
 from feature_flow.conductor import resume as run_resume
 from feature_flow.conductor.errors import Stop

@@ -86,6 +86,6 @@ def main(argv, out=None, err=None):
     out.write(render(feature, state.parse_log(text)))
     plan = Path(top) / os.environ.get("FLOW_DIR", "plans") / feature
     if (plan / "tasks").is_dir():
-        from feature_flow import reality  # plan vs reality, from the same log
+        from feature_flow.plan import reality  # plan vs reality, from the same log
         out.write("\n" + reality.text(*reality.collect(plan, state.parse_log(text))))
     return 0

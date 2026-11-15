@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import feature_flow
-from feature_flow import codehash, tickets
+from feature_flow import codehash
+from feature_flow.plan import tickets
 from feature_flow.infra import git, state
 
 USAGE = "usage: feature-flow doctor <feature> [--trust <digest>]"
