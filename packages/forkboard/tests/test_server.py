@@ -14,8 +14,9 @@ import helpers
 from forkboard import live, server, storage
 
 
-def announced(proc, timeout=8):
-    """Bounded pipe reading also works on Windows, where select only accepts sockets."""
+def announced(proc, timeout=30):
+    """Bounded pipe reading also works on Windows, where select only accepts sockets. A cold CI runner can take
+    several seconds to start Python; on a timeout the process's stderr is shown."""
     lines = []
     reader = threading.Thread(target=lambda: lines.append(proc.stdout.readline()), daemon=True)
     reader.start()
@@ -23,7 +24,8 @@ def announced(proc, timeout=8):
     if reader.is_alive():
         proc.kill()
         reader.join(5)
-        raise AssertionError('server or writer did not announce readiness')
+        err = proc.stderr.read() if proc.stderr else ''
+        raise AssertionError('server or writer did not announce readiness within %ds; stderr: %s' % (timeout, err))
     return lines[0]
 
 
@@ -170,7 +172,7 @@ class HTTP(unittest.TestCase):
             proc = start('--port', '0')
             line = announced(proc)
             self.assertIn('http://127.0.0.1:', line)
-            self.assertIn(str(self.path), line)
+            self.assertIn(str(self.path.resolve()), line)  # the server prints the resolved path (no 8.3 short names)
             proc.terminate()
             proc.communicate(timeout=5)
             self.assertEqual(storage.read(self.path)['round'], 1)
