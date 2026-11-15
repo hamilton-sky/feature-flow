@@ -47,19 +47,19 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
 | `FLOW_DRIVER` | `person` | read by `start`: `agent` when another agent drives the run: no handoffs (unless `FLOW_TICKETS_PER_SESSION` is set), and the eval says so |
 | `FLOW_LANES` | the plan's `Lanes:` line, else `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`); overrides `Lanes:` |
-| `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
+| `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
 | `FLOW_BUDGET` | unset | read by `start`: minutes of active work before fast mode turns on, then a re-plan offer; `off` drops it |
-| `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
+| `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
 | `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase, whatever the brainstorm's `Scouts:` line says |
 | `FLOW_CODEINTEL` | `auto` | `off` keeps codeintel out of the scout's and reviewer's prompts; `auto` adds it when `codeintel doctor` reports an engine ready |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
-| `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
-| `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
-| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks; from the plan, only `Gate: off unsafe` in `commands.md` does the same **Retiring:** from 0.43.0 only `Gate: off unsafe` turns the gate off; `start` warns. |
-| `FLOW_REVIEWERS` | `1` | `2` runs a quality and a ticket reviewer side by side where one review would run (not in lanes) **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
-| `FLOW_ROUND_REVIEW` | `off` | `on` reviews the whole round once at the end, after every ticket's own review **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
-| `FLOW_BASE_GATE` | `off` | `on` runs the whole gate once at the base, before the first ticket, and stops if it is red (`<feature>.base-gate.log`) **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
-| `FLOW_GATE_FULL` | unset | `1` runs the full Build, Test and Lint after every ticket, even when `commands.md` has a `Quick:` line **Retiring:** set by the mode alone from 0.43.0; `start` warns when it is set by hand. |
+| `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks; from the plan, only `Gate: off unsafe` in `commands.md` does the same **Retiring:** from 0.44.0 only `Gate: off unsafe` turns the gate off; `start` warns. |
+| `FLOW_REVIEWERS` | `1` | `2` runs a quality and a ticket reviewer side by side where one review would run (not in lanes) **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_ROUND_REVIEW` | `off` | `on` reviews the whole round once at the end, after every ticket's own review **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_BASE_GATE` | `off` | `on` runs the whole gate once at the base, before the first ticket, and stops if it is red (`<feature>.base-gate.log`) **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_GATE_FULL` | unset | `1` runs the full Build, Test and Lint after every ticket, even when `commands.md` has a `Quick:` line **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
 | `FLOW_SMALL_FILES` | `3` | most files a ticket may change and still get the single review (no level), or stay level 1 |
 | `FLOW_SMALL_LINES` | `60` | most changed lines for the single review; `0` turns the single review off |
 | `FLOW_GATE_TIMEOUT` | `30` | minutes each gate command and the smoke test may run; `0` means no limit. A failed smoke test writes `.feature-flow/state/<feature>.smoke.log` |

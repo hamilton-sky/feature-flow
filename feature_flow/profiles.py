@@ -5,7 +5,7 @@ The word comes from FLOW_MODE, else FLOW_PROFILE, else a `Mode:` line in the pla
 profiles below, which hold the settings: `fix` on normal, `small` on fast, `feature` and `explore` on
 standard, `careful` on careful. The old profile names are still read (fast is small, standard is feature).
 A mode only fills settings that are not set: a FLOW_ variable given on the command line always wins, though
-the ones in RETIRED print a warning, as the mode is to set them alone from 0.43.0.
+the ones in RETIRED print a warning, as the mode is to set them alone from 0.44.0.
 """
 
 PROFILES = {
@@ -41,7 +41,7 @@ MODES = {  # the mode -> the profile that holds its settings
 ORDER = ("fix", "small", "feature", "careful", "explore")
 OLD_NAMES = {"fast": "small", "standard": "feature", "careful": "careful", "normal": ""}  # a profile -> its mode
 
-# settings the mode is to set alone: from 0.43.0 they are not read from the environment
+# settings the mode is to set alone: from 0.44.0 they are not read from the environment
 RETIRED = ("FLOW_FAST", "FLOW_REVIEWERS", "FLOW_ROUND_REVIEW", "FLOW_BASE_GATE", "FLOW_GATE_FULL", "FLOW_BATCH",
            "FLOW_MAX_RETRIES", "FLOW_MAX_REVIEW_ROUNDS")
 
@@ -94,11 +94,11 @@ def apply(environ, name):
 
 def warnings(environ, filled):
     """One line per retired setting set by hand (not filled by the mode), and for FLOW_PROFILE and FLOW_GATE=off."""
-    out = ["feature-flow: %s is set; from 0.43.0 only the mode sets it (Mode: in commands.md, or FLOW_MODE). "
+    out = ["feature-flow: %s is set; from 0.44.0 only the mode sets it (Mode: in commands.md, or FLOW_MODE). "
            "See docs/modes.md" % key for key in RETIRED if environ.get(key) and key not in filled]
     if environ.get("FLOW_PROFILE") and not environ.get("FLOW_MODE"):
         out.append("feature-flow: FLOW_PROFILE is now FLOW_MODE (fast is small, standard is feature)")
     if environ.get("FLOW_GATE") == "off":
-        out.append("feature-flow: FLOW_GATE=off is read for the last time in this release; from 0.43.0 only "
+        out.append("feature-flow: FLOW_GATE=off is read for the last time in this release; from 0.44.0 only "
                    "`Gate: off unsafe` in the approved commands.md turns the gate off")
     return out

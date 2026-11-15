@@ -42,10 +42,10 @@ Each mode stands on one of the old profiles, so a plan made before modes runs ex
 
 ## Settings the mode now sets alone
 
-These settings still work in 0.42.0, but `start` prints a warning when one is set by hand. From 0.43.0 only the mode sets them:
+These settings still work in 0.43.0, but `start` prints a warning when one is set by hand. From 0.44.0 only the mode sets them:
 
 `FLOW_FAST`, `FLOW_REVIEWERS`, `FLOW_ROUND_REVIEW`, `FLOW_BASE_GATE`, `FLOW_GATE_FULL`, `FLOW_BATCH`, `FLOW_MAX_RETRIES`, `FLOW_MAX_REVIEW_ROUNDS`.
 
-`FLOW_GATE=off` also warns: from 0.43.0 only `Gate: off unsafe` in the approved `commands.md` turns the gate off, so it always shows in the plan.
+`FLOW_GATE=off` also warns: from 0.44.0 only `Gate: off unsafe` in the approved `commands.md` turns the gate off, so it always shows in the plan.
 
 The settings that stay yours to override: `FLOW_MODE`, `FLOW_LANES`, `FLOW_SCOUTS`, `FLOW_BUDGET`, `FLOW_CODEINTEL`, `FLOW_GATE_TIMEOUT`, `FLOW_TICKETS_PER_SESSION`, `FLOW_DIR` and `FLOW_TICKETS` ([all settings](commands-and-settings.md)).

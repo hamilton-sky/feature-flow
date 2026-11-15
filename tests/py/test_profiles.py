@@ -81,7 +81,7 @@ class ModeTests(unittest.TestCase):
         env = {"FLOW_REVIEWERS": "1", "FLOW_ROUND_REVIEW": "on", "FLOW_GATE": "off", "FLOW_PROFILE": "fast"}
         lines = profiles.warnings(env, ["FLOW_ROUND_REVIEW"])
         self.assertEqual(len(lines), 3, lines)
-        self.assertTrue(lines[0].startswith("feature-flow: FLOW_REVIEWERS is set; from 0.43.0 only the mode sets it"))
+        self.assertTrue(lines[0].startswith("feature-flow: FLOW_REVIEWERS is set; from 0.44.0 only the mode sets it"))
         self.assertIn("FLOW_PROFILE is now FLOW_MODE", lines[1])
         self.assertIn("`Gate: off unsafe`", lines[2])
         self.assertEqual(profiles.warnings({"FLOW_MODE": "small", "FLOW_FAST": "1"}, ["FLOW_FAST"]), [])
