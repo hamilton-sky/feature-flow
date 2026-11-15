@@ -2,12 +2,17 @@
 """The trusted check in front of every conductor call.
 
 usage: FLOW_TRUST=<last TRUST digest | new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py [--after-build <ticket> <sha>] <feature> <command> [args...]
+       [FLOW_TRUST=<digest>] python3 -I scripts/flow-trust.py <feature> --diagnose
 
 It hashes the flow's own files (the conductor, its package, guides, roles, skills and the run
 state), refuses to call the conductor when they differ from the digest the session passed in
 FLOW_TRUST, runs the conductor, and prints `TRUST <digest>` for the session to pass next time.
 It stops when the flow's code changed during the call, or when the run state is not what the
-conductor reported saving. After a BUILD, `--after-build <ticket> <sha>` accepts a code change
+conductor reported saving. When the digest does not match it says why, as far as the evidence
+allows: an older digest whose code half still matches (`FLOW_TRUST_ACCEPT=saved-state`, on the
+user's yes, carries on when the run state is as the last call saved it), files that really
+changed, or that it cannot tell. `--diagnose` in place of the command says the same and runs
+nothing. After a BUILD, `--after-build <ticket> <sha>` accepts a code change
 (never a state change) when the ticket at <sha> has `Floor: allow flow-edit`.
 
 It imports nothing from the repo, on purpose: it is the code that decides whether the flow's
@@ -37,6 +42,11 @@ USAGE = ("STOP usage: FLOW_TRUST=<last TRUST digest | new> FLOW_SESSION=<token> 
          "[--after-build <ticket> <sha>] <feature> <command> [args...]")
 NO_TRUST = "STOP pass FLOW_TRUST: the last TRUST digest, or new on this session's first call"
 CHANGED = "STOP flow files changed since the last step: %s"
+STALE = ("STOP the TRUST digest you passed is an older one: %s. pass the digest from the last TRUST line. if that is "
+         "lost, run the same command again with FLOW_TRUST_ACCEPT=saved-state on the user's yes")
+UNKNOWN = ("STOP the TRUST digest does not match, and the evidence cannot say why: %s. run `feature-flow doctor %s` "
+           "and show the user; do not carry on until they have looked")
+ACCEPTED = "TRUST-ACCEPTED saved-state: %s"
 NEW_FEATURE = ("STOP no earlier conductor call for %s in this repo, so FLOW_TRUST cannot be its digest: a TRUST digest "
                "belongs to one feature. on a feature's first call pass FLOW_TRUST=new")
 KILLED = "STOP the conductor was killed by signal %d"
@@ -209,6 +219,52 @@ def changed(before, after):
     return sorted(key for key in set(before) | set(after) if before.get(key) != after.get(key))
 
 
+def saved_list(top, feature):
+    """The per-file list the last call wrote, or None when there is none or it does not parse."""
+    try:
+        before = json.loads(trust_path(top, feature).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(before, dict) or not all(isinstance(v, str) for v in before.values()):
+        return None
+    return before
+
+
+def diagnose(top, feature, trust, code, state):
+    """(kind, why) for a FLOW_TRUST that is not the digest of the files now. kind is
+    `stale` (an older digest: the code half proves the flow code is unchanged since it, and the
+    run state is what the last call saved), `changed` (files really changed since the digest:
+    the saved list hashes to the digest's code half, so the names it gives are proven), or
+    `unknown` (the evidence cannot say which). The saved list is never trusted on its own: a
+    conclusion that rests on it says so."""
+    halves = trust.split(".")
+    if len(halves) != 2 or not all(len(h) == 16 and all(c in "0123456789abcdef" for c in h) for h in halves):
+        return "unknown", "%s is not a TRUST digest (<16 hex>.<16 hex>)" % (trust[:40] or "(empty)")
+    saved = saved_list(top, feature)
+    names = set(name(path, top) for path in state_files(top, feature))
+    saved_code = None if saved is None else {k: v for k, v in saved.items() if k not in names}
+    saved_state = None if saved is None else {k: v for k, v in saved.items() if k in names}
+    if saved is not None and part(saved_code) == halves[0] and part(saved_state) == halves[1]:
+        return "changed", ", ".join(changed(saved, dict(code, **state)))  # the list is the digest's: names proven
+    if halves[0] == part(code):
+        if saved is not None and saved_state == state and part(saved_code) == part(code):
+            return "stale", ("the flow code is as it was at that digest (checked against the digest itself), and the "
+                             "run state is as the last conductor call saved it (that rests on %s, which is not proof)"
+                             % name(trust_path(top, feature), top))
+        return "unknown", ("the flow code is as it was at that digest, but the run state is not what the last "
+                           "conductor call saved%s, so nothing says whether the conductor or something else wrote it"
+                           % ("" if saved is not None else " (there is no saved list to compare)"))
+    if saved_code is not None and part(saved_code) == halves[0]:
+        return "changed", ", ".join(changed(saved_code, code))  # the list's code half is the digest's: proven
+    if saved is None:
+        return "unknown", "the flow code is not what the digest says, and there is no saved list to name what changed"
+    if part(saved_code) == part(code):
+        return "unknown", ("the digest matches neither the files now nor the last saved list: it may be from before "
+                           "an accepted change (an upgrade, a resume), or the list was rewritten")
+    return "unknown", ("the digest matches neither the files now nor the last saved list. the list, unchecked, names "
+                       "%s" % (", ".join(changed(saved_code, code)) or "nothing"))
+
+
 def named_changes(top, feature, now):
     """The paths that differ from the per-file list the last call wrote. That list is untrusted:
     it only names paths once the digest has already decided to stop."""
@@ -323,6 +379,26 @@ def with_digest(out, command, feature, trusted):
     return out
 
 
+def diagnosis(top, feature, trust, code, state):
+    """`<feature> --diagnose`: what the trust check would say about FLOW_TRUST (none: about the
+    files and the saved list), as `TRUST-DIAGNOSIS <kind> <why>`. Runs nothing, writes nothing."""
+    if trust and trust != "new" and digest(code, state) == trust:
+        kind, why = "ok", "the digest matches the flow's files and the run state now"
+    elif trust and trust != "new":
+        kind, why = diagnose(top, feature, trust, code, state)
+    else:
+        saved = saved_list(top, feature)
+        if saved is None:
+            kind, why = "nodigest", "no digest given, and no saved list from an earlier call to compare with"
+        else:
+            names = changed(saved, dict(code, **state))
+            kind = "nodigest"
+            why = ("no digest given. against the saved list (not proof): %s" %
+                   ("nothing changed since the last call" if not names else "changed " + ", ".join(names)))
+    sys.stdout.write("TRUST-DIAGNOSIS %s %s\n" % (kind, why))
+    return 0
+
+
 def main():
     here, args = started()
     parsed = parse(args)
@@ -330,21 +406,30 @@ def main():
         print(USAGE)
         return 1
     feature, command, rest, after = parsed
+    diagnosing = command == "--diagnose"
     trust = os.environ.get("FLOW_TRUST", "")
-    if not trust:
+    if not trust and not diagnosing:
         print(NO_TRUST)
         return 1
     top = toplevel()
     before, state = snapshot(here, top, feature)
+    if diagnosing:
+        return diagnosis(top, feature, trust, before, state)
     edited = None
+    accepted = None
     if trust != "new" and digest(before, state) != trust:
         edited = flow_edit(top, feature, trust, after, before, state)
         if edited is None:
             if not trust_path(top, feature).is_file() and not any(path.exists() for path in state_files(top, feature)):
                 print(NEW_FEATURE % feature)
+                return 1
+            kind, why = diagnose(top, feature, trust, before, state)
+            if kind == "stale" and os.environ.get("FLOW_TRUST_ACCEPT") == "saved-state":
+                accepted = why
             else:
-                print(CHANGED % named_changes(top, feature, dict(before, **state)))
-            return 1
+                print(STALE % why if kind == "stale" else CHANGED % why if kind == "changed" else
+                      UNKNOWN % (why, feature))
+                return 1
     result = run_conductor(here, feature, command, rest)
     code, state = snapshot(here, top, feature)
     err, report = split_report(result.stderr)
@@ -367,6 +452,8 @@ def main():
         sys.stdout.write("TRUST %s\n" % trusted)
         if edited is not None:
             sys.stdout.write("FLOW-EDIT %s\n" % edited)
+        if accepted is not None:
+            sys.stdout.write(ACCEPTED % accepted + "\n")
         out = with_digest(out, command, feature, trusted)
     sys.stdout.flush()
     sys.stdout.buffer.write(out)

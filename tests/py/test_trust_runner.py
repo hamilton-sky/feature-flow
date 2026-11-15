@@ -370,7 +370,8 @@ class Trips(Base):
         self.append(self.repo.path("feature_flow/conductor/__init__.py"))
         rc, out, err = self.call("next")
         self.assertEqual(rc, 1, (out, err))
-        self.assertEqual(out.strip(), CHANGED + " (no earlier list to name them)")
+        self.assertTrue(out.startswith("STOP the TRUST digest does not match, and the evidence cannot say why: "
+                                       "the flow code is not what the digest says, and there is no saved list"), out)
 
 
 class Arguments(Base):
@@ -799,7 +800,11 @@ class FlowEdit(FlowEditBase):
             each[rel] = hashlib.sha256(self.repo.path(rel).read_bytes()).hexdigest()
         trust.write_text(json.dumps(each, sort_keys=True, indent=1) + "\n", encoding="utf-8")
         rc, lines, err = self.after_build(base)
-        self.assertStopped(rc, lines, err)
+        self.assertEqual(rc, 1, (lines, err))
+        self.assertTrue(lines[0].startswith("STOP the TRUST digest does not match, and the evidence cannot say why"),
+                        lines)  # 0.41.0: a rewritten list proves nothing, so the runner names nothing
+        self.assertIn("or the list was rewritten", lines[0])
+        self.assertFalse(any(line.startswith(("FLOW-EDIT", "TRUST")) for line in lines), lines)
 
     def test_a_state_change_alone_stops_with_the_flag(self):
         base = self.build()

@@ -105,31 +105,43 @@ def _start(c, num, current, chosen):
                "before the ticket's first commit" % (num, c.feature, num, c.feature, num))
 
 
-def resume(c, num=None, chosen=None):
-    """Accept the flow code as it is now and put the ticket's start back. Returns the OK line."""
+def resume(c, num=None, chosen=None, accept_code=False, dry=False):
+    """Put the ticket's start back, and with accept_code accept the flow code as it is now. Returns the OK line;
+    with dry, a `PLAN` line of what it would do, and nothing is changed. It never resets: the ticket's commits,
+    findings and attempt notes stay, a dirty tree stops it, and a session that owns the feature keeps it."""
     if not c.plan.is_dir():
         hint = suggest.hint(c.feature, suggest.features(c.root)).strip()
         raise Stop("no plan folder %s%s" % (c.plan, ". " + hint if hint else ""))
+    owned(c)
     if c.num_all("lanes") > 1:
         raise Stop("resume works on one ticket at a time, and this run has lanes. run `feature-flow reset %s` "
                    "first (it remembers where each ticket started), then resume" % c.feature)
     dirty = git.changes()
     if dirty:
-        raise Stop("working tree is not clean, commit or stash first: %s%s"
+        raise Stop("working tree is not clean, commit or stash first (resume never discards work): %s%s"
                    % (" ".join(dirty[:5]), " and %d more" % (len(dirty) - 5) if len(dirty) > 5 else ""))
     whole, each = c.flow_code()
     changed = []
     if c.get("code_sha") and whole != c.get("code_sha"):
         changed = codehash.changed(codehash.load(c.get("code_files")), each)
+    again = command_line(c, num, chosen, accept_code=True)
+    if changed and not accept_code and not dry:
+        raise Stop("the flow code changed since this ticket was picked: %s. resume accepts it only when you say so: "
+                   "show the user `%s`, and on their yes run `%s`"
+                   % (", ".join(changed[:8]) + (" and %d more" % (len(changed) - 8) if len(changed) > 8 else ""),
+                      command_line(c, num, chosen, dry=True), again))
     paths = tickets.ticket_files(str(c.plan / (os.environ.get("FLOW_TICKETS") or "tasks")))
     path = _pick_ticket(c, paths, num)
     done = []
     if changed:
-        done.append("accepted the flow code as it is now (changed: %s)" % ", ".join(changed[:5]))
+        done.append("%s the flow code as it is now (changed: %s)" % ("would accept" if dry else "accepted",
+                                                                   ", ".join(changed[:5])))
     if path is None:
         if num is None and not changed:
             raise Stop("no ticket is in progress for %s. say which one: `feature-flow resume %s NN`"
                        % (c.feature, c.feature))
+        if dry:
+            return "PLAN %s. nothing was changed. to do it: %s" % (", ".join(done) or "nothing to resume", again)
         if c.all:
             c.snapshot_code()
             c.save()
@@ -145,10 +157,13 @@ def resume(c, num=None, chosen=None):
                    % (c.get("num"), num, c.feature))
     sha, why = _start(c, num, current, chosen)
     commits = own_commits(sha, c.plan)
+    if dry:
+        return "PLAN %s. nothing was changed. to do it: %s" % (", ".join(
+            done + _planned(c, num, sha, why, current, commits)), command_line(c, num, chosen, accept_code=bool(changed)))
     repaired = ""
     if c.all.get("repair_sha"):  # resume restarts the ticket itself: a pending repair would move its start again
         repaired = git.head() if git.head() != c.all["repair_sha"] else ""
-        c.all["repair_sha"] = c.all["repair_num"] = ""
+        c.all["repair_sha"] = c.all["repair_num"] = c.all["repair_plan"] = ""
         done.append("took over the pending plan repair: the ticket reads the plan as it is now" if repaired else
                     "dropped the pending plan repair, which committed nothing")
     if current:  # the ticket is in progress: it carries on from its phase, with fresh attempts
@@ -177,7 +192,48 @@ def resume(c, num=None, chosen=None):
     c.log("RESUME %s %s" % (num, sha[:12]))
     done.append("%s from %s (%s)" % (what, sha[:10], why))
     if commits:
-        shown = "; ".join(commits[:8]) + (" and %d more" % (len(commits) - 8) if len(commits) > 8 else "")
-        done.append("its %d commit(s) since then count for it: %s" % (len(commits), shown))
+        done.append("its %d commit(s) since then count for it: %s" % (len(commits), _shown(commits)))
     done.append("every check runs again from there, test first included")
     return "OK %s. run %s %s" % (", ".join(done), c.invoke, c.feature)
+
+
+def _shown(commits):
+    return "; ".join(commits[:8]) + (" and %d more" % (len(commits) - 8) if len(commits) > 8 else "")
+
+
+def _planned(c, num, sha, why, current, commits):
+    """What a resume would do to ticket num, in words, for the dry run."""
+    found = []
+    if c.all.get("repair_sha"):
+        found.append("would take over the pending plan repair" if git.head() != c.all["repair_sha"] else
+                     "would drop the pending plan repair, which committed nothing")
+    found.append("ticket %s would %s from %s (%s)" % (num, "carry on in its %s phase" % c.get("phase") if current
+                                                       else "start again when it is picked", sha[:10], why))
+    if current and sha != current:
+        found.append("its start moves from %s" % current[:10])
+    found.append("its %d commit(s) since then would count for it%s" % (len(commits), ": " + _shown(commits)
+                                                                       if commits else ""))
+    found.append("the findings, attempt notes and tickets stay as they are, and every check runs again, test first "
+                 "included")
+    return found
+
+
+def command_line(c, num=None, chosen=None, accept_code=False, dry=False):
+    """The `feature-flow resume` line for these arguments."""
+    return " ".join(["feature-flow resume", c.feature] + ([num] if num else []) + (["--from", chosen] if chosen else [])
+                    + (["--accept-code"] if accept_code else []) + (["--dry-run"] if dry else []))
+
+
+def owned(c):
+    """resume changes a run's start: while a session owns the feature, only that session (its FLOW_SESSION) may,
+    or the user with FLOW_TAKEOVER=1 once that session is closed. The owner itself is never replaced."""
+    owner = c.get("owner")
+    if not owner or os.environ.get("FLOW_TAKEOVER", "0") == "1":
+        return
+    from feature_flow.conductor.guards import owner_hash  # the guards import the phases, which import resume
+    token = os.environ.get("FLOW_SESSION", "")
+    if owner_hash(token) == owner or (len(owner) == 16 and token == owner):  # a raw token, from before 0.5.0
+        return
+    raise Stop("%s is owned by session %s, and resume would move its ticket's start under it. run resume from that "
+               "session (with its FLOW_SESSION), or, once you are sure it is closed, with FLOW_TAKEOVER=1"
+               % (c.feature, owner[:8]))

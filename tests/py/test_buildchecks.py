@@ -261,7 +261,7 @@ class RealChecks(unittest.TestCase):
         source, report, notes = buildchecks.TestFirst().run(c)
         self.assertIsNone(source)
         self.assertIn("fail the Test command before the code", notes[0])
-        self.assertEqual(c.events, ["TESTFIRST-PASS"])
+        self.assertEqual([e for e in c.events if not e.startswith("TESTFIRST-TIME")], ["TESTFIRST-PASS"])
         self.assertEqual(c.saved[-1], "")
         self.assertIn(branch, c.saved)
         self.assertEqual(self.repo.git("symbolic-ref", "--short", "HEAD"), branch)
@@ -281,7 +281,7 @@ class RealChecks(unittest.TestCase):
         source, report, notes = buildchecks.TestFirst().run(c)
         self.assertEqual((source, notes), ("test first", []))
         self.assertIn("no commit between base and HEAD changes only test files", report)
-        self.assertEqual(c.events, ["TESTFIRST-FAIL"])
+        self.assertEqual([e for e in c.events if not e.startswith("TESTFIRST-TIME")], ["TESTFIRST-FAIL"])
 
     def test_the_pipeline_stops_at_the_footprint(self):
         self.ticket("Touches: src/\n", FENCE + "check\n$ " + py("pass") + "\n" + FENCE + "\n")

@@ -28,9 +28,10 @@ When your task says **repair**, the plan has a gap that stopped the build, not t
 2. Audit every open ticket's `Touches:` the same way: grep for the tests that pin what it changes, the generators that write its files, and the fixtures in the old shape. Add each missing path.
 3. You may widen `Touches:`, fix a `Done when` or `check` block that cannot pass as written, and add a new open ticket (numbered after the last one) for work no ticket owns. Keep the bar: never drop a promise of `spec.md`, and never weaken a check.
 4. Change `commands.md` only when the gap is there (a Lint command that checks the plan folder, a missing `Quick:` line), and list the change under OPEN QUESTIONS as `user: commands.md: <the change>`: the session asks the user before it commits.
-5. Never edit a resolved ticket. Run `--check` and `--lint` as above.
+5. Never edit a resolved ticket. Run `--check`, then the lint against the repair's baseline, `python3 scripts/flow-status.py <feature> --lint --baseline <commit>` with the commit your task names. Fix every problem it lists as **new**. A problem it lists as **inherited** was in the plan before the repair (often in a resolved ticket): leave it, it does not block the repair, and you must not edit a resolved ticket to fix it.
+6. When a question only an architect, designer or product owner can answer stands in the way (may one ticket change both files, say), ask it under OPEN QUESTIONS starting `architect:`, `designer:` or `po:`, and end with `PLAN: QUESTIONS`. The answers come back in your next round under `## Consulted`.
 
-Reply in the shape below with `REPAIRED: <each ticket and what changed>` in place of `FOLDED:`.
+Reply in the shape below with `REPAIRED: <each ticket and what changed>` in place of `FOLDED:`, and add one line before `KEPT:`: `FOOTPRINT: <each path a ticket's Touches: gained or lost, like 03 + src/server.py (the save race needs the lock there)>`, or `FOOTPRINT: unchanged`. The user sees it next to the conductor's own footprint check before the repair is committed.
 
 ## Reply
 

@@ -237,7 +237,7 @@ def plan(phase, scripts, feature, draft, brief, findings="", brainstorm=False, t
     return "\n\n".join(parts) + "\n"
 
 
-def replan(scripts, feature, plan, open_tickets, brainstorm=False, top=".", repair=None):
+def replan(scripts, feature, plan, open_tickets, brainstorm=False, top=".", repair=None, baseline=None, consulted=""):
     """The feature-planner's prompt to fold a running feature's open tickets into fewer, in place; with repair (the
     stopped ticket's path, or "" between tickets), to repair the plan instead."""
     role_text = role(scripts, ROLES["replan"], top)
@@ -252,7 +252,16 @@ def replan(scripts, feature, plan, open_tickets, brainstorm=False, top=".", repa
                 "Do not commit. Your final reply must end with exactly `PLAN: READY` or `PLAN: QUESTIONS`."
                 % (feature, plan, "The build stopped on `%s`: read it, its Attempt notes and its findings, to see what "
                    "the plan missed. " % repair if repair else ""))
-        return "\n\n".join([role_text, "---", "The re-plan guide follows. Follow it exactly.", guide, "---", task]) + "\n"
+        if baseline:
+            task += _runner("\n\nThe repair's baseline is the plan at `%s`. Check the repair with `python3 scripts/flow-status.py "
+                     "%s --lint --baseline %s`: fix every problem it lists as new. The ones it lists as inherited were "
+                     "there before the repair (often in a resolved ticket, which you never edit): leave them, they do "
+                     "not block the repair." % (baseline[:12], feature, baseline), scripts)
+        parts = [role_text, "---", "The re-plan guide follows. Follow it exactly.", guide, "---", task]
+        if consulted.strip():
+            parts += ["## Consulted", "You asked these questions in the last round; the answers are the consultants', "
+                      "not the user's. Use them, or say in your reply why not.", consulted.strip("\n")]
+        return "\n\n".join(parts) + "\n"
     listing = "\n".join("- `%s`" % path for path in open_tickets)
     if brainstorm:
         task += ("\nThe user chose how to build this feature in `%s/brainstorm.md`: the folded tickets still build its "

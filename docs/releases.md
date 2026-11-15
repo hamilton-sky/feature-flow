@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.41: recoverable stops
+
+| Version | Added |
+|---|---|
+| 0.41.0 | From the portable-live-page field run, whose stops came from the workflow's own recovery, not the code. **Doctor** ([docs](speed.md#long-features-and-handoff)): `feature-flow doctor <feature> [--trust <digest>]` (or `flow-status.py <feature> --doctor`) says where a run stands and the safe next command, read-only, and says `cannot determine` where the evidence does not support a conclusion. **The trust check says why**: a stale digest (the code half proves the flow code unchanged; `FLOW_TRUST_ACCEPT=saved-state` on the user's yes), files that really changed (named and proven), or that it cannot tell. `flow-trust.py <feature> --diagnose` says the same and runs nothing. **Safe resume**: `--dry-run` shows what it would do, changed flow code needs `--accept-code`, and a session that owns the feature keeps it. **Repair mode**: a repair is measured against the plan it started from (recorded commit and tree): inherited problems stay visible and never block, new ones block (`repair-check`, `flow-status.py <feature> --lint --baseline <commit>`), the footprint each ticket gains is listed and logged (`REPAIR-FOOTPRINT`), and `consult-prompt` works on the existing plan during a repair, with `replan-prompt repair <answers>` for the next round. **Timing**: the test-first check logs `TESTFIRST-TIME`, and `feature-flow eval` reports gate runs, test-first checks and finding-to-fix minutes (back at review, and to a pass), a baseline for the speed work to come. |
+
 ## 0.40: a repair keeps the start
 
 | Version | Added |

@@ -86,8 +86,8 @@ class Resume(unittest.TestCase):
         rc, out = self.repo.flow("next")
         self.assertEqual(rc, 1, out)
         self.assertIn("flow code changed while building", out)
-        self.assertIn("feature-flow resume f", out)
-        rc, out = self.repo.flow("resume")
+        self.assertIn("feature-flow resume f --accept-code", out)
+        rc, out = self.repo.flow("resume", "--accept-code")
         self.assertEqual(rc, 0, out)
         self.assertIn("accepted the flow code as it is now (changed: feature_flow/__init__.py)", out)
         rc, out = self.repo.flow("next")
@@ -124,7 +124,7 @@ class Resume(unittest.TestCase):
         self.repo.path("loose.txt").write_text("x\n", encoding="utf-8")
         rc, out = self.repo.flow("resume")
         self.assertEqual(rc, 1, out)
-        self.assertIn("commit or stash first: loose.txt", out)
+        self.assertIn("commit or stash first (resume never discards work): loose.txt", out)
 
     def test_feature_flow_resume_runs_in_the_current_repo(self):
         self.prepare()

@@ -8,6 +8,7 @@ first only with the gate on. A checkpointed gate leaves the full gate and Done w
 """
 
 import hashlib
+import time
 import json
 import re
 
@@ -158,6 +159,7 @@ class TestFirst:
             c.st["restore"] = value
             c.save()
         quick = tickets.commands_value(_at(c, c.commands), "Quick")
+        began = time.monotonic()
         try:
             ok, text = False, ""
             if quick:
@@ -168,6 +170,7 @@ class TestFirst:
                 ok, text = proof.test_first(c.get("base"), test, _at(c, c.plan), c.gate_timeout, remember)
         except proof.GitError as err:
             raise Stop("test first check of %s: %s" % (c.ticket_name(), err))
+        c.log("TESTFIRST-TIME %d" % round(time.monotonic() - began))  # eval: how long proving test first takes
         c.log("TESTFIRST-PASS" if ok else "TESTFIRST-FAIL")
         if not ok:
             lost_start(c)
