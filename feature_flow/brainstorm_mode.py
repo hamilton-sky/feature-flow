@@ -3,8 +3,12 @@
 A type says who the brainstorm is for, and sets how far the code and web scouts look and which helpers the
 brainstorm may use. Both are header lines of the brainstorm file, beside `Style:` and `Picked by:`:
 
+    Mode: careful
     Type: learn
     Scouts: code=light web=deep
+
+`Mode:` is how the plan will be built once the brainstorm ends (the start card's first row, docs/modes.md); the
+brief carries it into the plan's commands.md. A careful one also raises the brainstorm's helper limits.
 
 The file is `.feature-flow/state/brainstorm-<feature>.md` until the plan exists and then
 `plans/<feature>/brainstorm.md`, so the scouts of the plan and the build follow the same choice.
@@ -12,6 +16,8 @@ The file is `.feature-flow/state/brainstorm-<feature>.md` until the plan exists 
 
 import re
 from pathlib import Path
+
+from feature_flow import profiles
 
 LEVELS = ("off", "light", "normal", "deep")
 KINDS = ("code", "web")  # code: flow-scout, web: flow-web
@@ -48,13 +54,15 @@ def _check(key, value):
     value = value.strip().lower()
     if key == "type" and value not in TYPES:
         raise BadMode("Type: must be %s, not %s" % (", ".join(TYPES), value or "empty"))
+    if key == "mode" and value not in profiles.MODES:
+        raise BadMode("Mode: must be %s, not %s" % (", ".join(profiles.ORDER), value or "empty"))
     if key in KINDS and value not in LEVELS:
         raise BadMode("Scouts: %s= must be %s, not %s" % (key, ", ".join(LEVELS), value or "empty"))
     return value
 
 
 def parse(text):
-    """{"type"?, "code"?, "web"?, "helpers"?} from a brainstorm's header lines (those before the first `## ` heading).
+    """{"mode"?, "type"?, "code"?, "web"?, "helpers"?} from a brainstorm's header lines (those before the first `## ` heading).
     Raises BadMode on a value it does not know."""
     found = {}
     for line in (text or "").splitlines():
@@ -65,6 +73,8 @@ def parse(text):
             continue
         if key.strip() == "Type" and value.strip():
             found["type"] = _check("type", value)
+        elif key.strip() == "Mode" and value.strip():
+            found["mode"] = _check("mode", value.strip().strip("`"))
         elif key.strip() == "Helpers" and value.strip():
             found["helpers"] = helpers_line(value)
         elif key.strip() == "Scouts":
@@ -124,6 +134,15 @@ def read(plan_dir, state_dir, feature):
             continue
         return parse(text)
     return {}
+
+
+def helper_profile(environ, brainstorm):
+    """The row of LIMITS a brainstorm's helpers count against: careful when FLOW_MODE (or FLOW_PROFILE) says
+    careful, or, with neither set, when the brainstorm's own `Mode:` line does; else normal."""
+    named = profiles.env_profile(environ)
+    if named:
+        return "careful" if named == "careful" else "normal"
+    return "careful" if (brainstorm or {}).get("mode") == "careful" else "normal"
 
 
 def level(kind, environ, filled, mode):

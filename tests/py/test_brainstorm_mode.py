@@ -27,9 +27,20 @@ class Header(unittest.TestCase):
         self.assertEqual(brainstorm_mode.parse(""), {})
 
     def test_it_refuses_a_value_it_does_not_know(self):
-        for text in ("Type: fast\n", "Scouts: code=huge\n", "Scouts: tests=deep\n", "Scouts: deep\n"):
+        for text in ("Type: fast\n", "Mode: turbo\n", "Scouts: code=huge\n", "Scouts: tests=deep\n", "Scouts: deep\n"):
             with self.assertRaises(BadMode, msg=text):
                 brainstorm_mode.parse(text)
+
+    def test_it_reads_the_mode_line(self):
+        self.assertEqual(brainstorm_mode.parse("# B\n\nMode: `Careful`\nType: map\n"), {"mode": "careful", "type": "map"})
+        self.assertEqual(brainstorm_mode.parse("Mode: <feature|careful: how the plan is built>\n"), {})
+
+    def test_the_helper_limits_follow_flow_mode_then_the_mode_line(self):
+        careful = {"mode": "careful"}
+        self.assertEqual(brainstorm_mode.helper_profile({}, careful), "careful")
+        self.assertEqual(brainstorm_mode.helper_profile({}, {"mode": "explore"}), "normal")
+        self.assertEqual(brainstorm_mode.helper_profile({"FLOW_MODE": "feature"}, careful), "normal")
+        self.assertEqual(brainstorm_mode.helper_profile({"FLOW_PROFILE": "careful"}, {}), "careful")
 
     def test_the_helpers_line_reads_names_and_lenses_and_writes_back(self):
         self.assertEqual(brainstorm_mode.parse("Helpers: architect PO skeptic lens=ux,security\n")["helpers"],
@@ -130,6 +141,11 @@ class Brainstorm(unittest.TestCase):
                 self.assertIn("has used its %d" % n, out)
                 return n
         self.fail("no limit for %s" % helper)
+
+    def test_a_careful_mode_line_allows_three_consultants(self):
+        self.header("Mode: careful\n")
+        self.assertEqual(self.used("architect"), 3)
+        self.assertEqual(self.used("ux"), 3)
 
     def test_map_allows_three_scouts_and_one_web(self):
         self.header("Type: map\n")

@@ -2,10 +2,11 @@
 
 The page has five steps, Style, Team, Options, Plan and Build, each a Forkboard step (packages/forkboard/, doc.py)
 shown as a tab: a done step shows its one-line summary and a Change button, the current one is open with an Approve
-button, a later one is greyed. Style holds the brainstorm's type and its scout levels, Team its helpers, Options a
+button, a later one is greyed. Style holds the mode the plan will be built in, the brainstorm's type and its scout
+levels, Team its helpers, Options a
 pick of the drafted options, and Plan the build flow's choices. On a live page a pick waits until the user approves
 its step; the Approve saves the step's picks and its approval in the page's state, which wakes the session, and
-`apply_picks` writes them into the brainstorm's header lines (`Type:`, `Scouts:`, `Helpers:`), the only lines of the
+`apply_picks` writes them into the brainstorm's header lines (`Mode:`, `Type:`, `Scouts:`, `Helpers:`), the only lines of the
 brainstorm the page ever writes. Which steps are approved comes from the page's state (`approved`), so the steps
 move on one Approve at a time. The session publishes the page to the same link at every stop, so there is one page.
 """
@@ -36,8 +37,12 @@ LEVEL_NOTES = {"code": {"off": "no code scouts: the brainstorm works from what y
                        "normal": "the usual search: prior art and the docs of the tools involved",
                        "deep": "up to two searches that go wider; slower"}}
 CONSULT = ("architect", "designer", "po")
-PICK_KEYS = ("type", "code", "web", "consult", "skeptic", "lens")
-STYLE_KEYS = ("type", "code", "web")
+PICK_KEYS = ("mode", "type", "code", "web", "consult", "skeptic", "lens")
+STYLE_KEYS = ("mode", "type", "code", "web")
+BUILD_MODES = {  # the start card's Mode row: a brainstorm is explore, so the row picks how the plan is built after it
+    "feature": "most work: two reviewers on each ticket, the full tests and a review every 3 tickets",
+    "careful": "auth, money, data or shared code: the full tests and two reviewers on every ticket, and more "
+               "helpers for this brainstorm"}
 OPTION_KEY = "option"  # the Options step's pick: the session writes it as Chosen (brainstorm guide, Step 4)
 PLAN_KEYS = ("profile", "lanes", "gate", "full_review")  # flow_plan.PLAN_KEYS
 
@@ -46,9 +51,15 @@ def is_plan_key(key):  # flow_plan.is_plan_key: builder-<NN> is the Plan step's 
     return key in PLAN_KEYS or key.startswith("builder-")
 
 
-def profile(environ=None):
+def profile(environ=None, mode=None):
+    """The helper limits' row: careful from FLOW_MODE, or else from the brainstorm's Mode: line (mode, its parse)."""
     environ = os.environ if environ is None else environ
-    return "careful" if profiles.env_profile(environ) == "careful" else "normal"
+    return brainstorm_mode.helper_profile(environ, mode)
+
+
+def build_mode(mode):
+    """The Mode row's value: the brainstorm's Mode: line, with explore (and anything else) built as feature."""
+    return "careful" if (mode or {}).get("mode") == "careful" else "feature"
 
 
 def setup_of(text, environ=None):
@@ -57,7 +68,7 @@ def setup_of(text, environ=None):
     mode = brainstorm_mode.parse(text)
     kind = mode.get("type") or "standard"
     levels = {k: brainstorm_mode.level(k, environ, (), mode) for k in brainstorm_mode.KINDS}
-    caps = brainstorm_mode.limits(profile(environ), levels, kind)
+    caps = brainstorm_mode.limits(profile(environ, mode), levels, kind)
     helpers = mode.get("helpers")
     if helpers is None:
         helpers = brainstorm_mode.TYPES[kind]["helpers"]
@@ -69,8 +80,8 @@ def summary(kind, levels, helpers):
                                                            brainstorm_mode.helpers_text(helpers))
 
 
-def style_summary(kind, levels):
-    return "type %s, scouts code=%s web=%s" % (kind, levels["code"], levels["web"])
+def style_summary(kind, levels, built="feature"):
+    return "mode %s, type %s, scouts code=%s web=%s" % (built, kind, levels["code"], levels["web"])
 
 
 def team_summary(helpers):
@@ -84,6 +95,9 @@ def setup_section(text, environ=None):
     levels_options = lambda kind: [{"value": v, "label": LEVEL_LABELS[v], "note": LEVEL_NOTES[kind][v]}
                                     for v in brainstorm_mode.LEVELS]
     choices = [
+        {"key": "mode", "label": "Mode", "kind": "one", "value": build_mode(mode),
+         "about": "How the plan is built once the brainstorm ends. You can change it again on the plan's yes.",
+         "options": [{"value": m, "label": m.capitalize(), "note": note} for m, note in BUILD_MODES.items()]},
         {"key": "type", "label": "Type", "kind": "one", "value": kind,
          "about": "How the brainstorm runs. Pick by what you know already.",
          "options": [{"value": t, "label": t.capitalize(), "note": brainstorm_mode.TYPES[t]["about"]}
@@ -103,10 +117,10 @@ def setup_section(text, environ=None):
                                   "lens": "A lens looks at every option from one angle."}[key],
                         "options": [{"value": n, "label": HELPER_LABELS[n], "note": HELPER_NOTES[n]} for n in names],
                         "note": "Your profile and type allow none." if top == 0 else ""})
-    style = ("Who the brainstorm is for and how far the scouts look. The type sets the helpers the Team step "
+    style = ("How the plan will be built, who the brainstorm is for and how far the scouts look. The type sets the helpers the Team step "
              "starts from.")
-    team = ("Which helpers look at the options. The limits come from the %s profile and the %s type."
-            % (profile(environ), kind))
+    team = ("Which helpers look at the options. The limits come from the %s mode and the %s type."
+            % ("careful" if profile(environ, mode) == "careful" else "feature", kind))
     return [{"title": "Style", "kind": "text", "markdown": style, "items": [], "step": "Style",
              "choices": [c for c in choices if c["key"] in STYLE_KEYS]},
             {"title": "Team", "kind": "text", "markdown": team, "items": [], "step": "Team",
@@ -161,7 +175,7 @@ def document(base, text, environ=None, top=None, feature=None, approved=None):
         style_state = "done" if "Style" in approved else "current"
         team_state = "later" if style_state == "current" else "done" if "Team" in approved else "current"
     steps = [
-        {"name": "Style", "state": style_state, "summary": style_summary(kind, levels)},
+        {"name": "Style", "state": style_state, "summary": style_summary(kind, levels, build_mode(mode))},
         {"name": "Team", "state": team_state, "summary": team_summary(helpers)},
         {"name": "Options", "state": "done" if picked else "current" if has_options or team_state == "done" and live
          else "later",
@@ -202,7 +216,12 @@ def apply_picks(text, picks, environ=None):
     kind = picks.get("type", brainstorm_mode.parse(text).get("type") or "standard")
     if kind not in brainstorm_mode.TYPES:
         raise ValueError("Type: must be %s, not %s" % (", ".join(brainstorm_mode.TYPES), kind))
-    lines = {"Type": kind}
+    lines = {}
+    if "mode" in picks:
+        if picks["mode"] not in BUILD_MODES:
+            raise ValueError("Mode: must be %s, not %s" % (" or ".join(BUILD_MODES), picks["mode"]))
+        lines["Mode"] = picks["mode"]
+    lines["Type"] = kind
     mode, levels, helpers, _ = setup_of(header_lines(text, lines), environ)  # a new type brings its own defaults
     if "code" in picks or "web" in picks or "code" in mode or "web" in mode:
         new = dict(levels, **{k: picks[k] for k in brainstorm_mode.KINDS if k in picks})
@@ -223,7 +242,7 @@ def apply_picks(text, picks, environ=None):
     too_many = brainstorm_mode.over(helpers, caps)
     if too_many:
         raise ValueError("the page picked %d %s helper(s), and %s with type %s allows %d" % (
-            too_many[1], too_many[0], profile(environ), mode.get("type") or "standard", too_many[2]))
+            too_many[1], too_many[0], profile(environ, mode), mode.get("type") or "standard", too_many[2]))
     return out, lines
 
 
@@ -242,7 +261,7 @@ def header_lines(text, values):
     missing = ["%s: %s" % (k, v) for k, v in values.items() if k not in seen]
     if missing:
         last = max((i for i, l in enumerate(kept) if l.partition(":")[0].strip() in
-                    ("Picked by", "Style", "Type", "Scouts", "Helpers") and ":" in l), default=None)
+                    ("Picked by", "Style", "Mode", "Type", "Scouts", "Helpers") and ":" in l), default=None)
         if last is None:
             last = next((i for i, l in enumerate(kept) if l.startswith("# ")), -1)
             missing = ([""] if last >= 0 else []) + missing

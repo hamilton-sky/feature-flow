@@ -28,6 +28,10 @@ Name it in the command, `/feature-flow csv-export small`, and nothing is asked. 
 
 The mode is written into the plan's `commands.md` as a `Mode:` line, approved and frozen with the plan. `FLOW_MODE=<mode>` on `start` overrides the line for one run.
 
+## On the guided page
+
+For `feature`, `careful` and `explore`, a brainstorm's start card (the Style tab of the [guided page](guided-flow.md#stop-1-the-start-card)) has the mode as its first row: `feature` or `careful`, how the plan is built once the brainstorm ends. The session's guess is picked already, and `explore` shows as `feature`, since that is how it is built. The pick goes into the brainstorm's `Mode:` line, the brief takes it from there, and the plan's yes can still change it. A `careful` brainstorm may ask more helpers (the careful limits). `fix` and `small` never open a page: the one line in the chat is the whole question.
+
 ## Older names
 
 Each mode stands on one of the old profiles, so a plan made before modes runs exactly as before:

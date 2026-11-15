@@ -29,9 +29,11 @@ Your answer picks the [brainstorm type](brainstorm.md#brainstorm-before-planning
 
 Then it shows the setup in one line, for example:
 
-> `learn`: web scouts deep, code light, with the product owner, the skeptic and the `ux` lens. ok, or change it?
+> build as `feature`; `learn`: web scouts deep, code light, with the product owner, the skeptic and the `ux` lens. ok, or change it?
 
-"ok" takes it. To change it, say so ("no skeptic", "code=deep"), or, on the live page, pick in the Style tab (the type and the scout levels) and press Approve, then in the Team tab (the helpers) and press Approve. You start in a style, and the team comes after it, from that style's defaults. The setup is written into the brainstorm's header (`Type:`, `Scouts:`, `Helpers:`), and later the plan's scouts and the build's scouts follow the same levels.
+"ok" takes it. To change it, say so ("careful", "no skeptic", "code=deep"), or, on the live page, pick in the Style tab (the mode, the type and the scout levels) and press Approve, then in the Team tab (the helpers) and press Approve. You start in a style, and the team comes after it, from that style's defaults. The setup is written into the brainstorm's header (`Mode:`, `Type:`, `Scouts:`, `Helpers:`), and later the plan's scouts and the build's scouts follow the same levels.
+
+The Style tab's first row is the **mode** the plan will be built in once the brainstorm ends: `feature` (the default) or `careful`. A brainstorm is already the `explore` mode, so the row only picks what comes after it, and `fix` and `small` never open a page. `careful` also lets the brainstorm ask more helpers. The brief takes the mode from the brainstorm, and you can still change it on the plan's yes ([modes](modes.md)).
 
 ![The page at stop 1: the steps bar with Setup current, and the Setup step's choices for the type, the code scouts and the web scouts](images/guided-setup.png)
 
@@ -110,7 +112,7 @@ The guided flow is the path from an idea to a running build with as few question
 
 | Step | What it shows | What you can pick | Written to |
 |---|---|---|---|
-| **Style** and **Team** (stop 1, the start card) | "Do you know the domain, the codebase, both, or are you just exploring?", then one line with the setup | the [brainstorm type](brainstorm.md#brainstorm-before-planning), the code and web scout levels (off, light, normal, deep), the helpers (consultants, the skeptic, lenses), capped by the limits | the brainstorm's `Type:`, `Scouts:` and `Helpers:` lines |
+| **Style** and **Team** (stop 1, the start card) | "Do you know the domain, the codebase, both, or are you just exploring?", then one line with the setup | the [mode](modes.md) the plan is built in (`feature` or `careful`), the [brainstorm type](brainstorm.md#brainstorm-before-planning), the code and web scout levels (off, light, normal, deep), the helpers (consultants, the skeptic, lenses), capped by the limits | the brainstorm's `Mode:`, `Type:`, `Scouts:` and `Helpers:` lines |
 | **Options** (stop 2) | two or three options, each with an editable diagram, pros, cons, size and risky areas, and the session's pick | an option, a mix, an edited diagram, or drop the brainstorm | the brainstorm's Chosen section, then the brief |
 | **Plan** (stop 3, the plan-yes card) | the drafted tickets, their order, each ticket's level and review, how many can build at once and why the others wait, and the checks | the mode, the lanes, which tickets get a full review, each ticket's builder notes; adding or relaxing checks in the chat | the draft's `commands.md` (`Mode:`, `Lanes:`, check lines) and tickets (`Review: full`, `Builder:`) |
 | **Build** | each ticket's status as the run goes | nothing: the plan's yes froze the build setup | the run's log and state |

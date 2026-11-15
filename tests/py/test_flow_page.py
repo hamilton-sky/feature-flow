@@ -30,7 +30,7 @@ class Steps(unittest.TestCase):
         doc = page_doc(BRAINSTORM)
         self.assertEqual([(s["name"], s["state"]) for s in doc["steps"]],
                          [("Style", "done"), ("Team", "done"), ("Options", "done"), ("Plan", "later"), ("Build", "later")])
-        self.assertEqual(doc["steps"][0]["summary"], "type standard, scouts code=normal web=normal")
+        self.assertEqual(doc["steps"][0]["summary"], "mode feature, type standard, scouts code=normal web=normal")
         self.assertEqual(doc["steps"][1]["summary"], "helpers architect skeptic")
         self.assertEqual(doc["steps"][2]["summary"], "picked B")
         self.assertEqual([(s["title"], s["step"]) for s in doc["sections"]],
@@ -62,7 +62,7 @@ class Choices(unittest.TestCase):
     def choices(self, text, env=ENV):
         doc = flow_page.document(brainstorm_page.document(text, "csv"), text, env)
         style, team = doc["sections"][1:3]
-        self.assertEqual([c["key"] for c in style["choices"]], ["type", "code", "web"])
+        self.assertEqual([c["key"] for c in style["choices"]], ["mode", "type", "code", "web"])
         self.assertEqual([c["key"] for c in team["choices"]], ["consult", "skeptic", "lens"])
         return {c["key"]: c for c in style["choices"] + team["choices"]}
 
@@ -108,6 +108,52 @@ class Picks(unittest.TestCase):
     def test_a_header_with_only_a_title_gets_the_lines_under_it(self):
         out, _ = flow_page.apply_picks("# B\n\n## Idea\n\nx\n", {"type": "map"}, ENV)
         self.assertTrue(out.startswith("# B\n\nType: map\nHelpers: architect skeptic\n\n## Idea"), out)
+
+
+class ModeRow(unittest.TestCase):
+    """The start card's first row: how the plan is built once the brainstorm ends."""
+
+    def choices(self, text, env=ENV):
+        doc = flow_page.document(brainstorm_page.document(text, "csv"), text, env)
+        return {c["key"]: c for c in doc["sections"][1]["choices"]}, doc
+
+    def test_feature_by_default_and_explore_is_built_as_feature(self):
+        for header in ("", "Mode: explore\n", "Mode: `feature`\n"):
+            c, doc = self.choices("# B\n\n%s\n## Idea\n\nx\n" % header)
+            self.assertEqual([o["value"] for o in c["mode"]["options"]], ["feature", "careful"])
+            self.assertEqual(c["mode"]["value"], "feature", header)
+            self.assertTrue(doc["steps"][0]["summary"].startswith("mode feature, "))
+
+    def test_careful_raises_the_helper_limits_unless_flow_mode_says_otherwise(self):
+        c, doc = self.choices("# B\n\nMode: careful\n\n## Idea\n\nx\n")
+        self.assertEqual(c["mode"]["value"], "careful")
+        self.assertEqual(doc["steps"][0]["summary"], "mode careful, type standard, scouts code=normal web=normal")
+        team = {x["key"]: x for x in doc["sections"][2]["choices"]}
+        self.assertEqual((team["consult"]["max"], team["lens"]["max"]), (3, 3))
+        self.assertIn("the careful mode", doc["sections"][2]["markdown"])
+        c, doc = self.choices("# B\n\nMode: careful\n\n## Idea\n\nx\n", {"FLOW_MODE": "feature"})
+        team = {x["key"]: x for x in doc["sections"][2]["choices"]}
+        self.assertEqual(team["consult"]["max"], 2)
+
+    def test_the_pick_writes_the_mode_line_first(self):
+        text = "# Brainstorm: csv\n\nPicked by: person\nStyle: route\n\n## Idea\n\nx\n"
+        out, lines = flow_page.apply_picks(text, {"mode": "careful"}, ENV)
+        self.assertEqual(lines["Mode"], "careful")
+        self.assertIn("Style: route\nMode: careful\nType: standard\n", out)
+        again, lines = flow_page.apply_picks(out, {"mode": "feature"}, ENV)
+        self.assertIn("Style: route\nMode: feature\nType: standard\n", again)
+        self.assertEqual(again.count("Mode:"), 1)
+        with self.assertRaises(ValueError) as caught:
+            flow_page.apply_picks(out, {"mode": "small"}, ENV)
+        self.assertIn("Mode: must be feature or careful, not small", str(caught.exception))
+
+    def test_a_careful_brainstorm_allows_three_consultants(self):
+        out, _ = flow_page.apply_picks("# B\n\n## Idea\n\nx\n",
+                                       {"mode": "careful", "consult": ["architect", "designer", "po"]}, ENV)
+        self.assertIn("Helpers: architect designer po skeptic", out)
+        with self.assertRaises(ValueError):
+            flow_page.apply_picks("# B\n\n## Idea\n\nx\n",
+                                  {"mode": "feature", "consult": ["architect", "designer", "po"]}, ENV)
 
 
 class Command(unittest.TestCase):
