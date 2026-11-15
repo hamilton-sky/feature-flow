@@ -9,7 +9,6 @@ started from, so it is always the same text; nothing about it is remembered apar
 usage: python3 scripts/flow-status.py <feature> --lint --baseline <commit>
 """
 
-import collections
 import os
 import shutil
 import subprocess
@@ -101,10 +100,12 @@ def compare(plan_rel, rev, cwd=None):
 def split(now, before):
     """(inherited, new) of the problems now, counted as a multiset: a third copy of a message the baseline had twice
     is new."""
-    left = collections.Counter(before)
+    left = {}
+    for item in before:
+        left[item] = left.get(item, 0) + 1
     inherited, added = [], []
     for item in now:
-        if left[item] > 0:
+        if left.get(item, 0) > 0:
             left[item] -= 1
             inherited.append(item)
         else:
