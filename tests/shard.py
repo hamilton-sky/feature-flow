@@ -1,12 +1,16 @@
 """Run the unit tests in tests/py in shards: one shard (as CI's parallel jobs do), or every shard at once here.
 
 usage: python tests/shard.py <k> <n> [-v]    run shard k of n
-       python tests/shard.py all [n] [-v]    run all n shards (default 4) side by side, each in its own process
-                                             and its own temp folder; exit 1 when any shard fails
+       python tests/shard.py all [n] [-v]    run all n shards (default: one per CPU, at least 4) side by side, each
+                                             in its own process and its own temp folder; exit 1 when any shard fails
+       python tests/shard.py time [n]        time every test file on its own, n at a time (default 4), and write the
+                                             seconds to tests/py/timings.json
 
-The test files are dealt into n shards by size (largest first, each to the lightest shard so far), so the shards
-take about the same time. Every file lands in exactly one shard, and the same files always land in the same shard,
-so `all 4` runs exactly the tests CI's four jobs run.
+The test files are dealt into n shards by how long each takes (largest first, each to the lightest shard so far),
+so the shards end at about the same time. A file's time comes from tests/py/timings.json; a file not in it (a new
+one) is weighed by its size at the average seconds per byte of the timed files. Every file lands in exactly one
+shard, and the same files and timings always land in the same shard, so `all 4` runs exactly the tests CI's four
+jobs run.
 """
 
 import os
@@ -15,23 +19,44 @@ import subprocess
 import sys
 import tempfile
 import time
+import json
 import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent / "py"
+TIMINGS = HERE / "timings.json"
 DEFAULT_SHARDS = 4
 TICK = 30  # seconds between the "still running" lines of `all`
 TAIL = 60
 
 
+def timings():
+    """{test file stem: seconds} from tests/py/timings.json, {} when it is missing or unreadable."""
+    try:
+        data = json.loads(TIMINGS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: float(v) for k, v in data.items() if isinstance(v, (int, float))} if isinstance(data, dict) else {}
+
+
+def weights():
+    """{test file stem: weight}: its timed seconds, else its size at the timed files' seconds per byte."""
+    files = sorted(HERE.glob("test_*.py"))
+    size = {p.stem: p.stat().st_size for p in files}
+    timed = {k: v for k, v in timings().items() if k in size}
+    per_byte = sum(timed.values()) / sum(size[k] for k in timed) if timed else 1.0
+    return {k: timed.get(k, size[k] * per_byte) for k in size}
+
+
 def shards(n):
-    files = sorted(HERE.glob("test_*.py"), key=lambda p: (-p.stat().st_size, p.name))
+    weight_of = weights()
+    names = sorted(weight_of, key=lambda k: (-weight_of[k], k))
     out = [[] for _ in range(n)]
-    weight = [0] * n
-    for path in files:
+    weight = [0.0] * n
+    for name in names:
         k = weight.index(min(weight))
-        out[k].append(path.stem)
-        weight[k] += path.stat().st_size
+        out[k].append(name)
+        weight[k] += weight_of[name]
     return out
 
 
@@ -104,18 +129,59 @@ def every(n, verbose, say=print, tick=TICK, command=shard_command):
         shutil.rmtree(str(scratch), ignore_errors=True)
 
 
+def time_files(n, say=print):
+    """Run every test file on its own, n at a time, each in its own temp folder, and write how long each took
+    to tests/py/timings.json (whole seconds to one decimal). Returns 1 when a file failed (its time is still
+    written), else 0."""
+    names = sorted(p.stem for p in HERE.glob("test_*.py"))
+    scratch = Path(tempfile.mkdtemp(prefix="flow-timings-"))
+    took, failed, running = {}, [], {}
+    try:
+        while names or running:
+            while names and len(running) < n:
+                name = names.pop(0)
+                tmp = scratch / name
+                tmp.mkdir()
+                env = dict(os.environ, TMPDIR=str(tmp), TMP=str(tmp), TEMP=str(tmp))
+                proc = subprocess.Popen([sys.executable, "-m", "unittest", name], cwd=str(HERE), env=env,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                running[name] = (proc, time.monotonic())
+            time.sleep(0.2)
+            for name in sorted(running):
+                proc, began = running[name]
+                if proc.poll() is None:
+                    continue
+                del running[name]
+                took[name] = round(time.monotonic() - began, 1)
+                if proc.returncode != 0:
+                    failed.append(name)
+    finally:
+        for proc, _ in running.values():
+            proc.kill()
+            proc.wait()
+        shutil.rmtree(str(scratch), ignore_errors=True)
+    TIMINGS.write_text(json.dumps(dict(sorted(took.items())), indent=1) + "\n", encoding="utf-8")
+    say("timings: %d files, %s in all, written to %s" % (len(took), clock(sum(took.values())), TIMINGS))
+    if failed:
+        say("timings: these failed: %s" % " ".join(failed))
+        return 1
+    return 0
+
+
 def main(argv):
     verbose = "-v" in argv
     args = [a for a in argv if a != "-v"]
-    if args[:1] == ["all"]:
+    if args[:1] in (["all"], ["time"]):
         if len(args) > 2 or (len(args) == 2 and not (args[1].isdigit() and int(args[1]) >= 1)):
-            print("usage: python tests/shard.py all [n]  (n >= 1)", file=sys.stderr)
+            print("usage: python tests/shard.py %s [n]  (n >= 1)" % args[0], file=sys.stderr)
             return 2
-        return every(int(args[1]) if len(args) == 2 else DEFAULT_SHARDS, verbose,
-                     say=lambda text: print(text, flush=True))
+        say = lambda text: print(text, flush=True)  # noqa: E731
+        if args[0] == "time":
+            return time_files(int(args[1]) if len(args) == 2 else DEFAULT_SHARDS, say=say)
+        return every(int(args[1]) if len(args) == 2 else max(DEFAULT_SHARDS, os.cpu_count() or 1), verbose, say=say)
     if len(args) < 2 or not args[0].isdigit() or not args[1].isdigit() or not 1 <= int(args[0]) <= int(args[1]):
-        print("usage: python tests/shard.py <k> <n>  (1 <= k <= n), or python tests/shard.py all [n]",
-              file=sys.stderr)
+        print("usage: python tests/shard.py <k> <n>  (1 <= k <= n), or python tests/shard.py all [n], "
+              "or python tests/shard.py time [n]", file=sys.stderr)
         return 2
     return one(int(args[0]), int(args[1]), verbose)
 
