@@ -25,29 +25,40 @@ async function eventually(fn, ms=5000) {
     const body=()=>page.locator('body').innerText();
     const question=()=>page.getByRole('textbox',{name:'Your question or request'});
     const figure=()=>page.locator('figure.graph').first();
+    async function showFigure() {
+      if (!await figure().isVisible()) {
+        const panel = figure().locator('xpath=ancestor::*[@role="tabpanel"][1]');
+        const id = await panel.getAttribute('aria-labelledby');
+        await page.locator('[id="'+id+'"]').click();
+      }
+    }
     async function ask(text='Acceptance question') {
       await question().fill(text);
       await page.getByRole('button',{name:/Send to /}).click();
       await eventually(()=>state().asks.some(a=>a.text===text));
     }
     async function addNode() {
-      if(!await figure().isVisible()) await figure().locator('xpath=ancestor::details[1]').locator(':scope > summary').click();
+      await showFigure();
       await figure().locator('[data-act=add]').click();
       await page.keyboard.type('Acceptance node'); await page.keyboard.press('Enter');
     }
     if(['draft','building','done','no-brainstorm'].includes(mode)) {
-      await eventually(async()=> /Setup/.test(await body()) && /Plan/.test(await body()));
+      await page.getByRole('tab',{name:/Plan/}).click();
+      await eventually(async()=> /Plan/.test(await body()));
       if(mode==='draft') {
         assert.match(await body(), /Acceptance ticket/);
         assert.match(await body(), /gate|checks/i);
         assert.ok(await page.locator('fieldset.choice[data-key=profile]').count());
       } else if(mode==='no-brainstorm') {
-        assert.match(await body(), /Setup[\s\S]*not used/i);
-        assert.match(await body(), /Options[\s\S]*not used/i);
+        for (const name of ['Style', 'Team', 'Options']) {
+          await page.getByRole('tab',{name:new RegExp(name)}).click();
+          assert.match(await page.locator('[role=tabpanel]:not([hidden])').innerText(), /not used/i);
+        }
         assert.ok(await question().isVisible());
       } else {
-        await eventually(async()=>new RegExp(mode==='building'?'claimed|building|in progress|active':'1 of 1|1/1|all.*done|completed','i').test(await body()));
         assert.match(await body(), /approved|frozen|re-plan/i);
+        await page.getByRole('tab',{name:/Build/}).click();
+        await eventually(async()=>new RegExp(mode==='building'?'claimed|building|in progress|active':'1 of 1|1/1|all.*done|completed','i').test(await body()));
       }
       return;
     }
@@ -62,6 +73,7 @@ async function eventually(fn, ms=5000) {
       await figure().getByLabel('Compare with original').check();
       assert.match(await figure().innerText(), /1 added/);
     } else if(mode==='saved') {
+      await showFigure();
       const select=figure().getByRole('combobox',{name:'Version',exact:true});
       const options=await select.locator('option').evaluateAll(es=>es.map(e=>e.value).filter(v=>v!=='original'));
       assert.ok(options.length);
@@ -74,28 +86,36 @@ async function eventually(fn, ms=5000) {
     } else if(mode==='answer') {
       await eventually(async()=>/Acceptance answer/.test(await body()));
     } else if(mode==='pick') {
-      const field=page.locator('fieldset.choice[data-key=web]');
-      if(!await field.isVisible()) await page.locator('details.step-body > summary').first().click();
-      await field.locator('button[data-value=off]').click();
-      await eventually(()=>state().picks.web?.value==='off');
+      const field=page.locator('fieldset.choice[data-key=lens]');
+      await field.locator('input[value=security]').check();
+      assert.deepEqual(state().picks, {});
+      await page.locator('button.approve[data-approve=Team]').click();
+      await eventually(()=>state().picks.lens?.value.includes('security'));
     } else if(mode==='plan-pick') {
+      await page.getByRole('tab',{name:/Plan/}).click();
       await page.locator('fieldset.choice[data-key=profile] button[data-value=careful]').click();
+      await page.locator('button.approve[data-approve=Plan]').click();
       await eventually(()=>state().picks.profile?.value==='careful');
     } else if(mode==='requests') {
       await ask();
-      await page.locator('button.change[data-change=Setup]').click();
-      await eventually(()=>state().asks.some(a=>a.step==='Setup'));
+      await page.getByRole('tab',{name:/Style/}).click();
+      await page.locator('button.change[data-change=Style]').click();
+      await eventually(()=>state().asks.some(a=>a.step==='Style'));
+      await showFigure();
       await figure().getByRole('button',{name:/Ask .*change|Ask .*diagram/i}).click();
       const diagramText=figure().getByRole('textbox',{name:/change.*diagram|diagram.*change/i});
       await diagramText.fill('Acceptance diagram request');
-      await diagramText.press('Enter');
+      await figure().getByRole('button',{name:'Ask',exact:true}).click();
       await eventually(()=>state().asks.some(a=>a.kind==='diagram'));
     } else if(mode==='proposal') {
       await addNode();
       const before=await figure().locator('g.node text').allTextContents();
-      await page.getByRole('button',{name:/Preview proposal/i}).first().click();
-      // A proposal may be shown alongside the editor, but must not replace dirty work.
+      assert.ok(before.includes('Acceptance node'));
+      const versionsBefore=Object.keys(state().figures['1'].versions).length;
+      assert.ok(await page.getByRole('button',{name:/Preview proposal/i}).count());
       assert.deepEqual(await figure().locator('g.node text').allTextContents(),before);
+      await page.getByRole('button',{name:/Preview proposal/i}).first().click();
+      assert.equal(Object.keys(state().figures['1'].versions).length,versionsBefore);
       assert.ok(await page.getByRole('button',{name:'Save as my version',exact:true}).count());
     } else if(mode==='conflict') {
       let count=0;
@@ -126,13 +146,14 @@ async function eventually(fn, ms=5000) {
       assert.equal(await question().inputValue(),'Unsent through disconnect');
       await page.unroute('**/api/change');
       await context.setOffline(false);
-      await eventually(async()=>/connected/i.test(await body()));
       const retry=page.getByRole('button',{name:/Retry/i}).first();
       if(await retry.isVisible()) await retry.click();
       await eventually(()=>Object.keys(state().figures['1'].versions).length>0);
+      await eventually(async()=>/connected/i.test(await body()));
       assert.equal(await question().inputValue(),'Unsent through disconnect');
       assert.ok((await figure().locator('g.node text').allTextContents()).includes('Acceptance node'));
     } else if(mode==='refresh') {
+      await showFigure();
       await figure().getByRole('button',{name:'Save as my version',exact:true}).click();
       await eventually(()=>Object.keys(state().figures['1'].versions).length>0);
       const versionsBefore=state().figures['1'].versions;

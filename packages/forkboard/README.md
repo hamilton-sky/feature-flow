@@ -24,7 +24,7 @@ Version 0.1.0 was the extraction: the same page feature-flow 0.25 made, behind a
   | `bright` | consumer apps and UI: round, thick, colourful |
 
   A theme is one CSS file in [forkboard/themes/](forkboard/themes/): colour and font tokens, a `/* suits: */` line, and optional box tokens (`--node-radius`, `--node-stroke`, `--node-font`, `--node-filter`, `--edge-width`, `--edge-filter`; `url(#fb-rough)` draws lines by hand). Adding one is adding a file.
-- **Live** (claude.ai only): published as an artifact that saves itself, everyone it is shared with can save their own version of each diagram, compare any version with the original, ask Claude to redraw a diagram, and send questions to the session that made the page. The session reads them with `forkboard asks`, answers with `forkboard answer`, and takes a version with `forkboard version`.
+- **Live**: in Claude, publish an artifact that saves itself; alternatively use a loopback server locally. With the artifact, everyone it is shared with can save their own version of each diagram, compare any version with the original, ask Claude to redraw a diagram, and send questions to the session that made the page. The session reads them with `forkboard asks`, answers with `forkboard answer`, and takes a version with `forkboard version`.
 
 Everything is escaped except a small markdown: paragraphs, lists, tables, code, `code`, **bold**, *em* and https links. Nothing is sent anywhere; the page loads its fonts from Google Fonts, and mermaid from jsDelivr only for a diagram that is not a flowchart.
 
@@ -32,9 +32,12 @@ Everything is escaped except a small markdown: paragraphs, lists, tables, code, 
 
 ```
 forkboard render review.json [--theme NAME] [--fragment] [--out page.html]
-forkboard live review.json live/            # live/index.html and live/state.json, to publish together
+forkboard live review.json live/            # Claude artifact: publish index.html and state.json together
+forkboard live review.json live/ --provider local --agent-label Codex
+forkboard serve live/ --port 0              # print the loopback URL and state path
 forkboard asks live/                         # the open questions, with each asker's version of the diagram
 forkboard answer live/ 1 "Yes, for exports over 10k rows."
+forkboard answer-graph live/ 1 proposal.json # validated proposal for a diagram request
 forkboard version live/ 2 u_dana             # that person's version of figure 2, as mermaid
 forkboard picks live/                        # what people picked on the choices, as JSON
 forkboard themes                             # each theme and what it suits
@@ -84,9 +87,15 @@ The [proposal](https://claude.ai/artifact/2tGHswZqdnnq4b6YhADRJw) has the whole 
 
 - 0.3: steps and choices (done). Next, a verdict the agent reads back (`verdict.json`): the pick, each figure's final diagram, and comments pinned to boxes and arrows, typed as question, concern, suggestion or blocker. A round diff with a legend, not colour alone.
 - 0.4: MCP tools (`open_review`, `get_verdict`), so any agent can use it.
-- 0.5: the disagreement map (every reviewer's version on one canvas), lens overlays, and a local server host besides the claude.ai one.
+- 0.5: the disagreement map (every reviewer's version on one canvas), lens overlays, and further local-server collaboration features.
 - Then its own repository, once someone outside uses it.
 
 ## License
 
 MIT
+
+## Local live session
+
+Open the URL printed by `forkboard serve`; keep that process running while reviewing. The URL stays the same during the session. Port 0 chooses a free port; a restart prints a new URL, while the state folder retains saved versions, requests and replies. An explicit `--port 8765` requests a fixed port and fails if busy. The server listens only on loopback. It does not wake a chat: the agent must run `forkboard asks live/`, then `forkboard answer live/ N "..."` or `forkboard answer-graph live/ N proposal.json` explicitly. A graph proposal is previewed in the page and saved only by the reviewer.
+
+Changes to choices in a tab are staged until **Approve**, which records the picks and approval intent together. **Change** reopens that and later approvals. On a connection loss or conflict, the page retains pending work for retry; follow its recovery controls before replacing a dirty page. Static `render` still works without a live host. Claude users can continue publishing the default `live` output as an artifact with both files.

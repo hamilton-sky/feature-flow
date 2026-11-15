@@ -1,18 +1,24 @@
 """A loopback-only page and narrow conditional operation API. No filesystem mapping."""
 import hashlib
 import json
+from contextlib import nullcontext
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import storage
 
 
-def create(folder, port=0, refresh=None):
+def create(folder, port=0, refresh=None, prepare=None, guard=None):
     """Build a server; refresh is a trusted no-argument Python callback, never a URL target."""
     folder = Path(folder).resolve()
-    if not folder.is_dir() or not (folder / 'index.html').is_file() or (folder / 'index.html').is_symlink():
+    if not folder.is_dir():
         raise ValueError('live folder must contain a generated index.html')
-    storage.transaction(folder / 'state.json', lambda st: st)
+    def validate_page(before):
+        if not (folder / 'index.html').is_file() or (folder / 'index.html').is_symlink():
+            raise ValueError('live folder must contain a generated index.html')
+        return before, None
+    # Recovery, page validation and any identity initialization share one lock.
+    storage.transaction(folder / 'state.json', lambda st: st, prepare=validate_page)
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError('port must be a number from 0 to 65535')
 
@@ -56,31 +62,33 @@ def create(folder, port=0, refresh=None):
                 return
             try:
                 if self.path == '/':
-                    path = folder / 'index.html'
-                    if path.is_symlink() or not path.is_file():
-                        raise ValueError('page must be a regular file, not a symlink')
-                    with path.open('rb') as stream:
-                        body = stream.read(storage.MAX_STATE + 1)
+                    with storage.lock(folder / 'state.json'):
+                        path = folder / 'index.html'
+                        if path.is_symlink() or not path.is_file():
+                            raise ValueError('page must be a regular file, not a symlink')
+                        with path.open('rb') as stream:
+                            body = stream.read(storage.MAX_STATE + 1)
                     if len(body) > storage.MAX_STATE:
                         raise ValueError('page exceeds the 8 MiB limit')
                     self.reply(200, body, 'text/html; charset=utf-8')
                 else:
                     if self.path == '/api/page' and self.server.refresh is not None:
                         self.server.refresh()
-                    st = storage.read(folder / 'state.json')
-                    rev = storage.revision(st)
-                    if self.path == '/api/page':
-                        page = folder / 'index.html'
-                        if page.is_symlink():
-                            raise ValueError('page must not be a symlink')
-                        with page.open('rb') as stream:
-                            rendered = stream.read(storage.MAX_STATE + 1)
-                        if len(rendered) > storage.MAX_STATE:
-                            raise ValueError('page exceeds the 8 MiB limit')
-                        body = {'revision': '"' + hashlib.sha256(rendered).hexdigest() + '"',
-                                'round': st['round'], 'phase': st.get('phase', 'review')}
-                    else:
-                        body = st
+                    with storage.lock(folder / 'state.json'):
+                        st = storage._read(folder / 'state.json')
+                        rev = storage.revision(st)
+                        if self.path == '/api/page':
+                            page = folder / 'index.html'
+                            if page.is_symlink():
+                                raise ValueError('page must not be a symlink')
+                            with page.open('rb') as stream:
+                                rendered = stream.read(storage.MAX_STATE + 1)
+                            if len(rendered) > storage.MAX_STATE:
+                                raise ValueError('page exceeds the 8 MiB limit')
+                            body = {'revision': '"' + hashlib.sha256(rendered).hexdigest() + '"',
+                                    'round': st['round'], 'phase': st.get('phase', 'review')}
+                        else:
+                            body = st
                     self.reply(200, body, etag=rev)
             except (OSError, ValueError, TypeError) as e:
                 self.reply(409, {'error': str(e)})
@@ -111,7 +119,8 @@ def create(folder, port=0, refresh=None):
                 if len(raw) != length:
                     raise ValueError('incomplete JSON body')
                 envelope = json.loads(raw, parse_constant=storage._constant)
-                st = storage.change(folder / 'state.json', envelope, expected[0])
+                with self.server.guard():
+                    st = storage.change(folder / 'state.json', envelope, expected[0], prepare=self.server.prepare)
                 self.reply(200, st, etag=storage.revision(st))
             except storage.Conflict as e:
                 self.reply(412, {'error': str(e)})
@@ -121,14 +130,16 @@ def create(folder, port=0, refresh=None):
     httpd = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     httpd.daemon_threads = True
     httpd.refresh = refresh
+    httpd.prepare = prepare
+    httpd.guard = guard or nullcontext
     return httpd
 
 
-def serve(folder, port=0, out=None, refresh=None):
+def serve(folder, port=0, out=None, refresh=None, prepare=None, guard=None):
     """Serve until interrupted, printing the actual origin and persisted state location."""
     import sys
     out = out or sys.stdout
-    httpd = create(folder, port, refresh)
+    httpd = create(folder, port, refresh, prepare, guard)
     try:
         out.write('serving http://127.0.0.1:%d/ state %s\n' % (httpd.server_port, Path(folder).resolve() / 'state.json'))
         out.flush()

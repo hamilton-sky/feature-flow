@@ -26,9 +26,10 @@ nothing is committed.
 import os
 import re
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 
-from feature_flow import git, importer
+from feature_flow import git, importer, plan_lock
 
 USAGE = "usage: python3 scripts/flow-status.py <feature> --fix <diagnosis.md> [--dry-run]"
 HEADER = re.compile(r"^(Repro|Expect|Touches|Level|Cause|Fix):[ \t]*(.*?)\s*$")
@@ -174,11 +175,19 @@ def main(argv, out=None, err=None, guides_root=None):
         err.write(result + "\n")
         return 1
     files, carried = result
-    for rel, body in sorted(files.items()):
-        out.write("%s %s\n" % ("would write" if dry else "wrote", (plan / rel).relative_to(top).as_posix()))
-        if not dry:
-            (plan / rel).parent.mkdir(parents=True, exist_ok=True)
-            (plan / rel).write_text(body, encoding="utf-8")
+    try:
+        with nullcontext() if dry else plan_lock.lock(top, feature):
+            if plan.exists():
+                err.write("%s already exists: --fix only starts a new plan\n" % plan)
+                return 1
+            for rel, body in sorted(files.items()):
+                out.write("%s %s\n" % ("would write" if dry else "wrote", (plan / rel).relative_to(top).as_posix()))
+                if not dry:
+                    (plan / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (plan / rel).write_text(body, encoding="utf-8")
+    except ValueError as exc:
+        err.write(str(exc) + "\n")
+        return 1
     if carried:
         out.write("commands from %s: check them with the user\n" % carried)
     else:

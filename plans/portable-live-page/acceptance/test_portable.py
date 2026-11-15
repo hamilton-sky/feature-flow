@@ -135,9 +135,12 @@ class Portable(unittest.TestCase):
         _, old = self.state()
         payload = self.browser('ask')
         current, revision = self.state()
-        self.assertEqual(self.change(payload, old)[0], 412)
+        # Retransmitting an already committed operation is idempotent even with
+        # its original revision; a distinct stale operation must be rejected.
+        stale = {'id': 'distinct-stale-operation', 'change': payload['change']}
+        self.assertEqual(self.change(stale, old)[0], 412)
         self.assertEqual(self.state()[0], current)
-        self.assertEqual(self.change(payload, revision)[0], 200)
+        self.assertEqual(self.change(payload, old)[0], 200)
         self.assertEqual(len(self.state()[0]['asks']), 1)
         self.browser('conflict')
         self.assertEqual(sum(a['text'] == 'Conflict question' for a in self.state()[0]['asks']), 1)
@@ -203,7 +206,7 @@ class Portable(unittest.TestCase):
         self.render(); self.serve(); self.browser('pick')
         result = self.cli('picks', self.live)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout)['web'], 'off')
+        self.assertIn('security', json.loads(result.stdout)['lens'])
         before, revision = self.state()
         for change in [{'answer': {'text': 'forged'}}, {'round': 99}, {'approve': True},
                        {'command': 'touch owned'}]:
@@ -245,8 +248,10 @@ class Portable(unittest.TestCase):
         accepted = repo / 'plans/sample'; accepted.parent.mkdir(); shutil.move(str(folder), accepted)
         ticket = accepted / 'tasks/01-example.md'
         ticket.write_text(ticket.read_text().replace('Status: open', 'Status: claimed'))
+        self.assertEqual(self.request(path='/api/page')[0], 200)
         self.browser('building')
         ticket.write_text(ticket.read_text().replace('Status: claimed', 'Status: resolved'))
+        self.assertEqual(self.request(path='/api/page')[0], 200)
         self.browser('done')
 
     # A feature with draft or accepted tasks but no brainstorm.md can launch, render and process questions/plan picks. Setup/Options explicitly say they were not used; no synthetic brainstorm file is written. Brainstorm diagram apply reports unavailable when there is no source.
@@ -257,6 +262,10 @@ class Portable(unittest.TestCase):
         result = self.cli('brainstorm-page', 'sample', '--asks', self.live, module='feature_flow', cwd=repo)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Acceptance question', result.stdout)
+        self.browser('plan-pick')
+        result = self.cli('brainstorm-page', 'sample', '--picks', self.live, module='feature_flow', cwd=repo)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('careful', (folder / 'commands.md').read_text())
         result = self.cli('brainstorm-page', 'sample', '--apply', self.live, '1', 'original', module='feature_flow', cwd=repo)
         self.assertNotEqual(result.returncode, 0)
         self.assertRegex(result.stderr.lower(), r'no .*brainstorm|unavailable|no .*source')
@@ -321,7 +330,8 @@ class Portable(unittest.TestCase):
                     # Early rejection of an oversized body may close the connection before it is sent.
                     self.assertGreater(len(body or ''), 1024 * 1024)
                 else:
-                    self.assertTrue(400 <= status < 500, (status, data[:200]))
+                    # BaseHTTPRequestHandler rejects unsupported methods with 501.
+                    self.assertTrue(400 <= status < 500 or (method in ('DELETE', 'PUT') and status == 501), (status, data[:200]))
                     self.assertNotIn(b'PRIVATE ACCEPTANCE SECRET', data)
                 self.assertEqual({p.name: p.read_bytes() for p in self.live.iterdir() if p.is_file()}, before)
 

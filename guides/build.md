@@ -151,3 +151,10 @@ In **Manual** mode add a third line, `Continue in a fresh session with the featu
 - **The ticket names code that moved**: search for the real location, adapt, and say so in the Answer.
 - **Rollback**: show `git diff --stat` and ask before `git checkout --` (manual). In auto mode never discard work; stop.
 - **Auto mode and you must stop**: leave `Status: open`, add the Attempt note, and exit. The flow treats a ticket that is not resolved as a failed attempt.
+
+
+## Local live page (Codex)
+
+To offer a local live page, run `python3 -m feature_flow brainstorm-page <feature> --serve .feature-flow/state/<feature>-live --port 0 --agent-label Codex` and give the user the printed loopback URL. Keep the server running; the same URL follows setup, options, draft Plan and Build updates, including plan-only features. Restarting port 0 prints a new URL and preserves state. A native Claude artifact and static HTML remain available.
+
+The server does not wake the session. Explicitly check `--asks <live folder>` and use `--answer`, `--answer-graph`, `--apply`, and `--picks` with `brainstorm-page <feature>`. Choices are staged until tab Approve records approval intent and picks; process that intent through the normal approval rules. Accepted plans remain frozen until an approved re-plan. The HTTP server writes only page state and cannot run builds or commits. On disconnect or conflict, use the page's retry/recovery controls to preserve work. The manual Codex smoke recipe is in `docs/brainstorm.md`.

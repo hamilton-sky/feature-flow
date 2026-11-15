@@ -118,7 +118,7 @@ The page is the guided flow's one page. It has five tabs, Style, Team, Options, 
    - Then run `--page --answer <live folder> <n> "<answer>"`, with a short answer that says what you changed or wrote.
 5. Run step 1 again, which keeps the saved versions and asks, and publish both files to the same link. If a publish is refused because the page has a newer version, take that version's `state.json` and go back to step 4.
 
-A save that only adds a version, with no ask, needs nothing from you. The user can still answer in the chat instead of pressing Approve. Without an Artifact tool, or on Codex, make the plain page.
+A save that only adds a version, with no ask, needs nothing from you. The user can still answer in the chat instead of pressing Approve. On Codex use the local live server described below, or make the plain page when no live host is available.
 
 ## Sketch first
 
@@ -129,7 +129,7 @@ Use this with `brainstorm sketch` in the arguments, or when the user would rathe
 3. When the ask comes, `--apply` their version into the Sketch and treat it as the idea in their words.
 4. Go on with Step 2 and Step 3. Your options build on their sketch, and your answer on the page says how.
 
-Sketch first needs the live page. Without an Artifact tool, ask the user to describe the idea instead.
+Sketch first needs the live page. Without a live host, ask the user to describe the idea instead.
 
 ## Rules
 
@@ -138,3 +138,10 @@ Sketch first needs the live page. Without an Artifact tool, ask the user to desc
 - Never change files outside the state folder, and never commit: the brainstorm is committed with the plan.
 - Helpers are read only, and a hook makes them so; they never write the brainstorm and never ask the user.
 - Keep it short: a brainstorm that runs longer than the plan will is too long.
+
+
+## Local live page (Codex)
+
+To offer a local live page, run `python3 -m feature_flow brainstorm-page <feature> --serve .feature-flow/state/<feature>-live --port 0 --agent-label Codex` and give the user the printed loopback URL. Keep the server running; the same URL follows setup, options, draft Plan and Build updates, including plan-only features. Restarting port 0 prints a new URL and preserves state. A native Claude artifact and static HTML remain available.
+
+The server does not wake the session. Explicitly check `--asks <live folder>` and use `--answer`, `--answer-graph`, `--apply`, and `--picks` with `brainstorm-page <feature>`. Choices are staged until tab Approve records approval intent and picks; process that intent through the normal approval rules. Accepted plans remain frozen until an approved re-plan. The HTTP server writes only page state and cannot run builds or commits. On disconnect or conflict, use the page's retry/recovery controls to preserve work. The manual Codex smoke recipe is in `docs/brainstorm.md`.

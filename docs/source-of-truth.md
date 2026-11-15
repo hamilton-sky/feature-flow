@@ -23,9 +23,9 @@ feature-flow keeps every decision in files, in git. The guided flow's page and t
 2. **The page writes only its own `state.json`.** On a live page, your picks, your Approve, your saved diagram versions and your questions go into the page's `state.json`. Nothing on the page can write a repository file.
 3. **Only the session writes the files, through named commands.** `--page --picks` writes the Style and Team picks into the brainstorm's header (`Type:`, `Scouts:`, `Helpers:`) and the Plan tab's picks into the draft's `commands.md` and tickets. `--apply` writes a diagram version into the brainstorm, and refuses if the brainstorm changed since the page was built. `--answer` answers a question on the page. Each says what it wrote.
 4. **What is not written is not decided.** A pick you never approved, a diagram edited on the plain (not live) page, which lives only in your browser, and a question nobody answered are not in the files. The session works from the files.
-5. **One yes freezes the plan.** Approving the Plan tab (or saying yes in the chat) is the plan's yes. After it, nothing on the page can change the plan or the build setup. Only a re-plan, with your own yes, can.
+5. **One yes freezes the plan.** Approving the Plan tab records the user’s plan approval intent; the session processes that intent through the existing approval rules. Saying yes in chat remains supported. After it, nothing on the page can change the plan or the build setup. Only a re-plan, with your own yes, can.
 6. **Reality is read, never written.** The Build tab's Plan vs reality table and `feature-flow report` are made from the tickets and the run's log (`CHANGED`, `FOOTPRINT-*`, `LEVEL-*`, `DECISION`, `FOLLOWUPS`, `REPLAN`, `REPAIR`). They show what happened and decide nothing.
-7. **The page is optional.** On Codex, or with no Artifact tool, the same stops happen in the chat with a plain HTML page beside the brainstorm. The files, and what gets written, are the same.
+7. **The page is optional.** On Codex, a local live page can collect the same proposals; without a live host, the same stops happen in chat with a plain HTML page beside the brainstorm. The files, and what gets written, are the same.
 
 ## Plan vs reality
 

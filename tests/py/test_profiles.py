@@ -39,6 +39,22 @@ class PickTests(unittest.TestCase):
                 self.assertIn("`%s`" % key, doc, "%s in %s" % (key, name))
 
 
+class LivePageDocumentationTests(unittest.TestCase):
+    def test_codex_workflow_and_approval_contract(self):
+        doc = (ROOT / "docs" / "brainstorm.md").read_text(encoding="utf-8")
+        for phrase in ("--serve", "--port 0", "--agent-label Codex", "--asks", "--answer-graph",
+                       "--apply", "--picks", "412", "preview", "five seconds", "manual real-agent",
+                       "approval intent", "no automatic Codex chat wakeup", "never starts a build"):
+            self.assertIn(phrase, doc)
+        source = (ROOT / "docs" / "source-of-truth.md").read_text(encoding="utf-8")
+        self.assertIn("existing approval rules", source)
+        self.assertIn("freezes the plan", source.lower())
+        for name in ("skills/feature-flow/SKILL.md", "adapters/codex/feature-flow/SKILL.md"):
+            skill = (ROOT / name).read_text(encoding="utf-8")
+            for phrase in ("--serve", "--asks", "approval intent", "cannot run builds or commits"):
+                self.assertIn(phrase, skill, name)
+
+
 class ProfileDriveTests(unittest.TestCase):
     def setup(self, profile_line="", **env):
         repo = Repo(tickets=(("01-a", "A", "—"),))

@@ -20,7 +20,7 @@ import re
 import sys
 from pathlib import Path
 
-from feature_flow import brainstorm_mode, flow_page, git, studio
+from feature_flow import brainstorm_mode, flow_page, git, plan_lock, studio
 
 USAGE = ("usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]\n"
          "       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE")
@@ -155,6 +155,18 @@ def main(argv, out=None, err=None):
     importlib.import_module("forkboard.server")
     text = path.read_text(encoding="utf-8", errors="replace") if path else ""
     if tool in ("asks", "answer", "answer-graph", "apply", "picks"):
+        if tool == "picks":
+            try:
+                # The plan lock is always acquired before the state lock in live_tool.
+                # Re-evaluate both source and plan after acceptance/import/fix completes.
+                with plan_lock.lock(top, feature):
+                    current_path = source(top, feature)
+                    current_text = current_path.read_text(encoding="utf-8", errors="replace") if current_path else ""
+                    return live_tool(fb, tool, current_path, current_text, Path(live), extra, out, err,
+                                     flow_page.folders(top, feature))
+            except (OSError, ValueError) as e:
+                err.write("%s\n" % e)
+                return 1
         return live_tool(fb, tool, path, text, Path(live), extra, out, err, plans)
     if provider not in ("claude", "local"):
         err.write("provider must be claude or local\n")
@@ -192,26 +204,36 @@ def main(argv, out=None, err=None):
             doc["phase"] = "brainstorm"
         return doc
 
-    def regenerate(force=False):
+    def prepare_locked(old, force=False):
         folder = Path(live)
         folder.mkdir(parents=True, exist_ok=True)
         state_path = folder / "state.json"
-        with fb.storage.lock(state_path):
-            old = fb.storage.read(state_path, missing=True)
-            doc = compose(old)
-            html = fb.page.render(doc, css, name, provider != "local", True, provider=provider, agent_label=agent_label)
-            page_path = folder / "index.html"
-            if not force and page_path.is_file() and page_path.read_text(encoding="utf-8") == html:
-                return old
-            st = fb.storage._validate(fb.live.state(doc, old))
-            st["phase"] = doc["phase"]
-            st.setdefault("identity", {"id": "local_" + secrets.token_hex(12), "label": "You"})
-            data = fb.live.dump(st)
-            if len(data.encode("utf-8")) > fb.storage.MAX_STATE:
-                raise ValueError("page state exceeds the 8 MiB limit")
-            fb.storage.replace(state_path, data)
-            fb.storage.replace(page_path, html)
-            return st
+        doc = compose(old)
+        html = fb.page.render(doc, css, name, provider != "local", True, provider=provider, agent_label=agent_label)
+        page_path = folder / "index.html"
+        if not force and page_path.is_file() and not page_path.is_symlink() and page_path.read_text(encoding="utf-8") == html:
+            return old, None
+        st = fb.storage._validate(fb.live.state(doc, old))
+        st["phase"] = doc["phase"]
+        st.setdefault("identity", {"id": "local_" + secrets.token_hex(12), "label": "You"})
+        data = fb.live.dump(st)
+        if len(data.encode("utf-8")) > fb.storage.MAX_STATE:
+            raise ValueError("page state exceeds the 8 MiB limit")
+        return st, html
+
+    def regenerate_locked(force=False):
+        state_path = Path(live) / "state.json"
+        old = fb.storage._read(state_path, missing=True)
+        st, html = prepare_locked(old, force)
+        if html is not None:
+            fb.storage.publish(state_path, fb.live.dump(st), html)
+        return st
+
+    def regenerate(force=False):
+        folder = Path(live)
+        folder.mkdir(parents=True, exist_ok=True)
+        with fb.storage.lock(folder / "state.json"):
+            return regenerate_locked(force)
 
     try:
         if tool in ("live", "serve"):
@@ -220,7 +242,8 @@ def main(argv, out=None, err=None):
                 (Path(live) / "index.html").as_posix(), (Path(live) / "state.json").as_posix(), st["round"],
                 len(st["figures"]), sum(1 for a in st["asks"] if not a.get("answer"))))
             if tool == "serve":
-                fb.server.serve(live, port, out, refresh=regenerate)
+                fb.server.serve(live, port, out, refresh=regenerate, prepare=prepare_locked,
+                                guard=lambda: plan_lock.lock(top, feature))
             return 0
         doc = compose(None)
         dest = Path(target) if target else path.with_suffix(".html") if path else (plans[1] or plans[0]) / "index.html"

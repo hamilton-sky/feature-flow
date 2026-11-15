@@ -1,10 +1,14 @@
 import io
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
+import helpers
+
+sys.path.insert(0, str(helpers.ROOT))
 from feature_flow import brainstorm_page
 
 
@@ -121,7 +125,7 @@ class PortablePage(unittest.TestCase):
                 import importlib
                 importlib.import_module('forkboard.server')
                 callbacks = []
-                def serve(folder, port, out, refresh):
+                def serve(folder, port, out, refresh, prepare, guard):
                     callbacks.append(refresh)
                 with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=str(root)), mock.patch.object(fb.server, 'serve', side_effect=serve):
                     self.assertEqual(brainstorm_page.main(['demo', '--serve', str(folder)], io.StringIO(), io.StringIO()), 0)
@@ -138,6 +142,146 @@ class PortablePage(unittest.TestCase):
                     self.assertEqual(read()['phase'], 'complete')
                     self.assertTrue(read()['_document']['frozen'])
                     self.assertEqual(source.exists() if with_brainstorm else (plan / 'brainstorm.md').exists(), with_brainstorm)
+
+    def test_accepted_plan_is_refreshed_before_http_post_without_poll(self):
+        import json
+        import shutil
+        import threading
+        import urllib.error
+        import urllib.request
+        import importlib
+        from feature_flow import studio
+        fb = studio.load()
+        importlib.import_module('forkboard.server')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            draft = root / '.feature-flow/state/draft/demo'
+            (draft / 'tasks').mkdir(parents=True)
+            (draft / 'commands.md').write_text('Profile: standard\n')
+            (draft / 'tasks/01-test.md').write_text('# Test\n\nStatus: open\nBlocked by: none\n')
+            folder = root / 'live'
+            def serve(folder, port, out, refresh, prepare, guard):
+                before = fb.storage.read(Path(folder) / 'state.json')
+                original_state = (Path(folder) / 'state.json').read_bytes()
+                original_page = (Path(folder) / 'index.html').read_bytes()
+                plan = root / 'plans/demo'
+                plan.parent.mkdir(parents=True)
+                shutil.copytree(draft, plan)
+                server = fb.server.create(folder, 0, refresh, prepare, guard)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    origin = 'http://127.0.0.1:%d' % server.server_port
+                    invalid = json.dumps({'id': 'invalid', 'change': {'ask': {'text': ''}}}).encode()
+                    invalid_request = urllib.request.Request(origin + '/api/change', data=invalid, headers={'Origin': origin,
+                        'Content-Type': 'application/json', 'If-Match': fb.storage.revision(before)}, method='POST')
+                    with self.assertRaises(urllib.error.HTTPError) as bad:
+                        urllib.request.urlopen(invalid_request)
+                    self.assertIn(bad.exception.code, (400, 412))
+                    bad.exception.close()
+                    self.assertEqual((Path(folder) / 'state.json').read_bytes(), original_state)
+                    self.assertEqual((Path(folder) / 'index.html').read_bytes(), original_page)
+                    body = json.dumps({'id': 'late', 'change': {'pick': {'key': 'profile', 'entry': {'value': 'careful'}}}}).encode()
+                    request = urllib.request.Request(origin + '/api/change', data=body, headers={'Origin': origin,
+                        'Content-Type': 'application/json', 'If-Match': fb.storage.revision(before)}, method='POST')
+                    with self.assertRaises(urllib.error.HTTPError) as caught:
+                        urllib.request.urlopen(request)
+                    self.assertEqual(caught.exception.code, 412)
+                    caught.exception.close()
+                    self.assertEqual((Path(folder) / 'state.json').read_bytes(), original_state)
+                    self.assertEqual((Path(folder) / 'index.html').read_bytes(), original_page)
+                    refresh()
+                    after = fb.storage.read(Path(folder) / 'state.json')
+                    self.assertTrue(after['_document']['frozen'])
+                    self.assertNotIn('late', after.get('_operations', {}))
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join()
+            with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=str(root)), mock.patch.object(fb.server, 'serve', side_effect=serve):
+                self.assertEqual(brainstorm_page.main(['demo', '--serve', str(folder)], io.StringIO(), io.StringIO()), 0)
+
+    def test_plan_accept_and_post_serialize_across_feature_lock(self):
+        import importlib
+        import json
+        import shutil
+        import threading
+        import urllib.error
+        import urllib.request
+        from types import SimpleNamespace
+        from feature_flow import studio
+        from feature_flow.conductor import planning
+        fb = studio.load()
+        importlib.import_module('forkboard.server')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            draft = root / '.feature-flow/state/draft/demo'
+            (draft / 'tasks').mkdir(parents=True)
+            (draft / 'commands.md').write_text('Profile: standard\n')
+            (draft / 'tasks/01-test.md').write_text('# Test\n\nStatus: open\nBlocked by: none\n')
+            plan = root / 'plans/demo'
+            folder = root / 'live'
+            copied, release, post_done = threading.Event(), threading.Event(), threading.Event()
+            results, errors = [], []
+            planner = planning.Planner.__new__(planning.Planner)
+            planner.feature, planner.plan, planner.draft = 'demo', plan, draft
+            planner.scripts, planner.draft_root, planner.log = 'scripts', draft.parent, lambda *args: None
+            def serve(folder, port, out, refresh, prepare, guard):
+                before = fb.storage.read(Path(folder) / 'state.json')
+                server = fb.server.create(folder, 0, refresh, prepare, guard)
+                server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+                server_thread.start()
+                def accept():
+                    try:
+                        planner.plan_accept()
+                    except Exception as error:
+                        errors.append(error)
+                def post():
+                    origin = 'http://127.0.0.1:%d' % server.server_port
+                    body = json.dumps({'id': 'late', 'change': {'pick': {'key': 'profile', 'entry': {'value': 'careful'}}}}).encode()
+                    request = urllib.request.Request(origin + '/api/change', data=body, headers={'Origin': origin,
+                        'Content-Type': 'application/json', 'If-Match': fb.storage.revision(before)}, method='POST')
+                    try:
+                        with urllib.request.urlopen(request) as response:
+                            results.append(response.status)
+                    except urllib.error.HTTPError as error:
+                        results.append(error.code)
+                        error.close()
+                    finally:
+                        post_done.set()
+                try:
+                    check = SimpleNamespace(ok=True, out='OK')
+                    with mock.patch.object(planning.git, 'toplevel', return_value=str(root)), \
+                            mock.patch.object(planning.checks, 'flow_status', return_value=check), \
+                            mock.patch.object(planning, 'shutil', SimpleNamespace(copytree=paused_copy)):
+                        accept_thread = threading.Thread(target=accept)
+                        accept_thread.start()
+                        self.assertTrue(copied.wait(5))
+                        post_thread = threading.Thread(target=post)
+                        post_thread.start()
+                        self.assertFalse(post_done.wait(.15), 'POST passed while acceptance held the feature lock')
+                        release.set()
+                        accept_thread.join(5)
+                        post_thread.join(5)
+                    self.assertFalse(errors)
+                    self.assertEqual(results, [412])
+                    refresh()
+                    self.assertTrue(fb.storage.read(Path(folder) / 'state.json')['_document']['frozen'])
+                finally:
+                    release.set()
+                    server.shutdown()
+                    server.server_close()
+                    server_thread.join()
+            # Capture the original before patching the shared shutil module.
+            real_copy = shutil.copytree
+            def paused_copy(src, dst):
+                result = real_copy(src, dst)
+                copied.set()
+                if not release.wait(5):
+                    raise RuntimeError('acceptance was not released')
+                return result
+            with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=str(root)), mock.patch.object(fb.server, 'serve', side_effect=serve):
+                self.assertEqual(brainstorm_page.main(['demo', '--serve', str(folder)], io.StringIO(), io.StringIO()), 0)
 
     def test_invalid_plan_pick_does_not_write(self):
         from feature_flow import studio
@@ -160,3 +304,45 @@ class PortablePage(unittest.TestCase):
                 self.assertEqual(brainstorm_page.main(['demo', '--picks', str(folder)], io.StringIO(), err), 1)
                 self.assertEqual(commands.read_text(), 'Profile: standard\n')
                 self.assertIn('gate', err.getvalue())
+
+    def test_picks_wait_for_acceptance_then_leave_both_plans_unchanged(self):
+        import shutil
+        import threading
+        from feature_flow import plan_lock, studio
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            draft = root / '.feature-flow/state/draft/demo'
+            (draft / 'tasks').mkdir(parents=True)
+            commands = draft / 'commands.md'
+            commands.write_text('Profile: standard\n')
+            (draft / 'tasks/01-test.md').write_text('# Test\n\nStatus: open\nBlocked by: none\n')
+            folder = root / 'live'
+            out, err = io.StringIO(), io.StringIO()
+            with mock.patch.object(brainstorm_page.git, 'toplevel', return_value=str(root)):
+                self.assertEqual(brainstorm_page.main(['demo', '--live', str(folder)], io.StringIO(), io.StringIO()), 0)
+                fb = studio.load()
+                def stage(st):
+                    st['picks'] = {'profile': {'value': 'careful'}}
+                    return st
+                fb.storage.transaction(folder / 'state.json', stage)
+                done, started, result = threading.Event(), threading.Event(), []
+                def apply_picks():
+                    started.set()
+                    try:
+                        result.append(brainstorm_page.main(['demo', '--picks', str(folder)], out, err))
+                    finally:
+                        done.set()
+                plan = root / 'plans/demo'
+                with plan_lock.lock(root, 'demo'):
+                    worker = threading.Thread(target=apply_picks)
+                    worker.start()
+                    self.assertTrue(started.wait(2))
+                    self.assertFalse(done.wait(.15), 'picks passed while acceptance held the feature lock')
+                    plan.parent.mkdir(parents=True)
+                    shutil.copytree(draft, plan)
+                worker.join(5)
+                self.assertTrue(done.is_set())
+                self.assertEqual(result, [0], err.getvalue())
+                self.assertIn('plan is accepted', out.getvalue())
+                self.assertEqual(commands.read_text(), 'Profile: standard\n')
+                self.assertEqual((plan / 'commands.md').read_text(), 'Profile: standard\n')

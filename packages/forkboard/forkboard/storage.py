@@ -98,7 +98,7 @@ def _constant(value):
     raise ValueError('non-finite JSON number: %s' % value)
 
 
-def read(path, missing=False):
+def _read(path, missing=False):
     path = _safe(path)
     try:
         with path.open('rb') as stream:
@@ -113,6 +113,11 @@ def read(path, missing=False):
         return _validate(json.loads(raw, parse_constant=_constant))
     except (ValueError, UnicodeError, TypeError, RecursionError, OverflowError) as e:
         raise ValueError('cannot read page state %s; repair or restore it (file kept intact): %s' % (path, e)) from e
+
+
+def read(path, missing=False):
+    with lock(path):
+        return _read(path, missing)
 
 
 def revision(st):
@@ -132,6 +137,7 @@ def lock(path, timeout=2):
                 raise ValueError('state lock %s is busy; stop all writers and remove it only after confirming none is active to recover' % lockpath)
             time.sleep(0.02)
     try:
+        _recover(path)
         yield
     finally:
         lockpath.rmdir()
@@ -153,20 +159,63 @@ def replace(path, text):
             os.unlink(name)
 
 
-def transaction(path, mutate, create=False, timeout=2, page=None):
+def _journal(path):
+    return Path(path).with_name(Path(path).name + '.publication')
+
+
+def _recover(path):
+    journal = _safe(_journal(path))
+    if not journal.exists():
+        return
+    with journal.open('rb') as stream:
+        raw = stream.read(12 * MAX_STATE + 1024)
+    if len(raw) >= 12 * MAX_STATE + 1024:
+        raise ValueError('publication journal is too large; repair it before continuing')
+    try:
+        pending = json.loads(raw)
+        _fields(pending, ('state', 'page'), ('state', 'page'))
+        if not isinstance(pending['state'], str) or not isinstance(pending['page'], str):
+            raise ValueError('invalid publication journal')
+        if len(pending['state'].encode()) > MAX_STATE or len(pending['page'].encode()) > MAX_STATE:
+            raise ValueError('publication exceeds size limit')
+        _validate(json.loads(pending['state'], parse_constant=_constant))
+    except (ValueError, TypeError, UnicodeError) as e:
+        raise ValueError('invalid publication journal; repair or restore it: %s' % e) from e
+    _safe(path)
+    _safe(Path(path).parent / 'index.html')
+    replace(Path(path).parent / 'index.html', pending['page'])
+    replace(path, pending['state'])
+    journal.unlink()
+
+
+def publish(path, data, page):
+    """Publish a recoverable state/page pair while holding the state lock."""
+    path = _safe(path)
+    _safe(path.parent / 'index.html')
+    if len(page.encode('utf-8')) > MAX_STATE:
+        raise ValueError('page exceeds the 8 MiB limit')
+    replace(_journal(path), json.dumps({'state': data, 'page': page}, ensure_ascii=False))
+    _recover(path)
+
+
+def transaction(path, mutate, create=False, timeout=2, page=None, prepare=None):
     """Lock, reload, mutate, validate, replace. Callbacks never see a stale snapshot."""
     path = _safe(path)
     with lock(path, timeout):
-        before = read(path, missing=create)
-        st = _validate(mutate(before))
+        before = _read(path, missing=create)
+        candidate = before
+        prepared_page = None
+        if prepare is not None:
+            candidate, prepared_page = prepare(before)
+        st = _validate(mutate(candidate))
         st.setdefault('identity', {'id': 'local_' + secrets.token_hex(12), 'label': 'You'})
         data = live.dump(st)
         if len(data.encode('utf-8')) > MAX_STATE:
             raise ValueError('page state exceeds the 8 MiB limit; archive old work before retrying')
-        if before is None or not path.exists() or path.read_text(encoding='utf-8') != data:
+        if page is not None or prepared_page is not None:
+            publish(path, data, page if page is not None else prepared_page)
+        elif before is None or not path.exists() or path.read_text(encoding='utf-8') != data:
             replace(path, data)
-        if page is not None:
-            replace(path.parent / "index.html", page)
         return st
 
 
@@ -197,7 +246,7 @@ def _position(pos, model):
     return pos
 
 
-def change(path, envelope, expected):
+def change(path, envelope, expected, prepare=None):
     _fields(envelope, ('id', 'change'), ('id', 'change'))
     ident = _text(envelope['id'], 'operation id', 200)
     operation = envelope['change']
@@ -329,4 +378,4 @@ def change(path, envelope, expected):
         operations[ident] = digest
         return st
 
-    return transaction(path, apply)
+    return transaction(path, apply, prepare=prepare)

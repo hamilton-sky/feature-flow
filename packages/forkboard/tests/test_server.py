@@ -83,6 +83,36 @@ class HTTP(unittest.TestCase):
         self.assertEqual(self.post(question, rev)[0], 200)
         self.assertEqual(len(storage.read(self.path)['asks']), 1)
         self.assertEqual(self.request('/')[2], b'<h1>Review</h1>')
+
+    def test_server_start_recovers_initial_publication_before_checking_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            state = storage.read(self.path)
+            (folder / 'state.json.publication').write_text(json.dumps({'state': live.dump(state), 'page': '<h1>Recovered</h1>'}))
+            httpd = server.create(folder)
+            try:
+                self.assertEqual((folder / 'index.html').read_text(), '<h1>Recovered</h1>')
+                self.assertEqual(storage.read(folder / 'state.json'), state)
+                self.assertFalse((folder / 'state.json.publication').exists())
+            finally:
+                httpd.server_close()
+
+    def test_rejected_symlink_page_does_not_modify_legacy_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            state = live.state(helpers.fixture('sketch'))
+            state_path = folder / 'state.json'
+            state_path.write_text(live.dump(state))
+            before = state_path.read_bytes()
+            target = folder / 'elsewhere.html'
+            target.write_text('outside')
+            try:
+                (folder / 'index.html').symlink_to(target)
+            except (OSError, NotImplementedError):
+                self.skipTest('symlinks unavailable')
+            with self.assertRaises(ValueError):
+                server.create(folder)
+            self.assertEqual(state_path.read_bytes(), before)
         status, _, body = self.request('/api/page')
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)['round'], 1)

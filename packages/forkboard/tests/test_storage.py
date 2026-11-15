@@ -54,6 +54,64 @@ class Transactions(unittest.TestCase):
                 storage.transaction(self.path, lambda old: live.state(self.doc, old), create=True)
             self.assertEqual(self.path.read_text(), raw)
 
+    def test_interrupted_pair_publication_recovers_before_next_read_or_write(self):
+        page = self.path.parent / 'index.html'
+        page.write_text('old page')
+        original = storage.replace
+        def interrupted(path, data):
+            if Path(path) == self.path:
+                raise OSError('simulated interrupted state replacement')
+            return original(path, data)
+        with patch.object(storage, 'replace', side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, 'interrupted'):
+                storage.transaction(self.path, lambda old: dict(old, round=9), page='new page')
+        self.assertTrue(storage._journal(self.path).exists())
+        recovered = storage.read(self.path)
+        self.assertEqual(recovered['round'], 9)
+        self.assertEqual(page.read_text(), 'new page')
+        self.assertFalse(storage._journal(self.path).exists())
+        storage.transaction(self.path, lambda old: dict(old, round=10))
+        self.assertEqual(storage.read(self.path)['round'], 10)
+
+    def test_prepare_refresh_runs_under_mutation_lock_before_revision_check(self):
+        initial = storage.read(self.path)
+        original = self.path.read_bytes()
+        def prepare(before):
+            return dict(before, _document={'steps': [], 'choices': {}, 'frozen': True}), 'new page'
+        with self.assertRaises(storage.Conflict):
+            storage.change(self.path, {'id': 'late', 'change': {'pick': {'key': 'x', 'entry': {'value': 'x'}}}},
+                           storage.revision(initial), prepare=prepare)
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertFalse((self.path.parent / 'index.html').exists())
+        self.assertNotIn('late', storage.read(self.path).get('_operations', {}))
+        with self.assertRaises(ValueError):
+            storage.change(self.path, {'id': 'bad', 'change': {'ask': {'text': ''}}},
+                           storage.revision(initial), prepare=lambda before: (before, 'new page'))
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertFalse((self.path.parent / 'index.html').exists())
+
+    def test_process_death_mid_publication_recovers_from_journal(self):
+        page = self.path.parent / 'index.html'
+        page.write_text('old page')
+        code = '''import os,sys
+from pathlib import Path
+from forkboard import storage
+p=Path(sys.argv[1]); original=storage.replace
+def crash(path, text):
+ if Path(path)==p: os._exit(23)
+ return original(path,text)
+storage.replace=crash
+storage.transaction(p,lambda old: dict(old,round=8),page='new page')
+'''
+        env = dict(os.environ, PYTHONPATH=str(helpers.PACKAGE))
+        result = subprocess.run([sys.executable, '-c', code, str(self.path)], env=env, timeout=10)
+        self.assertEqual(result.returncode, 23)
+        self.assertTrue(storage._journal(self.path).exists())
+        self.path.with_name('state.json.lock').rmdir()  # process is confirmed dead
+        self.assertEqual(storage.read(self.path)['round'], 8)
+        self.assertEqual(page.read_text(), 'new page')
+        self.assertFalse(storage._journal(self.path).exists())
+
     def test_lock_contention_is_bounded_and_never_removes_ambiguous_lock(self):
         lock = self.path.with_name('state.json.lock')
         lock.mkdir()

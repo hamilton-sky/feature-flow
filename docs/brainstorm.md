@@ -25,7 +25,7 @@ The brainstorm is saved as `.feature-flow/state/brainstorm-<feature>.md` and com
 
 ## Using the page
 
-- **Tabs.** The page has five tabs: Style, Team, Options, Plan and Build. A finished step shows a one-line summary and a Change button, the current one is open with an Approve button, and a later one is greyed out. On the live page, Style's buttons pick the type and the scout levels, Team's boxes the helpers, Options' buttons the option, and each option says what it means. Your picks wait until you press Approve, which saves them and wakes the session.
+- **Tabs.** The page has five tabs: Style, Team, Options, Plan and Build. A finished step shows a one-line summary and a Change button, the current one is open with an Approve button, and a later one is greyed out. On the live page, Style's buttons pick the type and the scout levels, Team's boxes the helpers, Options' buttons the option, and each option says what it means. Your picks wait until you press Approve, which saves them as approval intent for the session to process.
 
 - **Read.** The sidebar jumps between sections and options. Switch between system, light and dark at its foot.
 - **Edit a diagram.** Drag boxes. **Add box** (its arrow picks one of seven kinds and a colour), double-click a box to rename it, **Connect** two boxes, **Delete**, **Undo** and **Redo** (Ctrl+Z and Ctrl+Shift+Z), **Reset**. Edits stay in your browser.
@@ -33,14 +33,14 @@ The brainstorm is saved as `.feature-flow/state/brainstorm-<feature>.md` and com
 - **Arrange.** **Arrange** lays a diagram out again: left to right, top to bottom, radial (the most joined box in the middle) or a grid. Undo puts the boxes back.
 - **Look.** The session picks a style that fits the subject: `route` (the default), `blueprint` (architecture), `sketch` (early ideas), `paper` (to share or print), `terminal` (infra and dev tools) or `bright` (UI and consumer features). Ask for another, or put `Style: <name>` in the brainstorm. Boxes are coloured by role: people orange, screens purple, services blue, data green, outside systems grey, and red for what an option puts at risk.
 
-## The live page (Claude only)
+## The native Claude live page
 
 When the session can publish artifacts, the page is live: a link you can share from its Share menu. The people you share it with need a claude.ai sign-in and edit access, not Claude Code.
 
 - **Save as my version** keeps your version of a diagram on the page, for everyone. Pick anyone's version from the list.
 - **Compare with original** marks added, removed and renamed boxes and arrows.
 - **Ask Claude to change it** redraws one diagram with your own Claude.
-- **Talk to Claude** sends the session a question. Each save wakes the session: it answers on the page, can put someone's version into the brainstorm, and publishes the next round to the same link.
+- **Talk to Claude** sends the session a question. The session checks for requests and answers on the page; it can put someone's version into the brainstorm, and publishes the next round to the same link.
 
 To draw first, start with `/feature-flow rate-limits brainstorm sketch`. The page opens with a small sketch of the idea; you change it, save it and send it, and the options build on your drawing.
 
@@ -98,7 +98,7 @@ What the page is good at:
 
 The page itself is **Forkboard** ([packages/forkboard/](../packages/forkboard/)), a separate package in this repository with its own version and tests. feature-flow turns the brainstorm into a review document and Forkboard makes the page from it; Forkboard never reads or writes the brainstorm file. Every install of feature-flow carries its copy of Forkboard (as `feature_flow/_forkboard/`), so nothing extra needs installing.
 
-**The live page (Claude only).** When the session can publish artifacts, it publishes the page live instead (`--live <folder>` writes `index.html` and a `state.json` beside it). Everyone you share it with (a claude.ai sign-in and edit access, no Claude Code needed) can save their own version of each diagram, pick between the original and anyone's version, turn on **Compare with original** to see added, removed and renamed boxes and arrows marked, ask Claude in the page to change a diagram (it uses that person's own Claude), and send the session questions from **Talk to Claude**. A save wakes the session: it reads the page's `state.json`, lists the open asks (`--asks`), answers each one (`--answer`), puts a version into the brainstorm when asked (`--apply <folder> <figure> <version>`), and publishes the next round to the same link. `/feature-flow <feature> brainstorm sketch` starts from your own drawing: the page opens with a small sketch of the idea, you draw yours and send it, and the options build on it. Without an Artifact tool (or on Codex) you get the plain page.
+**The native Claude live page.** When the session can publish artifacts, it publishes the page live instead (`--live <folder>` writes `index.html` and a `state.json` beside it). Everyone you share it with (a claude.ai sign-in and edit access, no Claude Code needed) can save their own version of each diagram, pick between the original and anyone's version, turn on **Compare with original** to see added, removed and renamed boxes and arrows marked, ask Claude in the page to change a diagram (it uses that person's own Claude), and send the session questions from **Talk to Claude**. The session checks for requests: it reads the page's `state.json`, lists the open asks (`--asks`), answers each one (`--answer`), puts a version into the brainstorm when asked (`--apply <folder> <figure> <version>`), and publishes the next round to the same link. `/feature-flow <feature> brainstorm sketch` starts from your own drawing: the page opens with a small sketch of the idea, you draw yours and send it, and the options build on it. Without an Artifact tool, use the local live page described below or the plain page.
 
 [docs/brainstorm.md](brainstorm.md) walks through a brainstorm step by step, how to use the page, and Forkboard's own commands.
 
@@ -107,3 +107,50 @@ The result is `brainstorm.md` ([template](../guides/templates/brainstorm.md)), c
 ## What has not been tried yet
 
 The guided flow's stops and the Setup and Plan steps' choices have not had a field run yet. The live page's loop (a person saves, the session wakes, answers and publishes again) has only run against a stand-in in tests. If you try either, [docs/field-run.md](field-run.md) says what to send back.
+
+### Local live page with Codex
+
+For a brainstorm, draft plan, active build, or completed build, run this from the repository root:
+
+```sh
+FEATURE=my-feature
+LIVE=.feature-flow/state/brainstorm-my-feature-live
+python3 -m feature_flow brainstorm-page "$FEATURE" --serve "$LIVE" --port 0 --agent-label Codex
+```
+
+Open the printed `http://127.0.0.1:.../` URL and keep the process running. It stays the same through phase and ticket updates; port 0 prints a new URL after restart. The saved state survives restarts. A fixed `--port 8765` is optional; a busy port fails instead of attaching to an existing server. A draft or accepted plan without a brainstorm also works: Style, Team and Options say not used, and applying a brainstorm diagram is unavailable. The Build tab follows active and completed ticket status. To generate only, use `--live "$LIVE" --provider local`; serve the generated folder with `forkboard serve "$LIVE" --port 0` (without FeatureFlow's automatic phase refresh).
+
+The page checks for updates while connected. If disconnected, retry and review any update before replacing dirty work. Diagram edits, pending saves and typed requests are retained. A stale diagram source blocks blind replay; use the recovery control to preserve the old edit and continue other work. There is no automatic Codex chat wakeup: the agent explicitly checks and answers requests in another terminal:
+
+```sh
+python3 -m feature_flow brainstorm-page "$FEATURE" --asks "$LIVE"
+python3 -m feature_flow brainstorm-page "$FEATURE" --answer "$LIVE" 1 "Here is the answer."
+python3 -m feature_flow brainstorm-page "$FEATURE" --answer-graph "$LIVE" 2 proposal.json
+python3 -m feature_flow brainstorm-page "$FEATURE" --apply "$LIVE" 1 VERSION
+python3 -m feature_flow brainstorm-page "$FEATURE" --picks "$LIVE"
+```
+
+Replace request numbers and `VERSION` with those shown by the page and `--asks`; `proposal.json` is a validated graph object with `dir`, `nodes` and `edges`. The reviewer explicitly previews and saves a proposed graph before `--apply`. Style, Team, Options and draft Plan choices are staged until their tab's **Approve** records the user's approval intent and picks together. The agent processes the intent using the named commands and existing approval policy. Accepted plans and build settings are frozen; changes require an approved re-plan. HTTP writes page state only: it never starts a build, changes a repository file or commits.
+
+#### Manual Codex smoke run
+
+This is a manual real-agent check; no account or model is required by the automated tests. In a disposable repo, prepare a brainstorm for `my-feature` with a flowchart and a draft plan with at least one open ticket. Start the `--serve` command above, copy its printed URL into `URL` in another terminal, and open it in a browser:
+
+```sh
+URL=http://127.0.0.1:PORT
+curl -i "$URL"state.json
+```
+
+1. Edit the diagram and press **Save as my version**. Record the displayed version. Obtain the current ETag with `curl -i "$URL"state.json`, make another save, then send a fresh operation with the old ETag to check stale-revision handling:
+
+   ```sh
+   OLD_ETAG='"paste-the-earlier-etag"'
+   curl -i -X POST "${URL}api/change" -H 'Content-Type: application/json' \
+     -H "Origin: ${URL%/}" -H "If-Match: $OLD_ETAG" \
+     --data '{"id":"manual-stale-check","change":{"ask":{"text":"stale check"}}}'
+   ```
+
+   The response is 412. Use the page's retry/recovery controls; verify your unsaved work remains.
+2. Submit a question and a diagram request from the page. Run `--asks "$LIVE"`, then `--answer "$LIVE" N "Answer from Codex"` for the question. Prepare `proposal.json` from the request's graph or another valid graph, run `--answer-graph "$LIVE" N proposal.json`, then preview and explicitly save it in the browser. Run `--apply "$LIVE" 1 VERSION` only when you intend to update the brainstorm.
+3. In draft Plan, change a setting and press **Approve**. Run `--asks "$LIVE"` and `--picks "$LIVE"`; confirm the validated draft file changes and that the agent handles plan approval under the normal approval rules.
+4. With the same URL open, update a ticket status through the normal workflow and observe the Build tab refresh within five seconds. Repeat for completion. Stop the server with Ctrl-C, restart with port 0, open the newly printed URL, and confirm saved state survived.

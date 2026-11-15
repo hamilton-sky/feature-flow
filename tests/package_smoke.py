@@ -12,6 +12,8 @@ Network: pip installs the wheel with --no-deps --no-index, so nothing is downloa
 """
 
 import filecmp
+import json
+import urllib.request
 import os
 import shutil
 import subprocess
@@ -43,6 +45,9 @@ BUNDLED = [
     "feature_flow/_forkboard/page.py",
     "feature_flow/_forkboard/assets/editor.js",
     "feature_flow/_forkboard/assets/live.js",
+    "feature_flow/_forkboard/assets/providers.js",
+    "feature_flow/_forkboard/server.py",
+    "feature_flow/_forkboard/storage.py",
     "feature_flow/_forkboard/themes/route.css",
 ]
 FAILED = []
@@ -107,7 +112,9 @@ def main(argv):
             members = [m.name.split("/", 1)[-1] for m in tar.getmembers()]
         need = ["skills/feature-flow/SKILL.md", "guides/build.md", "agents/ticket-builder.md",
                 "adapters/codex/feature-flow/SKILL.md", "scripts/flow-view.html", "feature_flow/install.py",
-                "packages/forkboard/forkboard/page.py", "packages/forkboard/forkboard/assets/editor.js"]
+                "packages/forkboard/forkboard/page.py", "packages/forkboard/forkboard/assets/editor.js",
+                "packages/forkboard/forkboard/assets/providers.js", "packages/forkboard/forkboard/server.py",
+                "packages/forkboard/forkboard/storage.py"]
         missing = [n for n in need if n not in members]
         check("the sdist holds the files the wheel bundles", not missing, "missing %s" % missing)
 
@@ -167,6 +174,36 @@ def main(argv):
         code, out = run([sys.executable, "-I", "scripts/flow-status.py", "f", "--brainstorm-page"], cwd=from_pkg, env=env)
         check("the installed flow-status.py makes the brainstorm page with Forkboard, under -I too",
               code == 0 and 'class="dg graph"' in brainstorm.with_suffix(".html").read_text(encoding="utf-8"), out)
+        live_dir = work / "installed-live"
+        code, out = run([command, "brainstorm-page", "f", "--live", live_dir, "--provider", "local"],
+                        cwd=from_pkg, env=env)
+        check("installed local render", code == 0 and (live_dir / "index.html").is_file(), out)
+        if code == 0:
+            proc = subprocess.Popen([str(command), "brainstorm-page", "f", "--serve", str(live_dir), "--port", "0"],
+                                    cwd=str(from_pkg), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    universal_newlines=True)
+            try:
+                line = proc.stdout.readline()
+                if line.startswith("wrote "):
+                    line = proc.stdout.readline()
+                check("installed local serve", line.startswith("serving http://127.0.0.1:"), line)
+                if line.startswith("serving http://127.0.0.1:"):
+                    url = line.split()[1]
+                    with urllib.request.urlopen(url + "state.json", timeout=5) as response:
+                        revision = response.headers["ETag"]
+                    request = urllib.request.Request(url + "api/change",
+                        data=json.dumps({"id": "installed-smoke", "change": {"ask": {"text": "Installed request?"}}}).encode(),
+                        headers={"Content-Type": "application/json", "Origin": url.rstrip("/"), "If-Match": revision})
+                    with urllib.request.urlopen(request, timeout=5) as response:
+                        check("installed local request", response.status == 200)
+                    code, out = run([command, "brainstorm-page", "f", "--asks", live_dir], cwd=from_pkg, env=env)
+                    check("installed local asks", code == 0 and "Installed request?" in out, out)
+                    code, out = run([command, "brainstorm-page", "f", "--answer", live_dir, "1", "Installed answer"],
+                                    cwd=from_pkg, env=env)
+                    check("installed local answer", code == 0, out)
+            finally:
+                proc.terminate()
+                proc.wait(timeout=10)
         code, out = run([command, "nonsense"], cwd=work, env=env)
         check("an unknown command is a usage error", code == 2 and "usage:" in out, out)
 
