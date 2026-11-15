@@ -12,7 +12,7 @@ from pathlib import Path
 
 from feature_flow import codehash, git, state
 from feature_flow.conductor import budget as time_budget
-from feature_flow.conductor import guards, reset as run_reset
+from feature_flow.conductor import guards, repair, reset as run_reset
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.guards import owner_hash  # the package exports it
 from feature_flow.conductor.phases import REGISTRY
@@ -89,8 +89,7 @@ class Conductor(Workspace):
         return [tuple(item.split(":", 1)) for item in self.all.get("deferred", "").split() if ":" in item]
 
     def fast_switch(self, value):
-        """`fast on|off` between phases: from the next ticket on, level 1 and 2 tickets skip or get their own
-        review. Tickets already deferred keep the feature review at the end."""
+        """`fast on|off` between phases: level 1-2 tickets skip or get their own review (budget.fast_switch)."""
         return time_budget.fast_switch(self, value)
 
     def check_code(self, allowed=False, final=False):
@@ -105,8 +104,8 @@ class Conductor(Workspace):
         if final:
             raise Stop("flow code changed during the feature review of %s: %s. a reviewer must never change it"
                        % (self.feature, ", ".join(names)))
-        raise Stop("flow code changed while building %s: %s. if you upgraded feature-flow or changed its code, run `feature-flow resume %s`: it keeps the ticket where it is. if the builder changed it, undo that, or give the ticket a line: Floor: allow flow-edit"
-                   % (self.ticket_name(), ", ".join(names), self.feature))
+        raise Stop("flow code changed while building %s: %s. if you upgraded feature-flow or changed its code, run `feature-flow resume %s --dry-run` to see what it accepts, then on your yes `feature-flow resume %s --accept-code`: it keeps the ticket where it is. if the builder changed it, undo that, or give the ticket a line: Floor: allow flow-edit"
+                   % (self.ticket_name(), ", ".join(names), self.feature, self.feature))
 
     # ---- commands ------------------------------------------------------
 
@@ -127,9 +126,9 @@ class Conductor(Workspace):
         """`budget` reports; `budget <minutes>|+<minutes>|off` sets it between phases."""
         return time_budget.budget_cmd(self, value)
 
-    def replan_prompt(self, mode=None):
-        """The feature-planner's prompt to fold the open tickets into fewer (between tickets), or to repair the plan."""
-        return guards.replan_prompt(self, mode)
+    def replan_prompt(self, mode=None, consulted=None):
+        """The feature-planner's prompt to fold the open tickets into fewer, or to repair the plan (repair.py)."""
+        return guards.replan_prompt(self, mode, consulted)
 
     def start(self):
         if not self.plan.is_dir():
@@ -217,8 +216,9 @@ class Conductor(Workspace):
         return prompt_files(self.state_file, self.feature, lane, text) if to_file else text
 
     def consult_prompt(self, role, question_file):
-        """A consultant's prompt for a question the planner raised. Stateless, like the other plan commands."""
-        return Planner(self).consult_prompt(role, question_file)
+        """A consultant's prompt for the planner's question: before the plan exists, or during a repair of it."""
+        ask = repair.consult_prompt if self.plan.is_dir() else lambda c, *a: Planner(c).consult_prompt(*a)
+        return ask(self, role, question_file)
 
     def brainstorm_prompt(self, helper, question_file):
         """A brainstorm helper's prompt. The script counts the helpers per brainstorm and refuses past the limit."""

@@ -1,6 +1,6 @@
 """The ticket graph reader, ported from the bash script of the same name.
 
-usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --fix <diagnosis.md> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]
+usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint [--baseline <commit>] | --doctor [--trust <digest>] | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --fix <diagnosis.md> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]
 Exit codes for --next: 0 a ready ticket path is printed, 10 all done, 11 unfinished but nothing ready.
 --ready prints every ready ticket path, one per line, with the same exit codes.
 """
@@ -13,7 +13,7 @@ import sys
 
 from feature_flow import builders, suggest, tickets
 
-USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --fix <diagnosis.md> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]"
+USAGE = "usage: python3 scripts/flow-status.py <feature> [--next | --ready | --counts | --check | --lint [--baseline <commit>] | --doctor [--trust <digest>] | --mermaid [plain] | --json | --width | --clean [--yes] | --eval [--later] | --import <tasks.md or folder> [--dry-run] | --fix <diagnosis.md> [--dry-run] | --page (or --brainstorm-page) [--style NAME] [--fragment | --live DIR | --asks STATE | --answer STATE N TEXT | --apply STATE FIGURE VERSION | --picks STATE]]"
 
 
 def _env(name, default):
@@ -54,6 +54,9 @@ def run(argv, out, err, cwd=None):
         err.write(USAGE + "\n")
         return 2
     root = _env("FLOW_DIR", "plans")
+    if mode == "--doctor":
+        from feature_flow import doctor
+        return doctor.main([feature] + list(argv[2:]), out, err)
     folder = "%s/%s/%s" % (root, feature, _env("FLOW_TICKETS", "tasks"))
     if not os.path.isdir(_under(cwd, folder)):
         err.write("no ticket folder: %s\n" % folder)
@@ -63,6 +66,13 @@ def run(argv, out, err, cwd=None):
     if not paths:
         err.write("no tickets in %s\n" % folder)
         return 2
+
+    if mode == "--lint" and opt == "--baseline":
+        if len(argv) < 4 or not argv[3]:
+            err.write("--lint --baseline needs the commit the repair started from\n")
+            return 2
+        from feature_flow import repaircheck
+        return repaircheck.main(feature, argv[3], out, err, root)
 
     if mode in ("--check", "--lint"):
         learnings = "%s/%s/learnings.md" % (root, feature)
@@ -207,7 +217,50 @@ def lint(g, plan_dir, cwd=None):
 
 
 def _check(g, ready, nready, unfinished, out, extra=([], [])):
+    errors, warnings = problems(g, nready, unfinished, extra)
+    for w in warnings:
+        out.write("warning: " + w + "\n")
+    if errors:
+        for e in errors:
+            out.write(e + "\n")
+        return 1
+    out.write("OK: %d tickets, %d ready now\n" % (len(g.order), nready))
+    return 0
+
+
+def readiness(g):
+    """(ready {ticket: bool}, how many are ready, how many are not resolved or parked)."""
+    ready = {}
+    for t in g.order:
+        ready[t] = g.stat[t] == "open" and all(d in g.seen and g.stat[d] == "resolved" for d in g.blk[t])
+    unfinished = sum(1 for t in g.order if g.stat[t] not in ("resolved", "parked"))
+    return ready, sum(1 for t in g.order if ready[t]), unfinished
+
+
+def plan_problems(plan_dir, cwd=None, strict=True):
+    """(errors, warnings) of `--lint` (strict) or `--check` for the plan in plan_dir, as lists, in the order the
+    command prints them; files the tickets name are looked up under cwd (None: the working folder)."""
+    folder = os.path.join(plan_dir, _env("FLOW_TICKETS", "tasks"))
+    paths = tickets.ticket_files(_under(cwd, folder)) if os.path.isdir(_under(cwd, folder)) else []
+    if not paths:
+        return ["no tickets in %s" % folder], []
+    first = []
+    learnings = os.path.join(plan_dir, "learnings.md")
+    if os.path.isfile(_under(cwd, learnings)):
+        lines = sum(1 for line in tickets.records(_under(cwd, learnings)) if line.strip(" \t\n\v\f\r") != "")
+        if lines > 40:
+            first.append("learnings.md has %d lines. every session reads it, so a human should prune it" % lines)
+    g = tickets.Graph(paths)
+    ready, nready, unfinished = readiness(g)
+    extra = lint(g, plan_dir, cwd) if strict else ([], [])
+    errors, warnings = problems(g, nready, unfinished, extra)
+    return errors, first + warnings
+
+
+def problems(g, nready, unfinished, extra=([], [])):
+    """(errors, warnings) of the plan check, with the lint's extra (errors, warnings) added."""
     errors = list(extra[0])
+    warnings = []
     for t in g.order:
         lab = g.lab[t]
         if t in g.dup:
@@ -271,16 +324,9 @@ def _check(g, ready, nready, unfinished, out, extra=([], [])):
         for m in g.mentions.get(t, []):
             if m == t or m not in g.seen or (t, m) in reach or (m, t) in reach:
                 continue
-            out.write("warning: %s: mentions ticket %s but is not ordered against it. add it to Blocked by, or reword\n"
-                      % (g.lab[t], g.lab[m]))
-    for w in extra[1]:
-        out.write("warning: " + w + "\n")
-    if errors:
-        for e in errors:
-            out.write(e + "\n")
-        return 1
-    out.write("OK: %d tickets, %d ready now\n" % (len(g.order), nready))
-    return 0
+            warnings.append("%s: mentions ticket %s but is not ordered against it. add it to Blocked by, or reword"
+                            % (g.lab[t], g.lab[m]))
+    return errors, warnings + list(extra[1])
 
 
 def width_of(g, commands):

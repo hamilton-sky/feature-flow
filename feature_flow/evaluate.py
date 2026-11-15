@@ -156,6 +156,9 @@ def timing(rows, per):
                 name, _, value = part.partition("=")
                 if value.isdigit():
                     gate_seconds[name] = gate_seconds.get(name, 0) + int(value)
+    gate_runs = [sum(int(v) for v in re.findall(r"=(\d+)", detail)) for _, _, event, detail in rows
+                 if event == "GATE-TIME"]
+    testfirst = [int(detail) for _, _, event, detail in rows if event == "TESTFIRST-TIME" and detail.isdigit()]
     slowest = None
     if by_ticket:
         n = max(by_ticket, key=lambda k: sum(by_ticket[k].values()))
@@ -166,7 +169,53 @@ def timing(rows, per):
             "by_ticket": {n: {k: round(v) for k, v in sorted(row.items())} for n, row in sorted(by_ticket.items())},
             "by_level": {k: round(v) for k, v in sorted(by_level.items())}, "slowest": slowest,
             "full_test_runs": dict(sorted(full.items())),
-            "gate_minutes": {k: round(v / 60.0, 1) for k, v in sorted(gate_seconds.items())}}
+            "gate_minutes": {k: round(v / 60.0, 1) for k, v in sorted(gate_seconds.items())},
+            "gate_runs": spread(gate_runs), "testfirst_runs": spread(testfirst),
+            "finding_to_fix": finding_to_fix(stamped)}
+
+
+def spread(seconds):
+    """{runs, median and longest seconds} of a list of durations, or None when it is empty."""
+    if not seconds:
+        return None
+    ordered = sorted(seconds)
+    mid = len(ordered) // 2
+    median = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2.0
+    return {"runs": len(ordered), "median_seconds": round(median), "longest_seconds": ordered[-1],
+            "total_seconds": sum(ordered)}
+
+
+VERIFIED = ("VERDICT-PASS", "REVIEW-DEFERRED", "FEATURE-PASS")  # a ticket's work passed (or, deferred, its checks did)
+BACK_AT_REVIEW = ("REVIEW", "REVIEW-DEFERRED")  # the fixed work reached a reviewer, or would have
+
+
+def finding_to_fix(stamped):
+    """How long each finding (a failed check or a review that sent the ticket back, CATCHES) took to fix: minutes
+    until the ticket's work reached a review again, and until it passed one (VERIFIED). A finding with no pass after
+    it is counted as open. None when the run had no findings."""
+    found = []
+    for i, (t, num, event, _) in enumerate(stamped):
+        if event not in CATCHES:
+            continue
+        review = fixed = None
+        for t2, num2, event2, _ in stamped[i + 1:]:
+            if num2 != num:
+                continue
+            if review is None and event2 in BACK_AT_REVIEW:
+                review = (t2 - t).total_seconds() / 60
+            if event2 in VERIFIED:
+                fixed = (t2 - t).total_seconds() / 60
+                break
+        found.append({"ticket": num, "check": event, "to_review": None if review is None else round(review, 1),
+                      "to_fix": None if fixed is None else round(fixed, 1)})
+    if not found:
+        return None
+    fixed = [f["to_fix"] for f in found if f["to_fix"] is not None]
+    back = [f["to_review"] for f in found if f["to_review"] is not None]
+    middle = lambda xs: sorted(xs)[len(xs) // 2] if xs else None
+    return {"findings": len(found), "open": sum(1 for f in found if f["to_fix"] is None),
+            "median_to_review_minutes": middle(back), "median_to_fix_minutes": middle(fixed),
+            "longest_to_fix_minutes": max(fixed) if fixed else None, "each": found}
 
 
 def driver(rows, run_state):
@@ -476,6 +525,16 @@ def render(record, out_dir, wrote_form):
             lines.append("  whole Test runs by the gate: " + ", ".join("%s x%d" % kv for kv in tm["full_test_runs"].items()))
         if tm.get("gate_minutes"):
             lines.append("  gate minutes by command: " + ", ".join("%s %s" % kv for kv in tm["gate_minutes"].items()))
+        for key, what in (("gate_runs", "gate runs"), ("testfirst_runs", "test-first checks")):
+            if tm.get(key):
+                lines.append("  %s: %d, median %s, longest %s" % (what, tm[key]["runs"], clock(tm[key]["median_seconds"]),
+                                                                clock(tm[key]["longest_seconds"])))
+        fix = tm.get("finding_to_fix")
+        if fix:
+            lines.append("  finding to fix: %d finding(s), median %s min back at review, median %s min to a pass "
+                         "(longest %s), %d still open" % (fix["findings"], _num(fix["median_to_review_minutes"]),
+                                                          _num(fix["median_to_fix_minutes"]),
+                                                          _num(fix["longest_to_fix_minutes"]), fix["open"]))
     tok = record["tokens"]
     if tok:
         total = tok["total"]
@@ -513,6 +572,14 @@ def render(record, out_dir, wrote_form):
         lines.append("  fixes since the run: %s" % (", ".join("%s x%d" % (n, len(h)) for n, h in sorted(hits.items())) or "none"))
     lines.append("wrote %s" % (out_dir / "eval.json"))
     return "\n".join(lines) + "\n"
+
+
+def clock(seconds):
+    return "%dm%02ds" % divmod(int(round(seconds)), 60)
+
+
+def _num(value):
+    return "?" if value is None else ("%g" % value)
 
 
 def main(argv, out=None, err=None):
