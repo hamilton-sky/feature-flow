@@ -7,7 +7,7 @@ import os
 import shutil
 from pathlib import Path
 
-from feature_flow import brainstorm_mode, checks, prompts, scouts, state
+from feature_flow import brainstorm_mode, checks, git, plan_lock, prompts, scouts, state
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases.base import lane_runner
 
@@ -255,11 +255,16 @@ class Planner:
         if not check.ok:
             raise Stop("the draft fails the plan check, fix it first: %s"
                        % " ".join(check.out.split())[:400])
-        self.plan.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(str(self.draft), str(self.plan))
-        check = checks.flow_status(self.scripts, self.feature, "--check")
-        if not check.ok:
-            raise Stop("the accepted plan in %s fails the plan check: %s"
-                       % (self.plan.as_posix(), " ".join(check.out.split())[:400]))
+        try:
+            with plan_lock.lock(git.toplevel() or os.getcwd(), self.feature):
+                self.no_plan_yet()
+                self.plan.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(str(self.draft), str(self.plan))
+                check = checks.flow_status(self.scripts, self.feature, "--check")
+                if not check.ok:
+                    raise Stop("the accepted plan in %s fails the plan check: %s"
+                               % (self.plan.as_posix(), " ".join(check.out.split())[:400]))
+        except ValueError as err:
+            raise Stop(str(err))
         self.log("PLAN-ACCEPT")
         return "OK %s" % self.plan.as_posix()

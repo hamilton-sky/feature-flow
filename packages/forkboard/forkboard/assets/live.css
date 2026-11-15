@@ -31,3 +31,7 @@ g.edge.ghost path{fill:none;stroke:#c8402f;stroke-width:1.6;stroke-dasharray:5 4
 .ask-row select,.ask-row button{font:inherit;background:var(--box);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 10px;cursor:pointer;max-width:100%}
 .ask-row button.go{background:var(--acc);color:var(--box);border-color:var(--acc)}
 .ask-row button[hidden],.ask-about[hidden]{display:none}
+.live-connection{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:8px}
+.live-connection button{font:inherit;color:var(--fg);background:var(--box);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+.live-connection button[hidden]{display:none}
+.update-preview{width:100%}.update-preview iframe{width:100%;height:70vh;border:1px solid var(--line);background:var(--box)}

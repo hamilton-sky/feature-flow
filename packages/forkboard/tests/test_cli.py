@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 import helpers
-from forkboard import __version__, cli, live
+from forkboard import __version__, cli, live, storage
 
 
 class Command(unittest.TestCase):
@@ -31,6 +31,16 @@ class Command(unittest.TestCase):
             return cli.main(list(args), out, err), out.getvalue(), err.getvalue()
         finally:
             sys.stdin = old
+
+    def test_local_provider_and_label_flags_keep_native_default(self):
+        folder = self.dir / 'local'
+        code, _, err = self.run_cli('live', str(self.doc), str(folder), '--provider', 'local', '--agent-label', '<Codex>')
+        self.assertEqual(code, 0, err)
+        html = (folder / 'index.html').read_text()
+        self.assertTrue(html.startswith('<!doctype html>'))
+        self.assertIn('data-provider="local"', html)
+        self.assertIn('data-agent-label="&lt;Codex&gt;"', html)
+        self.assertEqual(self.run_cli('live', str(self.doc), str(folder), '--provider', 'other')[0], 1)
 
     def test_render_writes_the_page_beside_the_document_or_to_stdout(self):
         code, out, err = self.run_cli("render", str(self.doc), "--theme", "blueprint")
@@ -74,6 +84,28 @@ class Command(unittest.TestCase):
         code, out, _ = self.run_cli("version", str(folder), "1", "original")
         self.assertEqual(code, 0)
         self.assertTrue(out.startswith("flowchart LR"))
+
+    def test_corrupt_state_is_not_reset_and_graph_answers_are_proposals(self):
+        folder = self.dir / "live"
+        self.run_cli("live", str(self.doc), str(folder))
+        state = folder / "state.json"
+        st = storage.read(state)
+        st = storage.change(state, {"id": "diagram", "change": {"ask": {
+            "text": "Change this", "kind": "diagram", "figure": "1"}}}, storage.revision(st))
+        proposal = self.dir / "proposal.json"
+        proposal.write_text(json.dumps(st["figures"]["1"]["original"]))
+        code, _, err = self.run_cli("answer-graph", str(folder), "1", str(proposal))
+        self.assertEqual(code, 0, err)
+        st = storage.read(state)
+        self.assertEqual(st["asks"][0]["result"], st["figures"]["1"]["original"])
+        self.assertEqual(st["figures"]["1"]["versions"], {})
+        state.write_text("{corrupt")
+        page = (folder / "index.html").read_bytes()
+        code, _, err = self.run_cli("live", str(self.doc), str(folder))
+        self.assertEqual(code, 1)
+        self.assertIn("repair or restore", err)
+        self.assertEqual(state.read_text(), "{corrupt")
+        self.assertEqual((folder / "index.html").read_bytes(), page)
 
     def test_mistakes_say_what_to_do(self):
         code, _, err = self.run_cli("render", str(self.doc), "--theme", "neon")

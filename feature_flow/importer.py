@@ -20,9 +20,10 @@ It never overwrites: an existing plans/<feature>/ is refused. Nothing is committ
 import os
 import re
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 
-from feature_flow import git
+from feature_flow import git, plan_lock
 
 USAGE = "usage: feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]"
 TASK = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s+(.*\S)\s*$")
@@ -210,11 +211,19 @@ def main(argv, out=None, err=None, guides_root=None):
     if isinstance(files, str):
         err.write(files + "\n")
         return 1
-    for rel, text in sorted(files.items()):
-        out.write("%s %s\n" % ("would write" if dry else "wrote", (plan / rel).relative_to(top).as_posix()))
-        if not dry:
-            (plan / rel).parent.mkdir(parents=True, exist_ok=True)
-            (plan / rel).write_text(text, encoding="utf-8")
+    try:
+        with nullcontext() if dry else plan_lock.lock(top, feature):
+            if plan.exists():
+                err.write("%s already exists: import only starts a new plan\n" % plan)
+                return 1
+            for rel, text in sorted(files.items()):
+                out.write("%s %s\n" % ("would write" if dry else "wrote", (plan / rel).relative_to(top).as_posix()))
+                if not dry:
+                    (plan / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (plan / rel).write_text(text, encoding="utf-8")
+    except ValueError as exc:
+        err.write(str(exc) + "\n")
+        return 1
     if not dry:
         out.write("next: fill in plans/%s/commands.md (Build, Test, Smoke), add a ```check block under each "
                   "ticket's Done when, set the levels, then flow-status.py %s --lint, commit the folder, and "

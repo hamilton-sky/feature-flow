@@ -331,9 +331,12 @@ def stepped(steps, body):
     return "\n".join(out)
 
 
-def render(doc, css, theme_name, fragment=False, live=False):
+def render(doc, css, theme_name, fragment=False, live=False, provider="claude", agent_label=None):
     """The page for a document, in a theme (its CSS and name); fragment leaves out the doctype, html, head and body
     tags for a host that adds its own (an Artifact); live adds the layer a page published as an artifact uses."""
+    if provider not in ('claude', 'local'):
+        raise ValueError('provider must be claude or local')
+    agent_label = agent_label if agent_label is not None else ('Codex' if provider == 'local' else 'Claude')
     lines = lambda text: (text or "").split("\n")
     ident = doc.get("id") or "review"
     kind_name = doc.get("kind") or "Review"
@@ -388,11 +391,11 @@ def render(doc, css, theme_name, fragment=False, live=False):
         '</button></div><label class="motion"><input type="checkbox" id="motion"> Animate the arrows</label></div>'
         '</nav>\n%s<main>\n<header class="hero"><div class="eyebrow">%s review &middot; style %s</div>'
         '<h1>%s</h1>%s<div class="meta">%s</div></header>\n%s\n</main>\n</div>\n%s<script>\n%s\n</script>\n'
-        % (html.escape(ident), ' data-live="1"' if live else "", len(nav), html.escape(kind_name), "".join(nav), FX,
+        % (html.escape(ident), (' data-live="1" data-provider="%s" data-agent-label="%s"' % (provider, html.escape(agent_label))) if live else "", len(nav), html.escape(kind_name), "".join(nav), FX,
            html.escape(kind_name), html.escape(theme_name), inline(doc.get("title") or page_title),
            intro, meta_html, body,
            '<script src="%s"></script>\n' % MERMAID if needs_mermaid else "",
-           palette_js() + asset("editor.js") + (asset("steps.js") if steps else "") + (asset("live.js") if live else "")))
+           palette_js() + asset("editor.js") + (asset("steps.js") if steps else "") + (asset("providers.js") + asset("live.js") if live else "")))
     if fragment:
         return head + content
     return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" '

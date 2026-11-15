@@ -41,6 +41,19 @@ class State(unittest.TestCase):
         self.assertEqual(len(again["asks"]), 2)
         self.assertEqual(live.state(doc, "junk")["round"], 1)
 
+    def test_regeneration_pins_legacy_versions_to_the_previous_source(self):
+        old = saved()
+        old_source = old['figures']['1']['source']
+        old['figures']['1']['versions']['pinned'] = dict(old['figures']['1']['versions']['u_dana'], source='earlier-source')
+        doc = helpers.fixture('sketch')
+        doc['sections'][0]['markdown'] = doc['sections'][0]['markdown'].replace('Tasks table', 'New source')
+        again = live.state(doc, old)
+        self.assertNotEqual(again['figures']['1']['source'], old_source)
+        self.assertEqual(live.version(again, '1', 'u_dana'), (DANA, old_source))
+        self.assertEqual(live.version(again, '1', 'pinned'), (DANA, 'earlier-source'))
+        self.assertEqual(live.version(again, '1', 'original')[1], again['figures']['1']['source'])
+        self.assertEqual(live.version(live.state(doc, again), '1', 'u_dana')[1], old_source)
+
     def test_other_code_blocks_do_not_count_as_figures(self):
         doc = {"schema": "bundle/1", "id": "f", "sections": [
             {"title": "Code", "markdown": "```python\nx = 1\n```"},

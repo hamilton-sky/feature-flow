@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.42: a local live page
+
+| Version | Added |
+|---|---|
+| 0.42.0 | **The live page without Claude** ([docs](brainstorm.md#local-live-page-with-codex)): `feature-flow brainstorm-page <feature> --serve <dir> --port 0 --agent-label Codex` serves the flow's one page from a loopback server, so Codex (or any agent) and plain browsers get the live page that 0.25 gave Claude artifacts. The page follows brainstorm, draft and build, keeps diagram edits, pending saves and typed requests across disconnects, and recovers a stale diagram source without a blind replay. Saves go through Forkboard's transactional storage (`server.py`, `storage.py`), which rejects a write that races plan acceptance and never leaves a new state beside an old page. The agent answers with `--asks`, `--answer`, `--answer-graph` and `--picks`; the server never runs builds or commits. Built as the portable-live-page feature: its field run is what 0.41.0 fixed. |
+
 ## 0.41: recoverable stops
 
 | Version | Added |

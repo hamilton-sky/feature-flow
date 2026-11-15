@@ -15,6 +15,15 @@ class Rendering(unittest.TestCase):
         self.doc = helpers.fixture("csv")
         self.html = page.render(self.doc, CSS, "blueprint")
 
+    def test_explicit_providers_and_labels_are_escaped(self):
+        out = page.render(self.doc, CSS, 'route', live=True, provider='local', agent_label='</script><img onerror="bad">')
+        self.assertIn('data-provider="local"', out)
+        self.assertIn('data-agent-label="&lt;/script&gt;&lt;img onerror=&quot;bad&quot;&gt;"', out)
+        self.assertLess(out.index('window.ForkboardProviders'), out.index("var wrap = document.querySelector('.wrap')"))
+        self.assertNotIn('</script><img', out)
+        with self.assertRaises(ValueError):
+            page.render(self.doc, CSS, 'route', live=True, provider='remote')
+
     def test_the_sidebar_routes_to_every_section_and_option(self):
         nav = self.html[self.html.index('<nav class="route"'):self.html.index("</nav>")]
         for target in ("#idea", "#options", "#a-stream-it", "#b-in-the-background", "#chosen", "#open"):

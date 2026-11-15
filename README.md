@@ -168,3 +168,7 @@ The full list is in [docs/README.md](docs/README.md).
 ## Contributing and license
 
 The tests are offline and call no model: `bash tests/run.sh` and `python3 -m unittest discover -s tests/py`. [docs/contributing.md](docs/contributing.md) has the rest, and how a release reaches PyPI. MIT licensed, see `LICENSE`.
+
+### Local live page for Codex
+
+Run `python3 -m feature_flow brainstorm-page FEATURE --serve .feature-flow/state/FEATURE-live --port 0 --agent-label Codex` from the repo and open the printed loopback URL. The page follows brainstorm, draft and build status; its server must remain running. The agent checks requests explicitly with `--asks`, answers with `--answer` or `--answer-graph`, and processes approved picks with `--picks`. See [the local workflow and manual smoke run](docs/brainstorm.md#local-live-page-with-codex). Claude artifact publishing and plain static pages remain available.

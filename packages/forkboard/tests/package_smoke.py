@@ -5,6 +5,8 @@ Checks that the wheel carries the page's assets and themes, and that `forkboard`
 """
 
 import os
+import json
+import urllib.request
 import subprocess
 import sys
 import tempfile
@@ -29,7 +31,7 @@ def main():
         run([sys.executable, "-m", "build", "--outdir", tmp / "dist", PACKAGE])
         wheel = next((tmp / "dist").glob("*.whl"))
         names = set(zipfile.ZipFile(str(wheel)).namelist())
-        need = ["forkboard/assets/editor.js", "forkboard/assets/live.js", "forkboard/themes/route.css", "forkboard/page.py"]
+        need = ["forkboard/assets/editor.js", "forkboard/assets/live.js", "forkboard/assets/providers.js", "forkboard/server.py", "forkboard/storage.py", "forkboard/themes/route.css", "forkboard/page.py"]
         missing = [n for n in need if n not in names]
         if missing or any(n.startswith("tests/") for n in names):
             sys.exit("the wheel is missing %s or holds tests" % missing)
@@ -45,6 +47,32 @@ def main():
         run([command, "render", PACKAGE / "tests" / "fixtures" / "csv.json", "--out", out], cwd=str(tmp), env=env)
         if 'class="dg graph"' not in out.read_text(encoding="utf-8"):
             sys.exit("the installed forkboard wrote a page without its editable diagram")
+        live_dir = tmp / "live"
+        run([command, "live", PACKAGE / "tests" / "fixtures" / "csv.json", live_dir,
+             "--provider", "local"], cwd=str(tmp), env=env)
+        if "providers" not in (live_dir / "index.html").read_text(encoding="utf-8").lower():
+            sys.exit("installed local page lacks its provider adapter")
+        proc = subprocess.Popen([str(command), "serve", str(live_dir), "--port", "0"], cwd=str(tmp), env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        try:
+            line = proc.stdout.readline()
+            if not line.startswith("serving http://127.0.0.1:"):
+                sys.exit("installed local server failed: " + line)
+            url = line.split()[1]
+            with urllib.request.urlopen(url + "state.json", timeout=5) as response:
+                revision = response.headers["ETag"]
+            request = urllib.request.Request(url + "api/change",
+                data=json.dumps({"id": "installed-smoke", "change": {"ask": {"text": "Installed request?"}}}).encode(),
+                headers={"Content-Type": "application/json", "Origin": url.rstrip("/"), "If-Match": revision})
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if response.status != 200:
+                    sys.exit("installed local request was not accepted")
+            if "Installed request?" not in run([command, "asks", live_dir], cwd=str(tmp), env=env):
+                sys.exit("installed asks did not find the local request")
+            run([command, "answer", live_dir, "1", "Installed answer"], cwd=str(tmp), env=env)
+        finally:
+            proc.terminate()
+            proc.wait(timeout=10)
         print("all passed")
 
 

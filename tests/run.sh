@@ -4,7 +4,16 @@
 # exit code is the number of failed checks, capped at 1.
 
 set -uo pipefail
-unset FLOW_INVOKE FLOW_TRUSTED
+# The gate can run this suite from a live flow, whose profile exports FLOW_ settings.
+# Fixtures choose their own settings: inherited base gates, reviews or session tokens
+# must not change what they exercise. Keep only CI's separate unit-test shard switch.
+for flow_test_env in "${!FLOW_@}"; do
+  case "$flow_test_env" in
+    FLOW_UNIT_IN_SHARDS) ;;
+    *) unset "$flow_test_env" ;;
+  esac
+done
+unset flow_test_env
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
@@ -398,7 +407,7 @@ if [ ! -e "$BAR/a/scripts" ] && [ ! -e "$BAR/a/.feature-flow/installed.txt" ] &&
 LEFT="$(find "$BAR/home" -type f)"
 if [ -z "$LEFT" ]; then ok "the user uninstall leaves no files in the home"; else bad "the user uninstall leaves no files in the home" "$LEFT"; fi
 if [ ! -e "$BAR/home/.feature-flow" ]; then ok "and ~/.feature-flow is gone"; else bad "and ~/.feature-flow is gone"; fi
-expect_has "--version prints the version" "feature-flow 0.41.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
+expect_has "--version prints the version" "feature-flow 0.42.0" "$(cd "$ROOT" && python3 -m feature_flow --version 2>&1)"
 if [ ! -e "$I/repo/.agents" ]; then ok "the default install writes no .agents"; else bad "the default install writes no .agents"; fi
 if cmp -s "$ROOT/skills/feature-flow/SKILL.md" "$I/repo/.claude/skills/feature-flow/SKILL.md"; then ok "the Claude install copies the skill byte for byte"; else bad "the Claude install copies the skill byte for byte"; fi
 mkdir -p "$C/both"
@@ -588,7 +597,7 @@ else
 fi
 out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py feature_flow/conductor/*.py feature_flow/conductor/*/*.py packages/forkboard/forkboard/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor and Forkboard parse as Python 3.9" 0 $?
-out="$(cd "$ROOT" && grep -rlE --include='*.py' '^(import|from) ' feature_flow packages/forkboard/forkboard | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat|traceback|fnmatch|contextlib|html|importlib)(\b|\s)')"
+out="$(cd "$ROOT" && grep -rlE --include='*.py' '^(import|from) ' feature_flow packages/forkboard/forkboard | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat|traceback|fnmatch|contextlib|html|importlib|math|http|socket|socketserver)(\b|\s)')"
 if [ -z "$out" ]; then ok "the conductor and Forkboard import only the standard library"; else bad "the conductor and Forkboard import only the standard library" "$out"; fi
 
 flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and feature_flow/

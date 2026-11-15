@@ -3,7 +3,7 @@
 // usage: node --test page.test.js   (needs python3 on PATH and playwright; see package.json)
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
@@ -71,7 +71,7 @@ test('the editor adds, connects, renames, deletes, undoes and resets', async () 
   await fig.locator('g.node').last().click();
   assert.deepEqual(await counts(fig), [4, 4]);
   await fig.locator('g.node').nth(1).dblclick();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type('Renamed');
   await page.keyboard.press('Enter');
   assert.ok((await fig.locator('g.node text').allTextContents()).includes('Renamed'));
@@ -233,4 +233,355 @@ test('a live page with steps shows them as tabs, saves picks only on Approve, an
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth) <= 1280, true);
   assert.deepEqual(errors, []);
   await context.close();
+});
+
+
+async function localServer(fixture = 'sketch', label = 'Codex') {
+  const folder = fs.mkdtempSync(path.join(dir, 'local-'));
+  forkboard('live', path.join(FIXTURES, fixture + '.json'), folder, '--provider', 'local', '--agent-label', label);
+  const proc = spawn(PYTHON, ['-u', '-m', 'forkboard', 'serve', folder], { env: { ...process.env, PYTHONPATH: PACKAGE } });
+  const url = await new Promise((resolve, reject) => {
+    let output = '';
+    proc.stdout.on('data', chunk => { output += chunk; const m = output.match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) resolve(m[0]); });
+    proc.on('exit', code => reject(new Error('server exited ' + code)));
+  });
+  return { folder, url, stop: () => proc.kill() };
+}
+
+test('local queue, reply and explicit proposal preserve dirty edits and typed text during polling', async () => {
+  const local = await localServer('sketch', '<Codex>');
+  try {
+    const { page, errors, context } = await open(local.url);
+    const fig = page.locator('figure.graph').first();
+    await page.locator('#talk textarea').fill('Unsent question');
+    await fig.getByRole('button', { name: 'Ask <Codex> to change it', exact: true }).click();
+    await fig.locator('.live-bar input[type=text]').fill('Add a cache');
+    await fig.getByRole('button', { name: 'Ask', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Waiting for <Codex>'));
+    const state = () => JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.equal(state().asks.length, 1);
+    assert.equal(state().asks[0].kind, 'diagram');
+    assert.ok(state().asks[0].source);
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Dirty'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    const proposal = state().asks[0].graph;
+    proposal.nodes[0].label = 'Proposed';
+    const file = path.join(local.folder, 'proposal.json'); fs.writeFileSync(file, JSON.stringify(proposal));
+    forkboard('answer-graph', local.folder, '1', file);
+    await page.getByRole('button', { name: 'Preview proposal', exact: true }).waitFor();
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Unsent question');
+    assert.equal(Object.keys(state().figures['1'].versions).length, 0);
+    await page.getByRole('button', { name: 'Preview proposal', exact: true }).click();
+    assert.ok((await fig.locator('g.node text').allTextContents()).includes('Proposed'));
+    assert.equal(Object.keys(state().figures['1'].versions).length, 0);
+    await fig.getByRole('button', { name: 'Save as my version', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('Saved'));
+    assert.equal(Object.keys(state().figures['1'].versions).length, 1);
+    assert.deepEqual(errors, []);
+    await context.close();
+  } finally { local.stop(); }
+});
+
+test('local staged list choices approve atomically and survive polling', async () => {
+  const local = await localServer('steps');
+  try {
+    const { page, errors, context } = await open(local.url);
+    const lens = page.locator('fieldset[data-key=lens]');
+    await page.waitForFunction(() => !document.querySelector('button.approve').disabled);
+    await lens.locator('input[value=security]').check();
+    await page.waitForTimeout(2400);
+    assert.ok(await lens.locator('input[value=security]').isChecked());
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))).picks, {});
+    await page.locator('button.approve').click();
+    await page.waitForFunction(() => document.querySelector('button.approve').textContent === 'Approved');
+    const st = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.deepEqual(st.picks.lens.value, ['ux', 'security']);
+    assert.equal(st.asks.length, 1);
+    assert.equal(st.approved.Team.by, st.identity.id);
+    assert.deepEqual(errors, []);
+    await context.close();
+  } finally { local.stop(); }
+});
+
+test('native capability denial becomes accessible read only and native generation remains a deliberate save', async () => {
+  function denied() {
+    window.claude = {use: async name => name === 'artifact' ? {publish: async () => {throw {code: 'not_granted'};}} : name === 'user' ? {id: async () => 'me', profiles: async () => ({})} : null};
+  }
+  let opened = await open(base, {init: denied});
+  await opened.page.locator('.live-bar button.go').first().click();
+  await opened.page.waitForFunction(() => document.querySelector('.live-connection').textContent.includes('Read only'));
+  assert.ok(await opened.page.locator('.live-bar button.go').first().isDisabled());
+  assert.ok(await opened.page.locator('#talk .live-note').isVisible());
+  assert.deepEqual(opened.errors, []);
+  await opened.context.close();
+  function nativeSample() {
+    window.__publications = [];
+    window.__prompt = null;
+    window.claude = {use: async name => ({
+      artifact: {publish: async files => { window.__publications.push(JSON.parse(files['state.json'].content)); return {shas: {'state.json': 'saved'}}; }},
+      user: {id: async () => 'me', profiles: async () => ({})},
+      sample: {json: async (prompt, options) => {window.__prompt = [prompt, options]; return {graph: {dir: 'TD', nodes: [{id: 'new', label: 'Native proposal', shape: 'bogus'}], edges: []}, reply: 'Proposed.'};}}
+    })[name]};
+  }
+  opened = await open(base, {init: nativeSample});
+  const fig = opened.page.locator('figure.graph').first();
+  await fig.getByRole('button', {name: 'Ask Claude to change it', exact: true}).click();
+  await fig.locator('.live-bar input[type=text]').fill('Simplify');
+  await fig.getByRole('button', {name: 'Ask', exact: true}).click();
+  await opened.page.waitForFunction(() => document.querySelector('figure.graph').textContent.includes('Native proposal'));
+  assert.equal(await opened.page.evaluate(() => window.__publications.length), 0);
+  assert.equal(await fig.evaluate(f => f.editor.get().graph.dir), 'LR');
+  assert.equal(await fig.evaluate(f => f.editor.get().graph.nodes[0].shape), 'rect');
+  assert.deepEqual(await opened.page.evaluate(() => window.__prompt[1]), {modelTier: 'default'});
+  await fig.getByRole('button', {name: 'Save as my version', exact: true}).click();
+  await opened.page.waitForFunction(() => window.__publications.length === 1);
+  assert.deepEqual(await opened.page.evaluate(() => window.__publications[0].figures['1'].versions.me.via), ['claude']);
+  assert.deepEqual(opened.errors, []);
+  await opened.context.close();
+});
+
+test('local repeated conflict retains an idempotent queue through reload and serializes retry', async () => {
+  const local = await localServer();
+  try {
+    const {page, context} = await open(local.url);
+    let calls = 0, ids = [];
+    await page.route('**/api/change', async route => {
+      const envelope = route.request().postDataJSON(); ids.push(envelope.id); calls++;
+      if (calls <= 2) await route.fulfill({status: 412, contentType: 'application/json', body: JSON.stringify({error: 'concurrent writer'})});
+      else await route.continue();
+    });
+    await page.locator('#talk textarea').fill('Retain this question');
+    await page.locator('#talk button.go').click();
+    await page.getByRole('button', {name: 'Retry save', exact: true}).waitFor();
+    assert.equal(calls, 2);
+    assert.equal(ids[0], ids[1]);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Retain this question');
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#talk')?.textContent.includes('Retain this question'));
+    const st = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.equal(st.asks.length, 1);
+    assert.equal(st.asks[0].id, ids[0]);
+    assert.ok(ids.every(id => id === ids[0]));
+    await context.close();
+  } finally {local.stop();}
+});
+
+test('local dirty edits, forms and staged picks survive disconnect and unsafe regeneration', async () => {
+  const local = await localServer('steps');
+  try {
+    const {page, context} = await open(local.url);
+    const lens = page.locator('fieldset[data-key=lens]');
+    await page.waitForFunction(() => !document.querySelector('button.approve').disabled);
+    await lens.locator('input[value=security]').check();
+    await page.locator('#talk textarea').fill('Still typing');
+    await page.locator('#tab-3').click();
+    const fig = page.locator('figure.graph').first();
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Unsaved'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    await page.context().setOffline(true);
+    // An aborted fetch reports an expected transport console error; state and form retention are the assertions.
+    await page.waitForFunction(() => document.querySelector('.live-connection').textContent.includes('Connection lost'));
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Still typing');
+    await page.context().setOffline(false);
+    const updated = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'steps.json'))); updated.title = 'Updated review';
+    const docFile = path.join(local.folder, 'updated.json'); fs.writeFileSync(docFile, JSON.stringify(updated));
+    forkboard('live', docFile, local.folder, '--provider', 'local');
+    await page.getByRole('button', {name: 'Review update', exact: true}).waitFor({timeout: 15000});
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Still typing');
+    await page.locator('#tab-2').click();
+    assert.ok(await lens.locator('input[value=security]').isChecked());
+    await page.locator('button.approve').click();
+    await page.waitForFunction(() => document.querySelector('button.approve').textContent === 'Approved');
+    await page.locator('#tab-1').click();
+    await page.locator('button.change[data-change=Style]').click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Change the step Style'));
+    const st = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.deepEqual(st.approved, {});
+    assert.equal(st.asks.length, 2);
+    await context.close();
+  } finally {local.stop();}
+});
+
+test('local figure source change blocks blind conflict replay without discarding the editor', async () => {
+  const local = await localServer();
+  try {
+    const {page, context} = await open(local.url);
+    const fig = page.locator('figure.graph').first();
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Old edit'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    const doc = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'sketch.json')));
+    doc.sections[0].markdown = doc.sections[0].markdown.replace('Tasks table', 'Different source');
+    const docFile = path.join(local.folder, 'changed.json'); fs.writeFileSync(docFile, JSON.stringify(doc));
+    forkboard('live', docFile, local.folder, '--provider', 'local');
+    await fig.getByRole('button', {name: 'Save as my version', exact: true}).click();
+    await page.waitForFunction(() => document.querySelector('.live-connection').textContent.includes('Figure source changed'));
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))).figures['1'].versions).length, 0);
+    assert.ok(await page.getByRole('button', {name: 'Retry save', exact: true}).isVisible());
+    await page.locator('#talk textarea').fill('Unrelated question');
+    await page.locator('#talk button.go').click();
+    await page.getByRole('button', {name: 'Keep edit and unblock saves', exact: true}).click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Unrelated question'));
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    await page.reload();
+    await page.getByRole('button', {name: 'Restore preserved edit', exact: true}).click();
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    const saved = JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json')));
+    assert.deepEqual(saved.asks.map(a => a.text), ['Unrelated question']);
+    assert.equal(Object.keys(saved.figures['1'].versions).length, 0);
+    await context.close();
+  } finally {local.stop();}
+});
+
+for (const host of ['local', 'native']) {
+  for (const field of ['talk', 'diagram', 'option', 'ticket']) {
+    test(`${host} delayed ${field} acknowledgement preserves a newer draft`, async () => {
+      const local = host === 'local' ? await localServer('steps') : null;
+      function delayedRuntime() {
+        window.__saved = [];
+        const wait = () => new Promise(resolve => { window.__release = resolve; });
+        window.claude = {use: async name => ({
+          artifact: {publish: async files => {await wait(); window.__saved.push(JSON.parse(files['state.json'].content)); return {shas: {'state.json': 'saved'}};}},
+          user: {id: async () => 'me', profiles: async () => ({})},
+          sample: {json: async () => {await wait(); return {graph: {nodes: [{id: 'a', label: 'Proposal'}], edges: []}, reply: 'Done'};}}
+        })[name]};
+      }
+      let context;
+      try {
+        const opened = await open(local ? local.url : base + 'steps/', local ? {} : {init: delayedRuntime});
+        const {page, errors} = opened; context = opened.context;
+        let started, release;
+        const waiting = new Promise(resolve => {started = resolve;});
+        if (local) await page.route('**/api/change', async route => {
+          await new Promise(resolve => {release = resolve; started();});
+          await route.continue();
+        });
+        let input, send;
+        if (field === 'talk') {
+          input = page.locator('#talk textarea'); send = page.locator('#talk button.go');
+        } else {
+          await page.locator('#tab-3').click();
+          if (field === 'diagram') {
+            const fig = page.locator('figure.graph').first();
+            await fig.getByRole('button', {name: /Ask .* to change it/}).click();
+            input = fig.locator('.live-bar input[type=text]'); send = fig.getByRole('button', {name: 'Ask', exact: true});
+          } else {
+            const box = field === 'option' ? page.locator('article.opt[data-about="B. In the background"]') : page.locator('.ask-about');
+            await box.locator('button.ask-open').click();
+            input = box.locator('textarea'); send = box.locator('.ask-row button.go');
+          }
+        }
+        await input.fill('  first request  ');
+        await send.click();
+        if (local) await waiting;
+        else await page.waitForFunction(() => !!window.__release);
+        await input.fill('second unsent request');
+        if (local) release(); else await page.evaluate(() => window.__release());
+        await page.waitForFunction(selector => !document.querySelector(selector).disabled,
+          field === 'talk' ? '#talk button.go' : field === 'diagram' ? 'figure.graph .live-bar input[type=text] + button' : field === 'option' ? 'article.opt[data-about="B. In the background"] .ask-row button.go' : '.ask-about button.go');
+        assert.equal(await input.inputValue(), 'second unsent request');
+        if (field !== 'diagram' || local) {
+          const saved = local ? JSON.parse(fs.readFileSync(path.join(local.folder, 'state.json'))) : await page.evaluate(() => window.__saved.at(-1));
+          assert.deepEqual(saved.asks.map(ask => ask.text), ['first request']);
+        }
+        // Unchanged drafts, including surrounding whitespace, still clear after success.
+        if (local) await page.unroute('**/api/change');
+        else await page.evaluate(() => { window.__release = null; });
+        await input.fill('  unchanged draft  ');
+        await send.click();
+        if (!local) {
+          await page.waitForFunction(() => !!window.__release);
+          await page.evaluate(() => window.__release());
+        }
+        await page.waitForFunction(element => element.value === '', await input.elementHandle());
+        assert.deepEqual(errors, []);
+      } finally {
+        if (context) await context.close();
+        if (local) local.stop();
+      }
+    });
+  }
+}
+
+test('delayed approval preserves newer staged list choices', async () => {
+  function delayedApproval() {
+    window.__saved = [];
+    window.claude = {use: async name => ({
+      artifact: {publish: async files => {
+        await new Promise(resolve => { window.__release = resolve; });
+        window.__saved.push(JSON.parse(files['state.json'].content));
+        return {shas: {'state.json': 'saved'}};
+      }},
+      user: {id: async () => 'me', profiles: async () => ({})},
+    })[name]};
+  }
+  const {page, errors, context} = await open(base + 'steps/', {init: delayedApproval});
+  try {
+    const lens = page.locator('fieldset.choice[data-key=lens]');
+    await page.waitForFunction(() => !document.querySelector('button.approve').disabled);
+    await lens.locator('input[value=security]').check();
+    await page.locator('button.approve[data-approve=Team]').click();
+    await page.waitForFunction(() => !!window.__release);
+    await lens.locator('input[value=security]').uncheck();
+    await lens.locator('input[value=artistic]').check();
+    await page.evaluate(() => window.__release());
+    await page.waitForFunction(() => document.querySelector('button.approve').textContent === 'Approved');
+    assert.deepEqual(await page.evaluate(() => window.__saved[0].picks.lens.value), ['ux', 'security']);
+    await page.waitForFunction(() => {
+      const key = 'brainstorm-live:' + document.querySelector('.wrap').dataset.page + ':choices';
+      return JSON.parse(sessionStorage.getItem(key) || '{}').lens?.includes('artistic');
+    }, null, {timeout: 2000});
+    await page.reload();
+    await page.waitForSelector('.live-bar', {state: 'attached'});
+    await page.waitForFunction(() => document.querySelector('fieldset.choice[data-key=lens] input[value=artistic]').checked);
+    assert.equal(await lens.locator('input[value=artistic]').isChecked(), true);
+    assert.equal(await lens.locator('input[value=security]').isChecked(), false);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test('FeatureFlow refreshes draft to completed build while retaining a dirty editor', async () => {
+  const root = fs.mkdtempSync(path.join(dir, 'feature-'));
+  const draft = path.join(root, '.feature-flow', 'state', 'draft', 'demo');
+  fs.mkdirSync(path.join(draft, 'tasks'), {recursive: true});
+  fs.writeFileSync(path.join(draft, 'commands.md'), 'Profile: standard\n');
+  fs.writeFileSync(path.join(draft, 'tasks', '01-test.md'), '# Test\n\nStatus: open\nBlocked by: none\n');
+  const folder = path.join(root, 'live');
+  const repo = path.resolve(PACKAGE, '..', '..');
+  const proc = spawn(PYTHON, ['-u', '-m', 'feature_flow', 'brainstorm-page', 'demo', '--serve', folder],
+    {cwd: root, env: {...process.env, PYTHONPATH: repo}});
+  try {
+    const url = await new Promise((resolve, reject) => {
+      let output = ''; let errors = '';
+      proc.stderr.on('data', chunk => { errors += chunk; });
+      proc.stdout.on('data', chunk => { output += chunk; const m = output.match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) resolve(m[0]); });
+      proc.on('exit', code => reject(new Error('server exited ' + code + ': ' + errors)));
+    });
+    const {page, context} = await open(url);
+    await page.locator('#talk textarea').fill('Why this ticket?');
+    await page.locator('#talk button.go').click();
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Why this ticket?'));
+    execFileSync(PYTHON, ['-m', 'feature_flow', 'brainstorm-page', 'demo', '--answer', folder, '1', 'Because it is needed'],
+      {cwd: root, env: {...process.env, PYTHONPATH: repo}});
+    await page.waitForFunction(() => document.querySelector('#talk').textContent.includes('Because it is needed'));
+    await page.locator('#tab-4').click();
+    const fig = page.locator('figure.graph').first();
+    await fig.locator('[data-act=add]').click(); await page.keyboard.type('Unsaved'); await page.keyboard.press('Enter');
+    const dirty = await fig.evaluate(f => f.editor.get());
+    await page.locator('#talk textarea').fill('Still typing');
+    const plan = path.join(root, 'plans', 'demo');
+    fs.mkdirSync(path.dirname(plan), {recursive: true});
+    fs.cpSync(draft, plan, {recursive: true});
+    fs.writeFileSync(path.join(plan, 'tasks', '01-test.md'), '# Test\n\nStatus: resolved\nBlocked by: none\n');
+    await page.getByRole('button', {name: 'Review update', exact: true}).waitFor({timeout: 15000});
+    assert.deepEqual(await fig.evaluate(f => f.editor.get()), dirty);
+    assert.equal(await page.locator('#talk textarea').inputValue(), 'Still typing');
+    const state = JSON.parse(fs.readFileSync(path.join(folder, 'state.json')));
+    assert.equal(state.phase, 'complete');
+    assert.equal(state._document.frozen, true);
+    await context.close();
+  } finally { proc.kill(); }
 });
