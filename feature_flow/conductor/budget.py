@@ -87,11 +87,11 @@ def fast_switch(c, value):
 def mode_switch(c, value):
     """`mode small` mid-run is `fast on`; `mode <the plan's own mode>` is `fast off`. Any other mode changes the
     plan's reviews, so it needs a re-plan, which needs the user's yes."""
-    from feature_flow import profiles
+    from feature_flow.plan import modes
     word = (value or "").strip().lower()
-    own = c.settings.mode or profiles.OLD_NAMES.get(c.profile or "normal") or "fix"
-    if word not in profiles.MODES:
-        raise Stop("the mode must be %s, not %s" % (", ".join(profiles.ORDER), value))
+    own = c.settings.mode or modes.OLD_NAMES.get(c.profile or "normal") or "fix"
+    if word not in modes.MODES:
+        raise Stop("the mode must be %s, not %s" % (", ".join(modes.ORDER), value))
     if word == "small":
         return fast_switch(c, "on")
     if word == own:

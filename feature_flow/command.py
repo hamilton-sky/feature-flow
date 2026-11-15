@@ -10,7 +10,8 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, brainstorm_page, cli, config, doctor, install, evaluate, importer, report, status, uninstall, view
+from feature_flow import __version__, brainstorm_page, cli, config, doctor, install, evaluate, importer, report, uninstall, view
+from feature_flow.commands import flow_status
 from feature_flow.infra import git, suggest
 
 USAGE = """\
@@ -99,7 +100,7 @@ def main(argv=None):
     if command == "config":
         return config.main(rest)
     if command == "status":
-        return status.main(rest)
+        return flow_status.main(rest)
     if command == "view":
         return view.main(rest, here=os.path.join(install.source_root(), "scripts"))
     if command == "report":

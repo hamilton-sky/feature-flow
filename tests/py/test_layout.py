@@ -24,8 +24,6 @@ ENTRY = {"__init__", "__main__", "command", "cli"}
 
 # modules still at the top of feature_flow/, by the folder they move to
 FLAT = {
-    "tickets": "plan", "builders": "plan", "brainstorm_mode": "plan", "repaircheck": "plan", "reality": "plan",
-    "profiles": "plan", "status": "plan",
     "gate": "verify", "floorguard": "verify", "proof": "verify", "checks": "verify",
     "lanes": "conductor", "scouts": "conductor", "prompts": "conductor", "codeintel": "conductor",
     "codehash": "conductor",
@@ -37,13 +35,7 @@ FLAT = {
 
 # the upward imports allowed today, (importer, imported); each move empties some of them
 UPWARD = {
-    ("feature_flow.status", "feature_flow.brainstorm_page"),  # status.main moves into commands/flow_status
-    ("feature_flow.status", "feature_flow.clean"),
-    ("feature_flow.status", "feature_flow.doctor"),
-    ("feature_flow.status", "feature_flow.evaluate"),
-    ("feature_flow.status", "feature_flow.fixer"),
-    ("feature_flow.status", "feature_flow.importer"),
-    ("feature_flow.status", "feature_flow.lanes"),  # --width; stays, lazily, once the rest is gone
+    ("feature_flow.plan.status", "feature_flow.lanes"),  # --width, lazily
 }
 
 # modules allowed to import each other at module level: the build, review and ask phases hand a ticket to

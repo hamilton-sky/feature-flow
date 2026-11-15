@@ -402,7 +402,7 @@ class Repair(unittest.TestCase):
         self.assertIn("new warning: 02: names `src/missing.py`", out)
 
     def test_a_third_copy_of_an_inherited_problem_is_new(self):
-        from feature_flow import repaircheck
+        from feature_flow.plan import repaircheck
         self.assertEqual(repaircheck.split(["a", "a", "b"], ["a", "b"]), (["a", "b"], ["a"]))
 
     def test_a_resolved_ticket_change_ends_the_report_blocked(self):

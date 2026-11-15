@@ -21,7 +21,8 @@ import re
 import sys
 from pathlib import Path
 
-from feature_flow import brainstorm_mode, flow_page, studio
+from feature_flow import flow_page, studio
+from feature_flow.plan import brainstorm_mode
 from feature_flow.infra import git, plan_lock
 
 USAGE = ("usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]\n"

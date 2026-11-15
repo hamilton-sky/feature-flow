@@ -12,7 +12,9 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import builders, flow_plan, prompts, status  # the modules under test, from this checkout
+from feature_flow import flow_plan, prompts  # the modules under test, from this checkout
+from feature_flow.plan import status
+from feature_flow.plan import builders
 from test_lanes_width import CSV, write_plan
 
 SCRIPTS = helpers.ROOT / "scripts"

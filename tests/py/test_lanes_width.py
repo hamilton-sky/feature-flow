@@ -11,7 +11,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import lanes, status  # the modules under test, from this checkout
+from feature_flow import lanes  # the modules under test, from this checkout
+from feature_flow.plan import status
 
 TICKET = "# %(n)s %(title)s\n\nStatus: %(status)s\nLevel: %(level)s\n%(touches)s%(blocked)s\n## Done when\n\n- it works\n"
 

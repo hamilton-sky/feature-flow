@@ -7,7 +7,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import proof, status  # the package under test, from this checkout
+from feature_flow import proof  # the package under test, from this checkout
+from feature_flow.plan import status
 
 
 class Out:

@@ -13,7 +13,7 @@ move on one Approve at a time. The session publishes the page to the same link a
 
 import os
 
-from feature_flow import brainstorm_mode, profiles
+from feature_flow.plan import brainstorm_mode, modes
 
 STEPS = ("Style", "Team", "Options", "Plan", "Build")
 STYLE_SECTIONS = ("idea", "sketch")  # the brainstorm's sections that belong to Style; the rest are Options

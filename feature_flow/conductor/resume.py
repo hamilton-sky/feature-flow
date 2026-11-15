@@ -11,7 +11,8 @@ the user names, else the one the run (or the last reset) remembered, else the pa
 import os
 import re
 
-from feature_flow import codehash, proof, tickets
+from feature_flow import codehash, proof
+from feature_flow.plan import tickets
 from feature_flow.infra import git, suggest
 from feature_flow.conductor.errors import Stop
 

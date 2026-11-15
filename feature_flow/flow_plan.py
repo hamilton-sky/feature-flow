@@ -11,7 +11,9 @@ it with a re-plan. The Build step shows how far the run is.
 import re
 from pathlib import Path
 
-from feature_flow import builders, gate, lanes, profiles, reality, status, tickets
+from feature_flow import gate, lanes
+from feature_flow.plan import status
+from feature_flow.plan import builders, modes, reality, tickets
 
 PLAN_KEYS = ("profile", "lanes", "gate", "full_review")
 GATE_CHOICES = ("each", "batch 2", "batch 3", "batch 5", "end")
@@ -50,8 +52,8 @@ class Plan:
     def mode_profile(self):
         """(mode, profile) the plan's Mode: or Profile: line names; ("", "normal") for neither or a bad name."""
         try:
-            mode, profile = profiles.resolve({}, self.value("Mode"), self.value("Profile"))
-        except profiles.UnknownProfile:
+            mode, profile = modes.resolve({}, self.value("Mode"), self.value("Profile"))
+        except modes.UnknownProfile:
             return "", "normal"
         return mode, profile or "normal"
 
@@ -243,8 +245,8 @@ def apply_picks(folder, picks):
     new_profile = plan.profile()
     if "profile" in picks:  # the Mode pick; the key keeps its old name in the page's state
         try:
-            mode, new_profile = profiles.resolve({}, str(picks["profile"]))
-        except profiles.UnknownProfile as err:
+            mode, new_profile = modes.resolve({}, str(picks["profile"]))
+        except modes.UnknownProfile as err:
             raise ValueError(str(err))
         mode = mode or "fix"
         new_profile = new_profile or "normal"
@@ -274,7 +276,7 @@ def apply_picks(folder, picks):
         shown = not plan.value("Gate") and value == plan_gate_default(old_profile)  # the card's default, not a pick
         if value == plan_gate_default(new_profile) or (shown and new_profile != old_profile):
             text = set_header(text, "Gate", None)  # the mode's default: it follows the mode
-            said.append("Gate: %s (the %s default)" % (plan_gate_default(new_profile), profiles.OLD_NAMES.get(new_profile) or "fix"))
+            said.append("Gate: %s (the %s default)" % (plan_gate_default(new_profile), modes.OLD_NAMES.get(new_profile) or "fix"))
         else:
             text = set_header(text, "Gate", "`%s`" % value)
             said.append("Gate: %s" % value)

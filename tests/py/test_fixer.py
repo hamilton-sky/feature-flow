@@ -6,7 +6,9 @@ import unittest
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import fixer, status  # the package under test, from this checkout
+from feature_flow import fixer  # the package under test, from this checkout
+from feature_flow.commands import flow_status
+from feature_flow.plan import status
 
 DIAGNOSIS = """# Fix: CSV export drops the last row
 
@@ -104,7 +106,7 @@ class FixPlanTests(unittest.TestCase):
 
     def test_the_fix_plan_passes_the_check_through_flow_status(self):
         sys.stdout.flush()
-        code = status.main(["fix-last-row", "--fix", str(self.diag)])
+        code = flow_status.main(["fix-last-row", "--fix", str(self.diag)])
         self.assertEqual(code, 0)
         out, err = io.BytesIO(), io.BytesIO()
         code = status.run(["fix-last-row", "--check"], status._Bytes(out), status._Bytes(err))

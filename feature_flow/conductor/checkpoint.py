@@ -11,7 +11,8 @@ of HEAD; the others stay deferred for the next checkpoint.
 import os
 import re
 
-from feature_flow import proof, tickets
+from feature_flow import proof
+from feature_flow.plan import tickets
 from feature_flow.infra import git
 from feature_flow.conductor import buildchecks
 from feature_flow.conductor.errors import Stop

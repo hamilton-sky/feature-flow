@@ -12,8 +12,9 @@ import helpers
 from helpers import ROOT, Repo
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import brainstorm_mode, scouts  # the package under test, from this checkout
-from feature_flow.brainstorm_mode import BadMode
+from feature_flow import scouts  # the package under test, from this checkout
+from feature_flow.plan import brainstorm_mode
+from feature_flow.plan.brainstorm_mode import BadMode
 from test_scouts_drive import SCOUT
 
 

@@ -13,7 +13,7 @@ import json
 import os
 from pathlib import Path
 
-from feature_flow import tickets
+from feature_flow.plan import tickets
 from feature_flow.infra import state
 
 
