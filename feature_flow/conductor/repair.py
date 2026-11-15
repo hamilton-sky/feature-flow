@@ -15,7 +15,7 @@ def plan_rel(c):
     return proof.repo_relative(c.plan).rstrip("/")
 
 
-def repair_problems(c):
+def repair_problems(c, extra=()):
     """(the report lines, clean) of the pending repair against the plan it started from (the repair's baseline:
     the plan at repair_sha, whose tree replan-prompt recorded). Stops when the baseline cannot be told."""
     sha, tree = c.all.get("repair_sha"), c.all.get("repair_plan")
@@ -30,7 +30,7 @@ def repair_problems(c):
         found = repaircheck.compare(plan_rel(c), sha, cwd=str(c.top))
     except repaircheck.BaselineError as err:
         raise Stop("cannot read the repair's baseline: %s" % err)
-    return found, repaircheck.lines(found, sha, tree)
+    return found, repaircheck.lines(found, sha, tree, extra)
 
 
 def repair_check(c):
@@ -38,12 +38,10 @@ def repair_check(c):
     it: the footprint each ticket gains or loses, the problems the plan already had (shown, never blocking) and the
     ones the repair adds (blocking), and whether a resolved ticket changed. Changes nothing."""
     c.check_owner()
-    found, (report, clean) = repair_problems(c)
     resolved = resolved_changed(c, c.all["repair_sha"], worktree=True)
-    if resolved:
-        report.insert(-1, "resolved ticket changed: %s (put it back: git checkout %s -- %s)"
-                      % (resolved, c.all["repair_sha"][:12], resolved))
-        clean = False
+    extra = ["resolved ticket changed: %s (put it back: git checkout %s -- %s)"
+             % (resolved, c.all["repair_sha"][:12], resolved)] if resolved else []
+    found, (report, clean) = repair_problems(c, extra)
     c.log("REPAIR-CHECK-%s" % ("OK" if clean else "BLOCKED"))
     head = "OK repair check of %s" % c.feature if clean else "BLOCKED repair check of %s" % c.feature
     return "\n".join([head] + report)

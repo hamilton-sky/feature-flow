@@ -237,7 +237,7 @@ def diagnose(feature, top, digest=None, root=None):
             nexts.append(("feature-flow resume %s --dry-run, then --accept-code on the user's yes" % feature,
                           "the flow code changed; resume shows exactly what it accepts"))
     kind, text = trust_check(top, scripts, feature, digest)
-    out.append(("trust", "%s: %s" % (kind, text)))
+    out.append(("trust", "%s: %s (by %s, a copy the skill's pin does not check)" % (kind, text, scripts / "flow-trust.py")))
     if kind == "stale":
         nexts.insert(0, ("the digest from the last TRUST line", "the digest passed was an older one; if it is lost, "
                          "the same command with FLOW_TRUST_ACCEPT=saved-state on the user's yes"))

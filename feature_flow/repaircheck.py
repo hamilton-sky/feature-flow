@@ -9,6 +9,7 @@ started from, so it is always the same text; nothing about it is remembered apar
 usage: python3 scripts/flow-status.py <feature> --lint --baseline <commit>
 """
 
+import collections
 import os
 import shutil
 import subprocess
@@ -91,10 +92,24 @@ def compare(plan_rel, rev, cwd=None):
         shutil.rmtree(temp, ignore_errors=True)
     now = footprints(os.path.join(cwd or os.getcwd(), plan_rel))
     return {
-        "inherited": ([e for e in new[0] if e in old[0]], [w for w in new[1] if w in old[1]]),
-        "new": ([e for e in new[0] if e not in old[0]], [w for w in new[1] if w not in old[1]]),
+        "inherited": (split(new[0], old[0])[0], split(new[1], old[1])[0]),
+        "new": (split(new[0], old[0])[1], split(new[1], old[1])[1]),
         "footprint": footprint_changes(before, now),
     }
+
+
+def split(now, before):
+    """(inherited, new) of the problems now, counted as a multiset: a third copy of a message the baseline had twice
+    is new."""
+    left = collections.Counter(before)
+    inherited, added = [], []
+    for item in now:
+        if left[item] > 0:
+            left[item] -= 1
+            inherited.append(item)
+        else:
+            added.append(item)
+    return inherited, added
 
 
 def _problems(plan_dir, top):
@@ -102,14 +117,16 @@ def _problems(plan_dir, top):
     return status.plan_problems(os.path.abspath(plan_dir), cwd=top)
 
 
-def lines(found, rev, tree=None):
-    """The report of compare(), one finding per line, and whether the repair is clean (adds no problem)."""
+def lines(found, rev, tree=None, extra=()):
+    """The report of compare(), one finding per line, and whether the repair is clean (adds no problem); extra:
+    blocking lines found elsewhere (a resolved ticket the repair changed)."""
     out = ["baseline: the plan at %s%s" % (rev[:12], " (tree %s)" % tree[:12] if tree else "")]
     out += ["footprint: %s" % line for line in found["footprint"]] or ["footprint: unchanged"]
     for kind, (errors, warnings) in (("inherited", found["inherited"]), ("new", found["new"])):
         out += ["%s error: %s" % (kind, e) for e in errors]
         out += ["%s warning: %s" % (kind, w) for w in warnings]
-    added = len(found["new"][0]) + len(found["new"][1])
+    out += list(extra)
+    added = len(found["new"][0]) + len(found["new"][1]) + len(extra)
     kept = len(found["inherited"][0]) + len(found["inherited"][1])
     if added:
         out.append("BLOCKED: the repair adds %d problem(s). fix those; the %d inherited one(s) stay as they are"

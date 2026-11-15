@@ -201,8 +201,6 @@ def finding_to_fix(stamped):
         for t2, num2, event2, _ in stamped[i + 1:]:
             if num2 != num:
                 continue
-            if event2 in CATCHES and review is None and fixed is None:
-                break  # another finding came first: it is the one that is fixed next
             if review is None and event2 in BACK_AT_REVIEW:
                 review = (t2 - t).total_seconds() / 60
             if event2 in VERIFIED:

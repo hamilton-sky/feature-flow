@@ -52,7 +52,7 @@ class Trust(test_trust_runner.Base):
         rc, out, err = self.trust("f", "next", FLOW_TRUST=older, FLOW_SESSION=self.token)
         self.assertEqual(rc, 1, (out, err))
         first = out.splitlines()[0]
-        self.assertTrue(first.startswith("STOP the TRUST digest you passed is an older one"), first)
+        self.assertTrue(first.startswith("STOP the TRUST digest you passed looks like an older one"), first)
         self.assertIn("checked against the digest itself", first)
         self.assertIn("FLOW_TRUST_ACCEPT=saved-state", first)
         self.assertNotIn("flow files changed", first)
@@ -103,6 +103,12 @@ class Trust(test_trust_runner.Base):
         self.assertIn("no saved list", first)
         self.assertIn("feature-flow doctor f", first)
         self.assertNotIn("FLOW_TRUST_ACCEPT", first)
+
+    def test_an_accepted_state_is_shown(self):
+        older, latest = self.stale()
+        rc, out, err = self.trust("f", "prompt", FLOW_TRUST=older, FLOW_SESSION=self.token,
+                                  FLOW_TRUST_ACCEPT="saved-state")
+        self.assertIn("accepted the run state phase=build num=01", out.splitlines()[1])
 
     def test_a_run_state_that_is_not_what_was_saved_cannot_be_accepted(self):
         older, latest = self.stale()
@@ -261,13 +267,12 @@ class Recovery(unittest.TestCase):
         rc, out = self.repo.flow("start")
         token = out.split()[1]
         owner = self.repo.state()["owner"]
-        rc, out = self.repo.flow("resume")
-        self.assertEqual(rc, 1, out)
-        self.assertIn("is owned by session", out)
-        self.assertIn("FLOW_TAKEOVER=1", out)
-        rc, out = self.repo.flow("resume", FLOW_SESSION=token)
+        rc, out = self.repo.flow("resume")  # as a stop prints it, from a terminal: no token
         self.assertEqual(rc, 0, out)
+        self.assertIn("session %s still owns the feature and carries on with it" % owner[:8], out)
         self.assertEqual(self.repo.state()["owner"], owner)
+        rc, out = self.repo.flow("next", FLOW_SESSION=token)
+        self.assertEqual(rc, 0, out)
 
 
 def ticket(title, status, touches, extra=""):
@@ -384,6 +389,28 @@ class Repair(unittest.TestCase):
         self.assertTrue(out.startswith("BLOCKED"), out)
         self.assertIn("resolved ticket changed: plans/f/tasks/01-done.md", out)
 
+    def test_a_blocked_repair_keeps_its_baseline_through_another_round(self):
+        self.widen("src/missing.py")
+        self.repo.commit("plan(f): repair the plan")
+        rc, out = self.repo.flow("next")
+        self.assertEqual(rc, 1, out)
+        rc, out = self.repo.flow("replan-prompt", "repair")  # the planner is sent back with the new problem
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.repo.state()["repair_sha"], self.start)
+        rc, out = self.repo.flow("repair-check")
+        self.assertTrue(out.startswith("BLOCKED"), out)
+        self.assertIn("new warning: 02: names `src/missing.py`", out)
+
+    def test_a_third_copy_of_an_inherited_problem_is_new(self):
+        from feature_flow import repaircheck
+        self.assertEqual(repaircheck.split(["a", "a", "b"], ["a", "b"]), (["a", "b"], ["a"]))
+
+    def test_a_resolved_ticket_change_ends_the_report_blocked(self):
+        path = self.repo.path("plans/f/tasks/01-done.md")
+        path.write_text(path.read_text(encoding="utf-8").replace("# Done\n", "# Done again\n", 1), encoding="utf-8")
+        rc, out = self.repo.flow("repair-check")
+        self.assertTrue(out.splitlines()[-1].startswith("BLOCKED: the repair adds 1 problem(s)"), out)
+
     def test_a_consult_on_the_existing_plan_works_during_a_repair(self):
         question = self.repo.path(".feature-flow/state/ask-f-repair.md")
         question.write_text("architect: may the fix change both server.py and storage.py?\n", encoding="utf-8")
@@ -431,6 +458,12 @@ class Timing(unittest.TestCase):
         self.assertEqual(fix["median_to_fix_minutes"], 20.0)
         self.assertEqual(tm["gate_runs"]["median_seconds"], 304)
         self.assertEqual(tm["testfirst_runs"]["longest_seconds"], 420)
+
+    def test_two_findings_fixed_by_one_pass_are_both_fixed(self):
+        rows = self.rows(["2026-11-14T10:00:00Z,02,TESTFIRST-FAIL", "2026-11-14T10:02:00Z,02,GATE-FAIL",
+                          "2026-11-14T10:10:00Z,02,REVIEW", "2026-11-14T10:12:00Z,02,VERDICT-PASS"])
+        fix = evaluate.timing(rows, {"02": {}})["finding_to_fix"]
+        self.assertEqual((fix["findings"], fix["open"]), (2, 0))
 
     def test_the_test_first_check_logs_its_time(self):
         case = Recovery("test_resume_keeps_a_live_owner")

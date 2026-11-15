@@ -125,7 +125,7 @@ def replan_prompt(c, mode=None, consulted=None):
             raise Stop("a %s is pending. run replan-prompt repair when next stops on a ticket, or between tickets"
                        % c.all.get("phase"))
         notes = planning.Planner(c).read_text(consulted, "consultants' answers") if consulted else ""
-        if not (c.all.get("repair_sha") and git.head() == c.all["repair_sha"]):  # a second round keeps its baseline
+        if not c.all.get("repair_sha"):  # a later round, even after a blocked commit, keeps the first baseline
             c.all["repair_sha"] = git.head()
             c.all["repair_num"] = c.get("num") if c.all.get("phase") else ""
             c.all["repair_plan"] = repaircheck.plan_tree(c.all["repair_sha"], repair.plan_rel(c)) or ""

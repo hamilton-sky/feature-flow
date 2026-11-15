@@ -42,11 +42,12 @@ USAGE = ("STOP usage: FLOW_TRUST=<last TRUST digest | new> FLOW_SESSION=<token> 
          "[--after-build <ticket> <sha>] <feature> <command> [args...]")
 NO_TRUST = "STOP pass FLOW_TRUST: the last TRUST digest, or new on this session's first call"
 CHANGED = "STOP flow files changed since the last step: %s"
-STALE = ("STOP the TRUST digest you passed is an older one: %s. pass the digest from the last TRUST line. if that is "
-         "lost, run the same command again with FLOW_TRUST_ACCEPT=saved-state on the user's yes")
+STALE = ("STOP the TRUST digest you passed looks like an older one: %s. pass the digest from the last TRUST line. if "
+         "that is lost, show the user the run state (.feature-flow/state/flow-<feature>.state), and only on their yes "
+         "run the same command again with FLOW_TRUST_ACCEPT=saved-state")
 UNKNOWN = ("STOP the TRUST digest does not match, and the evidence cannot say why: %s. run `feature-flow doctor %s` "
            "and show the user; do not carry on until they have looked")
-ACCEPTED = "TRUST-ACCEPTED saved-state: %s"
+ACCEPTED = "TRUST-ACCEPTED saved-state: the flow code is unchanged since the digest; accepted the run state %s"
 NEW_FEATURE = ("STOP no earlier conductor call for %s in this repo, so FLOW_TRUST cannot be its digest: a TRUST digest "
                "belongs to one feature. on a feature's first call pass FLOW_TRUST=new")
 KILLED = "STOP the conductor was killed by signal %d"
@@ -248,9 +249,10 @@ def diagnose(top, feature, trust, code, state):
         return "changed", ", ".join(changed(saved, dict(code, **state)))  # the list is the digest's: names proven
     if halves[0] == part(code):
         if saved is not None and saved_state == state and part(saved_code) == part(code):
-            return "stale", ("the flow code is as it was at that digest (checked against the digest itself), and the "
-                             "run state is as the last conductor call saved it (that rests on %s, which is not proof)"
-                             % name(trust_path(top, feature), top))
+            return "stale", ("the flow code is as it was at that digest (checked against the digest itself). the run "
+                             "state differs from it and is what the last conductor call saved by %s, which is not "
+                             "proof: a digest from an earlier call looks like this, and so would a state and list both "
+                             "rewritten since" % name(trust_path(top, feature), top))
         return "unknown", ("the flow code is as it was at that digest, but the run state is not what the last "
                            "conductor call saved%s, so nothing says whether the conductor or something else wrote it"
                            % ("" if saved is not None else " (there is no saved list to compare)"))
@@ -379,6 +381,17 @@ def with_digest(out, command, feature, trusted):
     return out
 
 
+def summary(top, feature):
+    """The run state's main keys as one line, so the user sees what FLOW_TRUST_ACCEPT=saved-state accepted."""
+    try:
+        text = state_files(top, feature)[0].read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "(none)"
+    pairs = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
+    keys = ("phase", "num", "ticket", "base", "plan_sha", "repair_sha", "owner")
+    return " ".join("%s=%s" % (k, pairs[k][:16]) for k in keys if pairs.get(k)) or "(empty)"
+
+
 def diagnosis(top, feature, trust, code, state):
     """`<feature> --diagnose`: what the trust check would say about FLOW_TRUST (none: about the
     files and the saved list), as `TRUST-DIAGNOSIS <kind> <why>`. Runs nothing, writes nothing."""
@@ -425,7 +438,7 @@ def main():
                 return 1
             kind, why = diagnose(top, feature, trust, before, state)
             if kind == "stale" and os.environ.get("FLOW_TRUST_ACCEPT") == "saved-state":
-                accepted = why
+                accepted = summary(top, feature)
             else:
                 print(STALE % why if kind == "stale" else CHANGED % why if kind == "changed" else
                       UNKNOWN % (why, feature))

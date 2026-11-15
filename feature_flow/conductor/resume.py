@@ -108,11 +108,11 @@ def _start(c, num, current, chosen):
 def resume(c, num=None, chosen=None, accept_code=False, dry=False):
     """Put the ticket's start back, and with accept_code accept the flow code as it is now. Returns the OK line;
     with dry, a `PLAN` line of what it would do, and nothing is changed. It never resets: the ticket's commits,
-    findings and attempt notes stay, a dirty tree stops it, and a session that owns the feature keeps it."""
+    findings and attempt notes stay, and a dirty tree stops it. It never touches the owner: a session that owns the
+    feature keeps it, and is named in the reply."""
     if not c.plan.is_dir():
         hint = suggest.hint(c.feature, suggest.features(c.root)).strip()
         raise Stop("no plan folder %s%s" % (c.plan, ". " + hint if hint else ""))
-    owned(c)
     if c.num_all("lanes") > 1:
         raise Stop("resume works on one ticket at a time, and this run has lanes. run `feature-flow reset %s` "
                    "first (it remembers where each ticket started), then resume" % c.feature)
@@ -194,6 +194,8 @@ def resume(c, num=None, chosen=None, accept_code=False, dry=False):
     if commits:
         done.append("its %d commit(s) since then count for it: %s" % (len(commits), _shown(commits)))
     done.append("every check runs again from there, test first included")
+    if c.get("owner"):
+        done.append("session %s still owns the feature and carries on with it" % c.get("owner")[:8])
     return "OK %s. run %s %s" % (", ".join(done), c.invoke, c.feature)
 
 
@@ -222,18 +224,3 @@ def command_line(c, num=None, chosen=None, accept_code=False, dry=False):
     """The `feature-flow resume` line for these arguments."""
     return " ".join(["feature-flow resume", c.feature] + ([num] if num else []) + (["--from", chosen] if chosen else [])
                     + (["--accept-code"] if accept_code else []) + (["--dry-run"] if dry else []))
-
-
-def owned(c):
-    """resume changes a run's start: while a session owns the feature, only that session (its FLOW_SESSION) may,
-    or the user with FLOW_TAKEOVER=1 once that session is closed. The owner itself is never replaced."""
-    owner = c.get("owner")
-    if not owner or os.environ.get("FLOW_TAKEOVER", "0") == "1":
-        return
-    from feature_flow.conductor.guards import owner_hash  # the guards import the phases, which import resume
-    token = os.environ.get("FLOW_SESSION", "")
-    if owner_hash(token) == owner or (len(owner) == 16 and token == owner):  # a raw token, from before 0.5.0
-        return
-    raise Stop("%s is owned by session %s, and resume would move its ticket's start under it. run resume from that "
-               "session (with its FLOW_SESSION), or, once you are sure it is closed, with FLOW_TAKEOVER=1"
-               % (c.feature, owner[:8]))
