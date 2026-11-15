@@ -2,7 +2,7 @@
 
 [← README](../README.md) · [Docs index](README.md)
 
-Every script command and every `FLOW_` setting. The skill runs these for you; you need them only to run a step by hand or change a default.
+Every script command and every `FLOW_` setting. The skill runs these for you; you need them only to run a step by hand or change a default. Most runs need none of the settings: the [mode](modes.md) sets them.
 
 ## Commands
 
@@ -12,7 +12,7 @@ feature-flow resume <feature> [NN] [--from <commit>] [--accept-code] [--dry-run]
 feature-flow doctor <feature> [--trust <digest>]          where a run stands and the safe next command, read-only (also flow-status.py <feature> --doctor, the repo's own copy)
 python3 scripts/flow-status.py <feature> --lint --baseline <commit>   a plan repair against the plan at <commit>: inherited problems (shown, not blocking), new ones (exit 1), footprint moves
 FLOW_TRUST=<digest> python3 -I scripts/flow-trust.py <feature> --diagnose   why a digest does not match: ok, stale, changed or unknown; runs nothing
-FLOW_TRUST=<digest|new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py <feature> next|prompt|verdict <file>|fast on|off   loop commands by hand, through the runner: prints TRUST <digest> first (no hash check, see below)
+FLOW_TRUST=<digest|new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py <feature> next|prompt|verdict <file>|fast on|off|mode <mode>   loop commands by hand, through the runner: prints TRUST <digest> first (no hash check, see below)
 FLOW_TRUST=<digest> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py <feature> replan-prompt repair [answers]|repair-check   a plan repair through the runner: the planner's prompt (with the consultants' answers), then the inherited and new problems against the repair's baseline
 python3 scripts/flow-status.py <feature>                  table of tickets and which are READY
 python3 scripts/flow-status.py <feature> --next           path of the next ready ticket (exit 10 = done, 11 = stuck)
@@ -44,25 +44,25 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `FLOW_PROFILE` | unset | `careful`, `standard`, `normal` or `fast`: fills the settings in this table that are not set; a `Profile:` line in `commands.md` does the same |
+| `FLOW_MODE` | unset | `fix`, `small`, `feature`, `careful` or `explore` ([modes](modes.md)): fills the settings in this table that are not set, over the plan's `Mode:` line. `FLOW_PROFILE` is its old name (`fast`, `standard`, `careful`, `normal`), still read |
 | `FLOW_TICKETS_PER_SESSION` | `4` | tickets per session before `HANDOFF`; `0` never hands off |
 | `FLOW_RELAY` | `0` | `1` hands off after every build and every review |
 | `FLOW_DRIVER` | `person` | read by `start`: `agent` when another agent drives the run: no handoffs (unless `FLOW_TICKETS_PER_SESSION` is set), and the eval says so |
 | `FLOW_LANES` | the plan's `Lanes:` line, else `1` | read by `start`: `2` to `4` builds tickets with disjoint `Touches:` side by side in worktrees (not with `FLOW_RELAY`); overrides `Lanes:` |
-| `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting |
+| `FLOW_FAST` | unset | read by `start`: `1` defers the reviews of tickets below level 3 to one feature review at the end, `0` turns it off; unset keeps the run's setting **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
 | `FLOW_BUDGET` | unset | read by `start`: minutes of active work before fast mode turns on, then a re-plan offer; `off` drops it |
-| `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off |
+| `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
 | `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase, whatever the brainstorm's `Scouts:` line says |
 | `FLOW_CODEINTEL` | `auto` | `off` keeps codeintel out of the scout's and reviewer's prompts; `auto` adds it when `codeintel doctor` reports an engine ready |
 | `FLOW_TRUST_ACCEPT` | unset | `saved-state`, only on the user's yes, carries on past a stale TRUST digest whose code half still matches, and prints the run state it accepted ([why](speed.md#when-a-run-stops)) |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
-| `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
-| `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |
-| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks; from the plan, only `Gate: off unsafe` in `commands.md` does the same |
-| `FLOW_REVIEWERS` | `1` | `2` runs a quality and a ticket reviewer side by side where one review would run (not in lanes) |
-| `FLOW_ROUND_REVIEW` | `off` | `on` reviews the whole round once at the end, after every ticket's own review |
-| `FLOW_BASE_GATE` | `off` | `on` runs the whole gate once at the base, before the first ticket, and stops if it is red (`<feature>.base-gate.log`) |
-| `FLOW_GATE_FULL` | unset | `1` runs the full Build, Test and Lint after every ticket, even when `commands.md` has a `Quick:` line |
+| `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_GATE` | `on` | `off` skips Build, Test and Lint after each ticket, and also the Done when and test-first checks; from the plan, only `Gate: off unsafe` in `commands.md` does the same **Retiring:** from 0.44.0 only `Gate: off unsafe` turns the gate off; `start` warns. |
+| `FLOW_REVIEWERS` | `1` | `2` runs a quality and a ticket reviewer side by side where one review would run (not in lanes) **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_ROUND_REVIEW` | `off` | `on` reviews the whole round once at the end, after every ticket's own review **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_BASE_GATE` | `off` | `on` runs the whole gate once at the base, before the first ticket, and stops if it is red (`<feature>.base-gate.log`) **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
+| `FLOW_GATE_FULL` | unset | `1` runs the full Build, Test and Lint after every ticket, even when `commands.md` has a `Quick:` line **Retiring:** set by the mode alone from 0.44.0; `start` warns when it is set by hand. |
 | `FLOW_SMALL_FILES` | `3` | most files a ticket may change and still get the single review (no level), or stay level 1 |
 | `FLOW_SMALL_LINES` | `60` | most changed lines for the single review; `0` turns the single review off |
 | `FLOW_GATE_TIMEOUT` | `30` | minutes each gate command and the smoke test may run; `0` means no limit. A failed smoke test writes `.feature-flow/state/<feature>.smoke.log` |

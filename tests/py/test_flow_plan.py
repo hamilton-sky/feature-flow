@@ -55,7 +55,7 @@ class Draft(unittest.TestCase):
         self.assertEqual([(s["name"], s["state"]) for s in doc["steps"]],
                          [("Style", "done"), ("Team", "done"), ("Options", "done"), ("Plan", "current"),
                           ("Build", "later")])
-        self.assertEqual(doc["steps"][3]["summary"], "6 tickets, standard, lanes auto (4)")
+        self.assertEqual(doc["steps"][3]["summary"], "6 tickets, feature, lanes auto (4)")
         plan, flow = [s for s in doc["sections"] if s.get("step") == "Plan"]
         self.assertIn("Up to 4 tickets can build at once. 04 waits for 03: level 3 shares the folder app/", plan["markdown"])
         self.assertIn('T01["01 model"]', plan["markdown"])
@@ -66,13 +66,15 @@ class Draft(unittest.TestCase):
 
     def test_the_plan_yes_picks_go_into_the_draft(self):
         said = flow_plan.apply_picks(self.draft, {"profile": "careful", "lanes": "2", "full_review": ["03"]})
-        self.assertEqual(said, ["Profile: careful", "Lanes: 2", "Review: full on 03"])
+        self.assertEqual(said, ["Mode: careful", "Lanes: 2", "Review: full on 03"])
         commands = (self.draft / "commands.md").read_text(encoding="utf-8")
-        self.assertIn("Profile: `careful`\nLanes: `2`\n", commands)
+        self.assertIn("Mode: `careful`\n", commands)
+        self.assertIn("Lanes: `2`\n", commands)
+        self.assertNotIn("Profile:", commands)  # the old line goes when a mode is picked
         self.assertIn("Review: full", next((self.draft / "tasks").glob("03-*.md")).read_text(encoding="utf-8"))
         flow_plan.apply_picks(self.draft, {"full_review": []})
         self.assertNotIn("Review:", next((self.draft / "tasks").glob("03-*.md")).read_text(encoding="utf-8"))
-        for picks, says in (({"profile": "turbo"}, "the profile must be"), ({"lanes": "9"}, "auto or 1 to 4"),
+        for picks, says in (({"profile": "turbo"}, "the mode must be"), ({"lanes": "9"}, "auto or 1 to 4"),
                             ({"full_review": ["99"]}, "a list of the plan's tickets")):
             with self.assertRaises(ValueError, msg=says) as caught:
                 flow_plan.apply_picks(self.draft, picks)
@@ -87,10 +89,10 @@ class Draft(unittest.TestCase):
         self.assertEqual(flow_plan.apply_picks(self.draft, {"gate": "end"}), ["Gate: end"])
         self.assertIn("Gate: `end`", (self.draft / "commands.md").read_text(encoding="utf-8"))
         # the shown default follows a new profile; an explicit pick of a profile's default is dropped
-        self.assertEqual(flow_plan.apply_picks(self.draft, {"gate": "batch 3"}), ["Gate: batch 3 (the standard default)"])
+        self.assertEqual(flow_plan.apply_picks(self.draft, {"gate": "batch 3"}), ["Gate: batch 3 (the feature default)"])
         self.assertNotIn("Gate:", (self.draft / "commands.md").read_text(encoding="utf-8"))
         self.assertEqual(flow_plan.apply_picks(self.draft, {"profile": "fast", "gate": "batch 3"}),
-                         ["Profile: fast", "Gate: end (the fast default)"])
+                         ["Mode: small", "Gate: end (the small default)"])
         for value, says in (("batch 0", "batch N (N from 1 to 20)"), ("off unsafe", "only by asking in the chat")):
             with self.assertRaises(ValueError) as caught:
                 flow_plan.apply_picks(self.draft, {"gate": value})

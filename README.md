@@ -18,7 +18,7 @@ You describe a feature in the chat. feature-flow turns it into a plan of small *
 - **Done means your tests pass when the script runs them,** not when the agent says so. The script reads the repo, runs your build, test and lint commands, and runs each ticket's own checks.
 - **It catches shortcuts.** Skipped or deleted tests, silenced lint, lowered thresholds, assertions that cannot fail, and edits outside the files a ticket said it would change all send the ticket back.
 - **You approve three times, then it runs by itself.** The idea, the option, and the plan; each stop can be skipped with "ok".
-- **One word sets the pace.** `careful`, `standard` or `fast` picks how much review each ticket gets, and tickets that touch different files can build side by side.
+- **One word says what kind of work it is.** The mode, `fix`, `small`, `feature`, `careful` or `explore`, sets how much review each ticket gets, and the session guesses it from your words. Tickets that touch different files can build side by side.
 - **Every run leaves a record** of what it cost and what each check caught, so a trial on your repo gives you numbers, not an impression.
 
 ## Quick start
@@ -58,7 +58,7 @@ feature-flow install --user          # once, for every repo (Claude Code; add --
 
 **What it costs.** Each ticket starts at least two subagents. The two-ticket demo used about 23k output tokens and 2M cached input tokens on Sonnet. For a first try, pick a feature of 2 or 3 tickets.
 
-**Where next:** [what a run looks like](#what-a-run-looks-like) · [choosing a pace](#careful-standard-or-fast) · [trying it on your own repo](docs/field-run.md) · [all commands and settings](docs/commands-and-settings.md)
+**Where next:** [what a run looks like](#what-a-run-looks-like) · [choosing a mode](#modes) · [trying it on your own repo](docs/field-run.md) · [all commands and settings](docs/commands-and-settings.md)
 
 ## Commands
 
@@ -71,9 +71,9 @@ feature-flow install --user          # once, for every repo (Claude Code; add --
 | Watch the graph, animated | `/feature-flow csv-export show` | `$feature-flow csv-export show` |
 | Fix a bug: find the cause, then one checked ticket ([how](docs/fix.md)) | `/feature-flow empty-export fix` | `$feature-flow empty-export fix` |
 | Weigh ways to build it first | `/feature-flow csv-export brainstorm` | `$feature-flow csv-export brainstorm` |
-| Everyday feature (what a new plan names) | `/feature-flow csv-export standard` | `$feature-flow csv-export standard` |
-| Small, low-risk feature: one review at the end | `/feature-flow csv-export fast` | `$feature-flow csv-export fast` |
+| Small, clear change: one review at the end | `/feature-flow csv-export small` | `$feature-flow csv-export small` |
 | Costly to get wrong: full checks and review per ticket | `/feature-flow csv-export careful` | `$feature-flow csv-export careful` |
+| Not sure what to build yet | `/feature-flow csv-export explore` | `$feature-flow csv-export explore` |
 | Another agent drives the session | `/feature-flow csv-export agent` | `$feature-flow csv-export agent` |
 
 The same command plans when `plans/csv-export/` does not exist yet and builds when it does. After your second yes it commits the plan and goes straight on to building it; say so if you want it to stop after planning. The `feature-flow` command on your PATH also has `status`, `view`, `report`, `eval`, `doctor`, `resume`, `reset`, `import` and `uninstall` ([all of them](docs/commands-and-settings.md)).
@@ -82,7 +82,7 @@ The same command plans when `plans/csv-export/` does not exist yet and builds wh
 
 ## What a run looks like
 
-The run stops for you three times, and you can skip any stop by saying "ok" (with `auto`, `agent` or `fast` it asks nothing). No stop has a timer.
+The run stops for you three times, and you can skip any stop by saying "ok" (with `auto` or `agent` it asks nothing). No stop has a timer.
 
 | Stop | What you decide | Skip with "ok" and |
 |---|---|---|
@@ -119,15 +119,17 @@ Each ticket has a **level**, set by the planner and approved by you with the pla
 
 [docs/how-it-works.md](docs/how-it-works.md) has the full flow, the agent roles and what the script checks and what it trusts. [docs/plans-and-tickets.md](docs/plans-and-tickets.md) has the plan's files and the ticket format.
 
-## Careful, standard or fast
+## Modes
 
-| Profile | Use it for |
+| Mode | Use it for |
 |---|---|
-| `careful` | code where a wrong "done" is expensive: the full test suite and an own review for every ticket |
-| `standard` | everyday features, and what a new plan names: the quick checks after every ticket, the full tests and one review every 3 tickets, two reviewers on each level 3 ticket |
-| `fast` | small, low-risk features: tickets in batches, one review of the whole feature at the end |
+| `fix` | one bug with one cause: a failing test first, then the fix, one reviewer |
+| `small` | a clear change: tickets in batches, one review of the whole feature at the end |
+| `feature` | most work, and the default: the quick checks after every ticket, the full tests and one review every 3 tickets, two reviewers side by side |
+| `careful` | code where a wrong "done" is expensive: the full test suite and two reviewers for every ticket |
+| `explore` | an idea you are not sure of yet: a brainstorm first, then built as `feature` |
 
-Pick one in the command (`/feature-flow csv-export careful`) or on the plan's yes. A level 3 ticket keeps its own review in every profile. When the full checks run can also be set on its own, every ticket or every few tickets, and tickets that touch different files can build side by side. [docs/speed.md](docs/speed.md) covers all of it, with the settings each profile sets.
+Name one in the command (`/feature-flow csv-export careful`), or let the session guess it from your words and say "ok". You can change it on the plan's yes. A level 3 ticket keeps its own review in every mode. [docs/modes.md](docs/modes.md) has what each mode sets. When the full checks run can also be set on its own, every ticket or every few tickets, and tickets that touch different files can build side by side. [docs/speed.md](docs/speed.md) covers all of it.
 
 ## Optional extras
 

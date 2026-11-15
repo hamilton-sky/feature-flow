@@ -6,7 +6,7 @@ A run on your repo, with a feature you actually need, teaches more than another 
 
 1. A repo with a test command that runs in about a minute or less, or a slow suite plus a faster subset you can name with `Quick:` in `commands.md`.
 2. A feature of 3 to 6 tickets that you can describe in a few sentences. If it has a behaviour a test can reach from outside, keep the planner's `Acceptance:` line, so a tester writes acceptance tests from the spec before the build.
-3. Pick a profile: `normal` for a first run, `careful` where a wrong "done" is expensive, `fast` for a small, low-risk feature.
+3. Pick a mode: `feature` for a first run, `careful` where a wrong "done" is expensive, `small` for a small, low-risk change ([modes](modes.md)).
 4. Install it so it stays out of your history: `feature-flow install . --private` (or `--user` once for every repo).
 5. For Codex: `--agent codex`, and run it on your own machine.
 

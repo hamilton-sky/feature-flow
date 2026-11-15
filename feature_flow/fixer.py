@@ -84,10 +84,10 @@ def commands(top, plans, feature, guides_root):
                    if CARRY.match(line)]
     if not any(line.startswith(("Build:", "Test:")) for line in carried):
         return importer.template(guides_root, "commands.md", feature).replace(
-            "Profile: `standard`", "Profile: `normal`"), None
+            "Mode: `feature`", "Mode: `fix`"), None
     text = ("# Commands: %s\n\nThe command lines of %s, for a one-ticket fix. Approved by a human with the fix; "
-            "workers must not change it. `normal` gives the ticket the full gate and its own review.\n\n%s\n"
-            "Profile: `normal`\n" % (feature, newest.relative_to(top).as_posix(), "\n".join(carried)))
+            "workers must not change it. `fix` gives the ticket the full gate and its own review.\n\n%s\n"
+            "Mode: `fix`\n" % (feature, newest.relative_to(top).as_posix(), "\n".join(carried)))
     return text, newest.relative_to(top).as_posix()
 
 

@@ -2,8 +2,8 @@
 
 The Plan step shows the drafted plan: its tickets and their order, the build flow (each ticket's level and review),
 how many tickets can build at once (lanes.plan_width) and the checks every ticket must pass. Its choices are the
-profile, the lanes and which tickets get a full review. While the plan is a draft (.feature-flow/state/draft/), the
-page's picks are written into the draft's commands.md (`Profile:`, `Lanes:`) and tickets (`Review: full`), so one
+mode, the lanes and which tickets get a full review. While the plan is a draft (.feature-flow/state/draft/), the
+page's picks are written into the draft's commands.md (`Mode:`, `Lanes:`) and tickets (`Review: full`), so one
 yes approves the plan and its build flow together and they are frozen with it. An accepted plan only shows: change
 it with a re-plan. The Build step shows how far the run is.
 """
@@ -26,10 +26,12 @@ BUILDER_KEY = "builder-"  # builder-<NN>: one pick per ticket, its Builder: line
 
 def is_plan_key(key):
     return key in PLAN_KEYS or key.startswith(BUILDER_KEY)
-PROFILE_NOTES = {"fast": "one builder takes small tickets in batches, and one review of the whole feature at the end",
-                 "standard": "two reviewers side by side on each ticket, and one review of the whole round",
-                 "careful": "the full gate and two reviewers on every ticket, and at most 2 lanes",
-                 "normal": "one review per ticket"}
+MODE_NOTES = {"small": "one builder takes small tickets in batches, and one review of the whole feature at the end",
+              "feature": "two reviewers side by side on each ticket, and one review of the whole round",
+              "careful": "the full gate and two reviewers on every ticket, and at most 2 lanes",
+              "fix": "one review per ticket",
+              "explore": "built as feature: two reviewers side by side on each ticket, one review of the round"}
+PLAN_MODES = ("small", "feature", "careful")  # what the Plan step offers; fix and explore show when the plan has them
 LANE_CAPS = {"careful": 2, "fast": 1}  # as conductor.guards.LANE_CAPS, and fast batches instead of lanes
 CHECKS = ("gate", "floor guard", "footprint", "done when", "test first")
 
@@ -45,8 +47,21 @@ class Plan:
     def value(self, key):
         return tickets.commands_value(self.commands, key).strip()
 
+    def mode_profile(self):
+        """(mode, profile) the plan's Mode: or Profile: line names; ("", "normal") for neither or a bad name."""
+        try:
+            mode, profile = profiles.resolve({}, self.value("Mode"), self.value("Profile"))
+        except profiles.UnknownProfile:
+            return "", "normal"
+        return mode, profile or "normal"
+
     def profile(self):
-        return (self.value("Profile") or "normal").lower()
+        return self.mode_profile()[1]
+
+    def mode(self):
+        """The plan's mode, with an old plan's profile named as its mode (normal as fix)."""
+        mode, profile = self.mode_profile()
+        return mode or {"normal": "fix"}.get(profile, profile)
 
     def width(self):
         return status.width_of(self.graph, str(self.commands))
@@ -118,12 +133,12 @@ def sections(folder, draft, environ=None):
     """(the Plan step's summary, its sections) for the plan in folder; draft says whether its picks can be written."""
     plan = Plan(folder)
     g = plan.graph
-    profile = plan.profile()
+    profile, mode = plan.profile(), plan.mode()
     wide, waits = plan.width()
     lanes_value = (plan.value("Lanes") or "1").lower()
     rows = ["| Ticket | Level | Review | Touches |", "|---|---|---|---|"]
     for t in g.order:
-        review = "full: spec, then quality" if g.review.get(t) == "full" else profile
+        review = "full: spec, then quality" if g.review.get(t) == "full" else mode
         rows.append("| %s %s | %s | %s | %s |" % (g.lab[t], g.title[t].replace("|", "/"), g.level.get(t, "-"), review,
                                                 ", ".join("`%s`" % p for p in g.touches.get(t, [])) or "none"))
     width_md = "Up to %d ticket%s can build at once." % (wide, "" if wide == 1 else "s")
@@ -134,14 +149,14 @@ def sections(folder, draft, environ=None):
     lanes_options = [{"value": "auto", "label": "Auto (%d)" % max(1, cap)}] + [
         {"value": str(n), "label": str(n)} for n in range(1, lanes.MAX_LANES_PLAN + 1)]
     choices = [
-        {"key": "profile", "label": "Profile", "kind": "one", "value": profile if profile in profiles.PROFILES else "normal",
-         "about": "How much review each ticket gets while it builds.",
-         "options": [{"value": p, "label": p.capitalize(), "note": PROFILE_NOTES.get(p, "")} for p in
-                     ("fast", "standard", "careful", "normal")]},
+        {"key": "profile", "label": "Mode", "kind": "one", "value": mode,
+         "about": "What kind of work this is: it sets how much review each ticket gets while it builds.",
+         "options": [{"value": m, "label": m.capitalize(), "note": MODE_NOTES.get(m, "")} for m in
+                     PLAN_MODES + (() if mode in PLAN_MODES else (mode,))]},
         {"key": "lanes", "label": "Tickets building at once", "kind": "one",
          "value": lanes_value if lanes_value in ("auto", "1", "2", "3", "4") else "1", "options": lanes_options,
          "about": "Tickets that touch different files can build side by side, each in its own worktree.",
-         "note": "Auto takes the plan's width, at most %d with this profile. FLOW_LANES still overrides it." % plan.lanes_cap()},
+         "note": "Auto takes the plan's width, at most %d in this mode. FLOW_LANES still overrides it." % plan.lanes_cap()},
     ]
     cadence = plan.gate()
     if cadence != "off unsafe":
@@ -149,8 +164,8 @@ def sections(folder, draft, environ=None):
                         "about": "The gate runs your test command and checks; sooner catches a break sooner, later is faster.",
                         "value": cadence, "options": [{"value": v, "label": v.capitalize(), "note": gate_note(v)} for v in
                                                       GATE_CHOICES + (() if cadence in GATE_CHOICES else (cadence,))],
-                        "note": "The %s profile's default is %s. A level 3 ticket keeps its own review either way."
-                                % (profile, plan_gate_default(profile))})
+                        "note": "The %s mode's default is %s. A level 3 ticket keeps its own review either way."
+                                % (mode, plan_gate_default(profile))})
     choices += [
         {"key": "full_review", "label": "Tickets with a full review (spec, then quality)", "kind": "some",
          "about": "A full review checks the ticket against its spec first, then its code quality. Pick the risky ones.",
@@ -174,7 +189,7 @@ def sections(folder, draft, environ=None):
            {"title": "Build flow", "kind": "text", "markdown": build_md, "items": [], "step": "Plan",
             "choices": choices if draft else []}]
     lanes_said = "lanes auto (%d)" % max(1, cap) if lanes_value == "auto" else "%s lane%s" % (lanes_value, "" if lanes_value == "1" else "s")
-    return "%d tickets, %s, %s" % (len(g.order), profile, lanes_said), out
+    return "%d tickets, %s, %s" % (len(g.order), mode, lanes_said), out
 
 
 def build_section(folder):
@@ -225,11 +240,16 @@ def apply_picks(folder, picks):
     writes = {}
     text = plan.commands.read_text(encoding="utf-8") if plan.commands.is_file() else ""
     said = []
-    if "profile" in picks:
-        if picks["profile"] not in profiles.PROFILES:
-            raise ValueError("the profile must be %s, not %s" % (", ".join(sorted(profiles.PROFILES)), picks["profile"]))
-        text = set_header(text, "Profile", "`%s`" % picks["profile"])
-        said.append("Profile: %s" % picks["profile"])
+    new_profile = plan.profile()
+    if "profile" in picks:  # the Mode pick; the key keeps its old name in the page's state
+        try:
+            mode, new_profile = profiles.resolve({}, str(picks["profile"]))
+        except profiles.UnknownProfile as err:
+            raise ValueError(str(err))
+        mode = mode or "fix"
+        new_profile = new_profile or "normal"
+        text = set_header(set_header(text, "Profile", None), "Mode", "`%s`" % mode)
+        said.append("Mode: %s" % mode)
     if "lanes" in picks:
         value = str(picks["lanes"])
         wide = plan.width()[0]
@@ -250,11 +270,11 @@ def apply_picks(folder, picks):
             gate_every(value, plan.profile())
         except ValueError as err:
             raise ValueError(str(err).replace("commands.md's Gate: line", "the gate"))
-        old_profile, new_profile = plan.profile(), str(picks.get("profile", plan.profile())).lower()
+        old_profile = plan.profile()
         shown = not plan.value("Gate") and value == plan_gate_default(old_profile)  # the card's default, not a pick
         if value == plan_gate_default(new_profile) or (shown and new_profile != old_profile):
-            text = set_header(text, "Gate", None)  # the profile's default: it follows the profile
-            said.append("Gate: %s (the %s default)" % (plan_gate_default(new_profile), new_profile))
+            text = set_header(text, "Gate", None)  # the mode's default: it follows the mode
+            said.append("Gate: %s (the %s default)" % (plan_gate_default(new_profile), profiles.OLD_NAMES.get(new_profile) or "fix"))
         else:
             text = set_header(text, "Gate", "`%s`" % value)
             said.append("Gate: %s" % value)

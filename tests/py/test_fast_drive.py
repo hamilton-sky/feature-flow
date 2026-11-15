@@ -182,6 +182,16 @@ class FastDrive(unittest.TestCase):
         rc, out = repo.flow("fast", "on", FLOW_TRUSTED="0", FLOW_SESSION=env["FLOW_SESSION"])
         self.assertIn("flow-trust.py", out)
 
+    def test_mode_small_is_fast_on_and_the_plans_own_mode_is_fast_off(self):
+        repo, env, _ = self.setup((("01-a", ["Level: 1"], "a.txt"),))
+        self.assertEqual(repo.flow("mode", "small", **env), (0, "OK fast on"))
+        self.assertEqual(repo.flow("mode", "fix", **env), (0, "OK fast off"))  # a plan with no Mode: line is fix
+        rc, out = repo.flow("mode", "careful", **env)
+        self.assertEqual(rc, 1)
+        self.assertIn("STOP mode careful changes the plan's reviews, which only a re-plan can do", out)
+        self.assertEqual(repo.flow("mode", "turbo", **env),
+                         (1, "STOP the mode must be fix, small, feature, careful, explore, not turbo"))
+
     def test_with_the_gate_off_every_ticket_keeps_its_review(self):
         repo, env, reply = self.setup((("01-a", ["Level: 1"], "a.txt"),), FLOW_FAST="1", FLOW_GATE="off")
         env["FLOW_GATE"] = "off"
