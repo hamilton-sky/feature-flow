@@ -5,7 +5,7 @@ import unittest
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import checks, floorguard  # the package under test, from this checkout
+from feature_flow.verify import checks, floorguard  # the package under test, from this checkout
 
 
 def diff(*files):

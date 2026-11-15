@@ -17,7 +17,8 @@ import helpers
 from helpers import Repo
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import cli, proof  # the package under test, from this checkout
+from feature_flow import cli  # the package under test, from this checkout
+from feature_flow.verify import proof
 
 PYTHON = '"%s"' % sys.executable
 CHECK = "```check\n$ %s -c \"print('fine')\"\nprints fine\n```\n\n" % PYTHON

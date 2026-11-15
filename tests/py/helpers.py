@@ -25,7 +25,7 @@ def run_loader(line, runner, args, cwd, env):
     as runner. Returns the finished process, output as text."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
-    from feature_flow import gate  # the package under test, from this checkout
+    from feature_flow.verify import gate  # the package under test, from this checkout
 
     if not line.startswith("python3 "):
         raise AssertionError("the loader line does not start with python3: %s" % line)

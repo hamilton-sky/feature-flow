@@ -3,7 +3,8 @@ feature review for deferred tickets, and the DONE line."""
 
 import os
 
-from feature_flow import checks, gate, lanes, proof
+from feature_flow import lanes
+from feature_flow.verify import checks, gate, proof
 from feature_flow.plan import tickets
 from feature_flow.infra import git
 from feature_flow.conductor import checkpoint

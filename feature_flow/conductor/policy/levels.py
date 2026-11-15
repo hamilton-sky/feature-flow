@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 
-from feature_flow.proof import declared_level, review_mode
+from feature_flow.verify.proof import declared_level, review_mode
 
 CONVERT = re.compile(r"^Type:[ \t]*convert\b", re.IGNORECASE | re.MULTILINE)
 LEVEL_NAMES = {1: "light", 2: "standard", 3: "boundary"}

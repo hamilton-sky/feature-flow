@@ -7,7 +7,8 @@ import os
 import shutil
 from pathlib import Path
 
-from feature_flow import checks, prompts, scouts
+from feature_flow import prompts, scouts
+from feature_flow.verify import checks
 from feature_flow.plan import brainstorm_mode
 from feature_flow.infra import git, plan_lock, state
 from feature_flow.conductor.errors import NoPhase, Stop

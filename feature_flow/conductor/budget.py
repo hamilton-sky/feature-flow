@@ -2,7 +2,7 @@
 
 import time
 
-from feature_flow import checks
+from feature_flow.verify import checks
 from feature_flow.conductor.errors import Stop
 
 GAP = 3600  # most seconds one step adds to the time spent: a longer pause is the user away, not work

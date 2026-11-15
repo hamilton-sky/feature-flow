@@ -12,7 +12,8 @@ import contextlib
 import os
 from pathlib import Path
 
-from feature_flow import checks, codehash, codeintel, floorguard, proof, scouts
+from feature_flow import codehash, codeintel, scouts
+from feature_flow.verify import checks, floorguard, proof
 from feature_flow.plan import tickets
 from feature_flow.infra import git, state
 from feature_flow.conductor import budget as time_budget
