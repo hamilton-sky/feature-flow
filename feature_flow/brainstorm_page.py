@@ -2,6 +2,7 @@
 
 usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]
        feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE
+       feature-flow brainstorm-page <feature> --serve DIR [--port N] [--agent-label NAME] | --answer-graph STATE <n> <graph.json>
 Reads plans/<feature>/brainstorm.md, or .feature-flow/state/brainstorm-<feature>.md before the plan exists, turns
 it into a review document and has Forkboard (packages/forkboard/, found by feature_flow/studio.py) make the page.
 The page goes beside the brainstorm (same name, .html). The look is a Forkboard theme: --style, else the brainstorm's
@@ -23,7 +24,8 @@ from pathlib import Path
 from feature_flow import brainstorm_mode, flow_page, git, plan_lock, studio
 
 USAGE = ("usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out FILE]\n"
-         "       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE")
+         "       feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE\n"
+         "       feature-flow brainstorm-page <feature> --serve DIR [--port N] [--agent-label NAME] | --answer-graph STATE <n> <graph.json>")
 DEFAULT_STYLE = "route"
 FENCE = re.compile(r"^```mermaid[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
 KINDS = {"chosen": "chosen", "rejected": "rejected", "open": "open", "risks for the planner": "callout"}

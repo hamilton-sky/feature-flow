@@ -13,6 +13,7 @@ feature-flow doctor <feature> [--trust <digest>]          where a run stands and
 python3 scripts/flow-status.py <feature> --lint --baseline <commit>   a plan repair against the plan at <commit>: inherited problems (shown, not blocking), new ones (exit 1), footprint moves
 FLOW_TRUST=<digest> python3 -I scripts/flow-trust.py <feature> --diagnose   why a digest does not match: ok, stale, changed or unknown; runs nothing
 FLOW_TRUST=<digest|new> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py <feature> next|prompt|verdict <file>|fast on|off   loop commands by hand, through the runner: prints TRUST <digest> first (no hash check, see below)
+FLOW_TRUST=<digest> FLOW_SESSION=<token> python3 -I scripts/flow-trust.py <feature> replan-prompt repair [answers]|repair-check   a plan repair through the runner: the planner's prompt (with the consultants' answers), then the inherited and new problems against the repair's baseline
 python3 scripts/flow-status.py <feature>                  table of tickets and which are READY
 python3 scripts/flow-status.py <feature> --next           path of the next ready ticket (exit 10 = done, 11 = stuck)
 python3 scripts/flow-status.py <feature> --ready          every ready ticket, one per line (the same exit codes)
@@ -30,6 +31,7 @@ python3 scripts/flow-status.py <feature> --mermaid        the ticket graph, colo
 python3 scripts/flow-status.py <feature> --json           every ticket with status, blockers and readiness
 python3 scripts/flow-view.py <feature> [--watch]          the animated graph page, opened in your browser
 feature-flow brainstorm-page <feature> [--style NAME] [--fragment]   the brainstorm as the flow's one page (Forkboard); --live DIR, --asks, --answer, --apply, --picks for the live page
+feature-flow brainstorm-page <feature> --serve DIR [--port N] [--agent-label NAME]   the same live page served on 127.0.0.1, for Codex or any agent (keep it running); --answer-graph STATE <n> <graph.json> answers a diagram request (docs/brainstorm.md)
 python3 scripts/gate.py <feature>                         run Build, Test and Lint from commands.md
 python3 scripts/floor-guard.py <feature> <NN> [base] [plan]   check a ticket's diff, run from the repo root (plan: the commit the plan is read at, after a repair)
 ```
@@ -52,6 +54,7 @@ The commands in `commands.md` run through `bash -c` on Linux and macOS and throu
 | `FLOW_BATCH` | `5` | fast mode: most small tickets one builder takes at once; `1` turns batches off |
 | `FLOW_SCOUTS` | `on` | `off` lists no scouts before any phase, whatever the brainstorm's `Scouts:` line says |
 | `FLOW_CODEINTEL` | `auto` | `off` keeps codeintel out of the scout's and reviewer's prompts; `auto` adds it when `codeintel doctor` reports an engine ready |
+| `FLOW_TRUST_ACCEPT` | unset | `saved-state`, only on the user's yes, carries on past a stale TRUST digest whose code half still matches, and prints the run state it accepted ([why](speed.md#when-a-run-stops)) |
 | `FLOW_TAKEOVER` | unset | `1` lets `start` take a feature over from a session that is gone |
 | `FLOW_MAX_RETRIES` | `2` | builds or reviews per step before the run stops |
 | `FLOW_MAX_REVIEW_ROUNDS` | `3` | times a ticket may be sent back before the run stops (a level 1 ticket: once) |

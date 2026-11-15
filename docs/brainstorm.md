@@ -104,13 +104,9 @@ The page itself is **Forkboard** ([packages/forkboard/](../packages/forkboard/))
 
 The result is `brainstorm.md` ([template](../guides/templates/brainstorm.md)), committed with the plan. The planner follows its chosen option and copies its diagram into `spec.md`, the plan reviewer fails a plan that builds a rejected option or leaves a risky area below level 3, and a re-plan keeps the choice. It is skipped in `fast`, for an import, and with `auto`; with `agent`, the driving agent picks, the file says `Picked by: agent`, and the eval records it.
 
-## What has not been tried yet
+## Local live page with Codex
 
-The guided flow's stops and the Setup and Plan steps' choices have not had a field run yet. The live page's loop (a person saves, the session wakes, answers and publishes again) has only run against a stand-in in tests. If you try either, [docs/field-run.md](field-run.md) says what to send back.
-
-### Local live page with Codex
-
-For a brainstorm, draft plan, active build, or completed build, run this from the repository root:
+The live page without Claude artifacts (new in 0.42.0): a small server on 127.0.0.1 serves the flow's one page, so Codex, another agent, or you in a plain browser get the same saves, versions and requests. For a brainstorm, draft plan, active build, or completed build, run this from the repository root:
 
 ```sh
 FEATURE=my-feature
@@ -132,7 +128,7 @@ python3 -m feature_flow brainstorm-page "$FEATURE" --picks "$LIVE"
 
 Replace request numbers and `VERSION` with those shown by the page and `--asks`; `proposal.json` is a validated graph object with `dir`, `nodes` and `edges`. The reviewer explicitly previews and saves a proposed graph before `--apply`. Style, Team, Options and draft Plan choices are staged until their tab's **Approve** records the user's approval intent and picks together. The agent processes the intent using the named commands and existing approval policy. Accepted plans and build settings are frozen; changes require an approved re-plan. HTTP writes page state only: it never starts a build, changes a repository file or commits.
 
-#### Manual Codex smoke run
+### Manual Codex smoke run
 
 This is a manual real-agent check; no account or model is required by the automated tests. In a disposable repo, prepare a brainstorm for `my-feature` with a flowchart and a draft plan with at least one open ticket. Start the `--serve` command above, copy its printed URL into `URL` in another terminal, and open it in a browser:
 
@@ -154,3 +150,7 @@ curl -i "$URL"state.json
 2. Submit a question and a diagram request from the page. Run `--asks "$LIVE"`, then `--answer "$LIVE" N "Answer from Codex"` for the question. Prepare `proposal.json` from the request's graph or another valid graph, run `--answer-graph "$LIVE" N proposal.json`, then preview and explicitly save it in the browser. Run `--apply "$LIVE" 1 VERSION` only when you intend to update the brainstorm.
 3. In draft Plan, change a setting and press **Approve**. Run `--asks "$LIVE"` and `--picks "$LIVE"`; confirm the validated draft file changes and that the agent handles plan approval under the normal approval rules.
 4. With the same URL open, update a ticket status through the normal workflow and observe the Build tab refresh within five seconds. Repeat for completion. Stop the server with Ctrl-C, restart with port 0, open the newly printed URL, and confirm saved state survived.
+
+## What has not been tried yet
+
+The guided flow's stops and the Setup and Plan steps' choices have not had a field run yet. The live page's loop (a person saves, the session wakes, answers and publishes again) has only run against a stand-in in tests. If you try either, [docs/field-run.md](field-run.md) says what to send back.

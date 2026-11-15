@@ -76,7 +76,9 @@ feature-flow install --user          # once, for every repo (Claude Code; add --
 | Costly to get wrong: full checks and review per ticket | `/feature-flow csv-export careful` | `$feature-flow csv-export careful` |
 | Another agent drives the session | `/feature-flow csv-export agent` | `$feature-flow csv-export agent` |
 
-The same command plans when `plans/csv-export/` does not exist yet and builds when it does. After your second yes it commits the plan and goes straight on to building it; say so if you want it to stop after planning. The `feature-flow` command on your PATH also has `status`, `view`, `report`, `eval`, `reset`, `import` and `uninstall` ([all of them](docs/commands-and-settings.md)).
+The same command plans when `plans/csv-export/` does not exist yet and builds when it does. After your second yes it commits the plan and goes straight on to building it; say so if you want it to stop after planning. The `feature-flow` command on your PATH also has `status`, `view`, `report`, `eval`, `doctor`, `resume`, `reset`, `import` and `uninstall` ([all of them](docs/commands-and-settings.md)).
+
+**When a run stops.** `feature-flow doctor csv-export` says where the run stands and the safe next command, and changes nothing. After an upgrade in the middle of a ticket, `feature-flow resume csv-export --dry-run` shows what carrying on would do; [docs/speed.md](docs/speed.md#when-a-run-stops) has every case.
 
 ## What a run looks like
 
@@ -132,6 +134,7 @@ Pick one in the command (`/feature-flow csv-export careful`) or on the plan's ye
 | Extra | What it does |
 |---|---|
 | [Brainstorm](docs/brainstorm.md) | weighs two or three ways to build it, on a review page with diagrams you can edit and share |
+| [Local live page](docs/brainstorm.md#local-live-page-with-codex) | the same live page without Claude artifacts: `feature-flow brainstorm-page csv-export --serve <dir> --port 0` serves it on your machine, for Codex or any agent |
 | [Acceptance tests](docs/helpers.md#acceptance-tests-the-tester) | a tester writes tests from the spec before any code; builders cannot change them |
 | [Ask the architect, designer or PO](docs/helpers.md#questions-for-the-architect-designer-or-product-owner) | agents answer design and product questions before they reach you |
 | [Read-ahead helpers](docs/helpers.md#scouts) | cheap agents read the code and the web ahead of each step; codeintel can join them |
@@ -141,6 +144,7 @@ Pick one in the command (`/feature-flow csv-export careful`) or on the plan's ye
 | [Graph view](docs/how-it-works.md#see-the-graph) | an animated page of the tickets, with a replay of the run |
 | [Run record](docs/field-run.md#recording-a-run-eval) | `eval.json`: cost, time, and what each check caught |
 | [Long features](docs/speed.md#long-features-and-handoff) | moves to a fresh session every few tickets and picks up where it stopped |
+| [Recovering a stopped run](docs/speed.md#when-a-run-stops) | `doctor` names the safe next step; `resume` carries on after an upgrade or a reset; a plan repair is checked against the plan it started from |
 
 ## Limits and status
 
@@ -168,7 +172,3 @@ The full list is in [docs/README.md](docs/README.md).
 ## Contributing and license
 
 The tests are offline and call no model: `bash tests/run.sh` and `python3 -m unittest discover -s tests/py`. [docs/contributing.md](docs/contributing.md) has the rest, and how a release reaches PyPI. MIT licensed, see `LICENSE`.
-
-### Local live page for Codex
-
-Run `python3 -m feature_flow brainstorm-page FEATURE --serve .feature-flow/state/FEATURE-live --port 0 --agent-label Codex` from the repo and open the printed loopback URL. The page follows brainstorm, draft and build status; its server must remain running. The agent checks requests explicitly with `--asks`, answers with `--answer` or `--answer-graph`, and processes approved picks with `--picks`. See [the local workflow and manual smoke run](docs/brainstorm.md#local-live-page-with-codex). Claude artifact publishing and plain static pages remain available.
