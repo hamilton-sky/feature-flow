@@ -9,3 +9,18 @@ feature-flow is a small, standard-library Python project with one maintainer. Is
 - The page is a view over the files ([docs/source-of-truth.md](docs/source-of-truth.md)): a page feature must not keep anything the session cannot write into a plan or brainstorm file through a named command.
 - Keep to what a bug or an observed run shows. A new option multiplies the combinations the tests have to cover (`tests/py/test_mode_matrix.py`).
 - Describe the change in the pull request as before and after, in plain language.
+
+## Where code lives
+
+`feature_flow/` holds the four entry modules at its top (`__init__.py`, `__main__.py`, `command.py` for the `feature-flow` command, `cli.py` for `scripts/flow.py`) and six folders, top to bottom:
+
+| Folder | Holds |
+|---|---|
+| `commands/` | one module per user command: `flow_status` (the `flow-status.py` dispatcher), `doctor`, `report`, `evaluate`, `importer`, `fixer`, `clean`, `install`, `uninstall`, `config`, `released` |
+| `pages/` | the HTML pages: `view`, `flow_page`, `flow_plan`, `brainstorm_page`, `studio` (finds Forkboard) |
+| `conductor/` | the run's state machine and its helpers: phases, schedulers, policy, `lanes`, `scouts`, `prompts`, `codehash`, `codeintel` |
+| `verify/` | the checks that judge a ticket: `gate`, `floorguard`, `proof`, `checks` |
+| `plan/` | reading and checking plan files, no processes: `tickets`, `status` (the graph reader), `lint`, `modes`, `builders`, `brainstorm_mode`, `repaircheck`, `reality` |
+| `infra/` | leaves: `git`, `state`, `proc`, `suggest`, `plan_lock` |
+
+A module may import its own folder or any folder below it, never one above, and `infra/` imports nothing else from `feature_flow`. `tests/py/test_layout.py` checks this with every import, including those inside functions, and also checks for import cycles, that every folder is in `pyproject.toml`'s `packages`, and the line limits. A new module goes in the folder whose job it does; a new folder needs a line in `pyproject.toml`.
