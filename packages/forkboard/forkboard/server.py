@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import socket
+import socketserver
 from contextlib import nullcontext
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -12,14 +13,16 @@ from . import storage
 
 class ExclusiveServer(ThreadingHTTPServer):
     """A busy port fails instead of attaching. On Windows SO_REUSEADDR lets a second socket bind a port that is in
-    use, so there the server asks for the port exclusively instead."""
+    use, so there the server asks for the port exclusively instead. It never looks its own name up: HTTPServer's
+    getfqdn('127.0.0.1') is a reverse DNS lookup that can take 30 seconds on macOS, and the name is not used."""
     allow_reuse_address = os.name != 'nt'
     allow_reuse_port = False
 
     def server_bind(self):
         if os.name == 'nt' and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        super().server_bind()
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 def create(folder, port=0, refresh=None, prepare=None, guard=None):
