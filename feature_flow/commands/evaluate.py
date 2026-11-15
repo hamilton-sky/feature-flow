@@ -5,7 +5,7 @@ Reads the run log and state in .feature-flow/state/, the plan's tickets, and, wh
 Claude Code session transcripts of this repo (for tokens). Writes <out>/eval.json, and the first time
 <out>/eval-verdict.md, a short form you fill in: was the plan right, what did you fix by hand, and was
 each catch real or a false alarm. Run it again after filling the form and eval.json carries your answers.
-When the agents asked codeintel (feature_flow/codeintel.py), the record counts their queries and what they said
+When the agents asked codeintel (feature_flow/conductor/codeintel.py), the record counts their queries and what they said
 of each answer, and the form asks whether it helped.
 --later also looks at the commits made after the run for fixes and reverts on the files each ticket
 touched: run it a week or two after the feature is done. <out> is plans/<feature>/ unless --out is given,
@@ -20,7 +20,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from feature_flow import __version__, report
+from feature_flow import __version__
+from feature_flow.commands import report
 from feature_flow.conductor import codeintel, lanes
 from feature_flow.plan import brainstorm_mode, tickets
 from feature_flow.infra import git, state, suggest

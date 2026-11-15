@@ -12,7 +12,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import flow_plan  # the modules under test, from this checkout
+from feature_flow.pages import flow_plan  # the modules under test, from this checkout
 from feature_flow.conductor import prompts
 from feature_flow.plan import status
 from feature_flow.plan import builders

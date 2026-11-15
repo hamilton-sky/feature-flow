@@ -12,7 +12,8 @@ from unittest import mock
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import command, config  # the package under test, from this checkout
+from feature_flow import command  # the package under test, from this checkout
+from feature_flow.commands import config
 
 
 def run(argv, environ):

@@ -6,7 +6,7 @@ import unittest
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import fixer  # the package under test, from this checkout
+from feature_flow.commands import fixer  # the package under test, from this checkout
 from feature_flow.commands import flow_status
 from feature_flow.plan import status
 

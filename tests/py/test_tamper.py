@@ -7,7 +7,7 @@ import helpers
 from helpers import Repo
 
 T1 = "plans/f/tasks/01-a.md"
-EDITS = ("feature_flow/floorguard.py", "scripts/flow.py")
+EDITS = ("feature_flow/verify/floorguard.py", "scripts/flow.py")
 
 
 class Tamper:
@@ -33,7 +33,7 @@ class Tamper:
         pass
 
     def edited(self):
-        return (self.prefix + "feature_flow/floorguard.py", "scripts/flow.py")
+        return (self.prefix + "feature_flow/verify/floorguard.py", "scripts/flow.py")
 
     def begin(self):
         rc, out = self.repo.flow("start")

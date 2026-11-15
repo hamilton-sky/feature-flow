@@ -2,9 +2,9 @@
 
 The layers, top to bottom: entry (command, cli, __main__) > commands > pages > conductor > verify > plan > infra.
 A module may import its own layer or any layer below it, never one above; infra imports only infra. A module's
-layer is its folder (feature_flow/plan/x.py is plan); a module still at the top of the package has its layer in
-FLAT, the folder it is going to. UPWARD lists the upward imports that are allowed today, and the test fails when
-one of them is gone, so the list only shrinks. Every import counts, including one inside a function.
+layer is its folder (feature_flow/plan/x.py is plan); only the entry modules sit at the top of the package.
+UPWARD lists the upward imports that are allowed, and the test fails when one of them is gone, so the list only
+shrinks. Every import counts, including one inside a function.
 
 It also checks that there is no import cycle between modules at module level, that every package folder is listed
 in pyproject.toml, that every module parses as Python 3.9, that no module grows past its line limit, and that the
@@ -22,15 +22,7 @@ ORDER = ("infra", "plan", "verify", "conductor", "pages", "commands", "entry")
 RANK = {name: rank for rank, name in enumerate(ORDER)}
 ENTRY = {"__init__", "__main__", "command", "cli"}
 
-# modules still at the top of feature_flow/, by the folder they move to
-FLAT = {
-    "view": "pages", "flow_page": "pages", "flow_plan": "pages", "brainstorm_page": "pages", "studio": "pages",
-    "doctor": "commands", "report": "commands", "evaluate": "commands", "importer": "commands",
-    "fixer": "commands", "clean": "commands", "install": "commands", "uninstall": "commands",
-    "released": "commands", "config": "commands",
-}
-
-# the upward imports allowed today, (importer, imported); each move empties some of them
+# the upward imports allowed, (importer, imported)
 UPWARD = {
     ("feature_flow.plan.status", "feature_flow.conductor.lanes"),  # --width, lazily
 }
@@ -64,9 +56,7 @@ def layer(name):
         return "entry"
     if len(parts) > 1 or parts[0] in RANK:
         return parts[0]
-    if parts[0] in ENTRY:
-        return "entry"
-    return FLAT.get(parts[0])
+    return "entry" if parts[0] in ENTRY else None
 
 
 def imports(name, path, known, top_only=False):
@@ -113,8 +103,7 @@ class Layout(unittest.TestCase):
 
     def test_every_module_has_a_layer(self):
         missing = sorted(name for name in self.modules if layer(name) not in RANK)
-        self.assertEqual(missing, [], "add these to FLAT in tests/py/test_layout.py, or move them into a layer "
-                                      "folder: %s" % missing)
+        self.assertEqual(missing, [], "move these into a layer folder: %s" % missing)
 
     def test_no_import_points_up_a_layer(self):
         up = set()

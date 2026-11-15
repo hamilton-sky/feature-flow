@@ -148,7 +148,7 @@ def folders(top, feature, environ=None):
 def document(base, text, environ=None, top=None, feature=None, approved=None):
     """The brainstorm page's document (brainstorm_page.document) as the guided flow's page: the Style and Team
     sections and the five steps, with each of the brainstorm's sections under Style or Options, and once there is a
-    plan (a draft, then the accepted one) its Plan and Build steps (feature_flow/flow_plan.py). approved is the set
+    plan (a draft, then the accepted one) its Plan and Build steps (feature_flow/pages/flow_plan.py). approved is the set
     of steps the live page's state says the user approved, or None for a page that is not live (then Style and Team
     are open together, and the user answers in the chat)."""
     mode, levels, helpers, _ = setup_of(text, environ)
@@ -188,7 +188,7 @@ def document(base, text, environ=None, top=None, feature=None, approved=None):
     extra = []
     draft, plan = folders(top, feature, environ) if top and feature else (None, None)
     if plan or draft:
-        from feature_flow import flow_plan
+        from feature_flow.pages import flow_plan
         said, extra = flow_plan.sections(plan or draft, draft=plan is None, environ=environ)
         steps[3].update(state="done" if plan else "current", summary=("approved: " if plan else "") + said)
         if plan:

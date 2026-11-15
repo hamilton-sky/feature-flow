@@ -351,7 +351,7 @@ done
 if [ -z "$bad_names" ]; then ok "frontmatter is the name, then a quoted description, in every skill"; else bad "frontmatter is the name, then a quoted description, in every skill" "$bad_names"; fi
 if [ "$(sed '1,/^---$/d' "$ROOT/skills/architect-review/SKILL.md" | sed '1,/^---$/d')" = "$(sed '1,/^---$/d' "$CS/architect-review/SKILL.md" | sed '1,/^---$/d')" ]; then ok "the other skills keep their body word for word"; else bad "the other skills keep their body word for word"; fi
 printf -- '---\nname: q\ndescription: Says "hi" \\ there: ok\nargument-hint: "[a]"\n---\n\nbody\n' > "$C/q.md"
-out="$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from feature_flow.install import codex_header; sys.stdout.buffer.write(codex_header(open(sys.argv[2], "rb").read()))' "$ROOT" "$C/q.md")"
+out="$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); from feature_flow.commands.install import codex_header; sys.stdout.buffer.write(codex_header(open(sys.argv[2], "rb").read()))' "$ROOT" "$C/q.md")"
 expect_has "a description with quotes and a backslash is escaped" 'description: "Says \"hi\" \\ there: ok"' "$out"
 expect_lacks "and the other header keys are dropped" "argument-hint" "$out"
 if command -v python3 > /dev/null 2>&1 && python3 -c 'import yaml' > /dev/null 2>&1; then

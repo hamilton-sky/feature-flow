@@ -3,7 +3,7 @@
 usage: feature-flow report <feature>
 Reads .feature-flow/state/flow-<feature>.log (one `time,ticket,EVENT` line per step, the time in UTC) and prints, per
 ticket, how many times it was built and reviewed and which checks failed, then the run's STOPs, resets
-and handoffs, then plan vs reality (feature_flow/reality.py): what each ticket planned to change next to what its
+and handoffs, then plan vs reality (feature_flow/plan/reality.py): what each ticket planned to change next to what its
 build changed. Read-only. It cannot see a trust-runner STOP (the runner stops before the conductor
 logs anything): the session's own output shows those, so count them by hand.
 """

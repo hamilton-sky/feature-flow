@@ -1,4 +1,4 @@
-"""The brainstorm's review page: feature-flow's side of it (feature_flow/brainstorm_page.py).
+"""The brainstorm's review page: feature-flow's side of it (feature_flow/pages/brainstorm_page.py).
 
 Forkboard (packages/forkboard/) makes the page and has its own tests; these check what feature-flow does: read the
 brainstorm's conventions into a review document, pick the style, find Forkboard, and write a version back.
@@ -16,8 +16,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import brainstorm_page as page  # the module under test, from this checkout
-from feature_flow import studio
+from feature_flow.pages import brainstorm_page as page  # the module under test, from this checkout
+from feature_flow.pages import studio
 
 BRAINSTORM = """# Brainstorm: csv
 

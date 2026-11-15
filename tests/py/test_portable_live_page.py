@@ -9,7 +9,7 @@ from unittest import mock
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import brainstorm_page
+from feature_flow.pages import brainstorm_page
 
 
 class PortablePage(unittest.TestCase):
@@ -31,7 +31,7 @@ class PortablePage(unittest.TestCase):
 
     def test_plan_picks_and_accepted_freeze_without_brainstorm(self):
         import json
-        from feature_flow import studio
+        from feature_flow.pages import studio
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)
             draft = root / '.feature-flow/state/draft/demo'
@@ -63,7 +63,7 @@ class PortablePage(unittest.TestCase):
                 self.assertIn('no brainstorm source', err.getvalue())
 
     def test_answer_preserves_latest_state_without_source(self):
-        from feature_flow import studio
+        from feature_flow.pages import studio
         with tempfile.TemporaryDirectory() as root:
             folder = Path(root) / 'live'
             folder.mkdir()
@@ -81,14 +81,14 @@ class PortablePage(unittest.TestCase):
     def test_subprocess_answer_and_regeneration_share_lock(self):
         import subprocess
         import sys
-        from feature_flow import studio
+        from feature_flow.pages import studio
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)
             source = root / 'plans/demo/brainstorm.md'
             source.parent.mkdir(parents=True)
             source.write_text('# Demo\n\n## Idea\n\nA review.\n')
             folder = root / 'live'
-            env = dict(os.environ, PYTHONPATH=str(Path(brainstorm_page.__file__).resolve().parent.parent))
+            env = dict(os.environ, PYTHONPATH=str(helpers.ROOT))
             cmd = [sys.executable, '-m', 'feature_flow', 'brainstorm-page', 'demo']
             subprocess.run(cmd + ['--live', str(folder)], cwd=root, env=env, check=True, capture_output=True)
             fb = studio.load()
@@ -107,7 +107,7 @@ class PortablePage(unittest.TestCase):
             self.assertEqual([a['answer'] for a in state['asks']], ['Answer %d' % i for i in range(1, 9)])
 
     def test_refresh_tracks_each_phase_with_and_without_brainstorm(self):
-        from feature_flow import studio
+        from feature_flow.pages import studio
         for with_brainstorm in (False, True):
             with self.subTest(with_brainstorm=with_brainstorm), tempfile.TemporaryDirectory() as root:
                 root = Path(root)
@@ -150,7 +150,7 @@ class PortablePage(unittest.TestCase):
         import urllib.error
         import urllib.request
         import importlib
-        from feature_flow import studio
+        from feature_flow.pages import studio
         fb = studio.load()
         importlib.import_module('forkboard.server')
         with tempfile.TemporaryDirectory() as tmp:
@@ -209,7 +209,7 @@ class PortablePage(unittest.TestCase):
         import urllib.error
         import urllib.request
         from types import SimpleNamespace
-        from feature_flow import studio
+        from feature_flow.pages import studio
         from feature_flow.conductor import planning
         fb = studio.load()
         importlib.import_module('forkboard.server')
@@ -284,7 +284,7 @@ class PortablePage(unittest.TestCase):
                 self.assertEqual(brainstorm_page.main(['demo', '--serve', str(folder)], io.StringIO(), io.StringIO()), 0)
 
     def test_invalid_plan_pick_does_not_write(self):
-        from feature_flow import studio
+        from feature_flow.pages import studio
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)
             draft = root / '.feature-flow/state/draft/demo'
@@ -308,7 +308,7 @@ class PortablePage(unittest.TestCase):
     def test_picks_wait_for_acceptance_then_leave_both_plans_unchanged(self):
         import shutil
         import threading
-        from feature_flow import studio
+        from feature_flow.pages import studio
         from feature_flow.infra import plan_lock
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

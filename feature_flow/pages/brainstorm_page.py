@@ -4,13 +4,13 @@ usage: feature-flow brainstorm-page <feature> [--style NAME] [--fragment] [--out
        feature-flow brainstorm-page <feature> --live DIR | --asks STATE | --answer STATE <n> <text> | --apply STATE <figure> <version> | --picks STATE
        feature-flow brainstorm-page <feature> --serve DIR [--port N] [--agent-label NAME] | --answer-graph STATE <n> <graph.json>
 Reads plans/<feature>/brainstorm.md, or .feature-flow/state/brainstorm-<feature>.md before the plan exists, turns
-it into a review document and has Forkboard (packages/forkboard/, found by feature_flow/studio.py) make the page.
+it into a review document and has Forkboard (packages/forkboard/, found by feature_flow/pages/studio.py) make the page.
 The page goes beside the brainstorm (same name, .html). The look is a Forkboard theme: --style, else the brainstorm's
 `Style:` line, else FLOW_STYLE, else route. --fragment leaves out the doctype, html, head and body tags, for a host
 that adds its own (an Artifact). --live writes DIR/index.html and DIR/state.json to publish as an artifact that
 saves itself; --asks, --answer, --apply and --picks are the session's side of it, and --apply and --picks are the
 only parts that write the brainstorm (--picks only its Type:, Scouts: and Helpers: lines): Forkboard never touches it.
-The page is the guided flow's one page (feature_flow/flow_page.py): Style, Team, Options, Plan and Build, as tabs.
+The page is the guided flow's one page (feature_flow/pages/flow_page.py): Style, Team, Options, Plan and Build, as tabs.
 """
 
 import os
@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-from feature_flow import flow_page, studio
+from feature_flow.pages import flow_page, studio
 from feature_flow.plan import brainstorm_mode
 from feature_flow.infra import git, plan_lock
 
@@ -315,7 +315,7 @@ def live_tool(fb, tool, path, text, state_path, extra, out, err, plans=(None, No
                     return 0
                 if not draft:
                     raise ValueError("there is no draft plan yet for the Plan step's picks")
-                from feature_flow import flow_plan
+                from feature_flow.pages import flow_plan
                 said = flow_plan.apply_picks(draft, plan_picks)
                 out.write("wrote %s into the draft %s\n" % ("; ".join(said), draft.as_posix()))
         else:

@@ -13,7 +13,7 @@ from helpers import ROOT, Repo
 
 import sys
 sys.path.insert(0, str(ROOT))
-from feature_flow import evaluate, report  # the modules under test, from this checkout
+from feature_flow.commands import evaluate, report  # the modules under test, from this checkout
 from feature_flow.verify import floorguard, gate
 from feature_flow.infra import state
 from feature_flow.conductor.policy import limits

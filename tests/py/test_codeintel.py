@@ -11,7 +11,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import evaluate  # the package under test, from this checkout
+from feature_flow.commands import evaluate  # the package under test, from this checkout
 from feature_flow.conductor import codeintel, prompts, scouts
 from feature_flow.infra import state
 

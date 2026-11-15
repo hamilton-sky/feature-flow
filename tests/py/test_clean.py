@@ -1,4 +1,4 @@
-"""flow-status.py <feature> --clean (feature_flow/clean.py): the brainstorm's spent files go once the plan exists;
+"""flow-status.py <feature> --clean (feature_flow/commands/clean.py): the brainstorm's spent files go once the plan exists;
 the final page and the brainstorm stay, and without --yes it only lists."""
 
 import io
@@ -11,7 +11,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import clean  # the module under test, from this checkout
+from feature_flow.commands import clean  # the module under test, from this checkout
 
 
 class Clean(unittest.TestCase):

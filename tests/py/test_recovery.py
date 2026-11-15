@@ -26,7 +26,7 @@ import test_trust_runner
 from test_proof import T1
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import evaluate  # the package under test, from this checkout
+from feature_flow.commands import evaluate  # the package under test, from this checkout
 
 STATE = test_trust_runner.STATE
 LIST = ".feature-flow/state/flow-f.trust"

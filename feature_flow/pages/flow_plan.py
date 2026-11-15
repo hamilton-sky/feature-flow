@@ -1,4 +1,4 @@
-"""The Plan and Build steps of the guided flow's page (feature_flow/flow_page.py), and the plan-yes card's choices.
+"""The Plan and Build steps of the guided flow's page (feature_flow/pages/flow_page.py), and the plan-yes card's choices.
 
 The Plan step shows the drafted plan: its tickets and their order, the build flow (each ticket's level and review),
 how many tickets can build at once (lanes.plan_width) and the checks every ticket must pass. Its choices are the

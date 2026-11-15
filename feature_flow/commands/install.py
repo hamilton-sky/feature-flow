@@ -22,7 +22,7 @@ import subprocess
 import sys
 
 import feature_flow
-from feature_flow.released import RELEASED
+from feature_flow.commands.released import RELEASED
 
 # the help text
 USAGE = """\

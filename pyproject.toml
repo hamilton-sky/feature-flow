@@ -44,6 +44,7 @@ packages = [
     "feature_flow.conductor.phases",
     "feature_flow.conductor.schedulers",
     "feature_flow.infra",
+    "feature_flow.pages",
     "feature_flow.plan",
     "feature_flow.verify",
     "feature_flow._forkboard",

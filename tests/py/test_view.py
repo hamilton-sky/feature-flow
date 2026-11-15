@@ -10,7 +10,7 @@ from unittest import mock
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import view  # the package under test, from this checkout
+from feature_flow.pages import view  # the package under test, from this checkout
 
 SCRIPTS = str(helpers.ROOT / "scripts")
 

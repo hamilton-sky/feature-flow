@@ -1,4 +1,4 @@
-"""The guided flow's one page (feature_flow/flow_page.py): the brainstorm page as tabs, Style with the type and the
+"""The guided flow's one page (feature_flow/pages/flow_page.py): the brainstorm page as tabs, Style with the type and the
 scout levels, Team with the helpers, each step opened by the Approve before it, and the page's picks written back
 into the brainstorm's header lines."""
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import brainstorm_page, flow_page, studio  # the modules under test, from this checkout
+from feature_flow.pages import brainstorm_page, flow_page, studio  # the modules under test, from this checkout
 from test_brainstorm_page import BRAINSTORM, SKETCH
 
 fb = studio.load()

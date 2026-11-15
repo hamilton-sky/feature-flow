@@ -71,7 +71,7 @@ class Footprint:
     def run(self, c):
         patterns = lanes.touches(c.ticket_at_base())
         changed = git.diff_names(c.get("base"), "HEAD", c.plan.as_posix(), cwd=_folder(c))
-        c.log("CHANGED %s" % json.dumps(sorted(changed)[:200]))  # plan vs reality (feature_flow/reality.py) reads it
+        c.log("CHANGED %s" % json.dumps(sorted(changed)[:200]))  # plan vs reality (feature_flow/plan/reality.py) reads it
         if patterns is None:
             return None, "", []
         outside = [p for p in changed if not tickets.matches_sensitive(p, patterns)]

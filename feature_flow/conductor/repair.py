@@ -1,6 +1,6 @@
 """Repair mode: a plan repair measured against the plan it started from (its baseline: the plan folder at repair_sha,
 whose tree replan-prompt recorded as repair_plan), the `repair-check` command, and consults on the existing plan while a
-repair is pending. The comparison itself is feature_flow/repaircheck.py."""
+repair is pending. The comparison itself is feature_flow/plan/repaircheck.py."""
 
 import os
 import re
