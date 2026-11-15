@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.45: the mode on the start card
+
+| Version | Added |
+|---|---|
+| 0.45.0 | **The mode on the start card** ([docs](modes.md#on-the-guided-page)): a brainstorm's Style tab starts with a Mode row, `feature` or `careful`, how the plan is built once the brainstorm ends, with the session's guess picked. It writes the brainstorm's new `Mode:` header line, which the brief and then `commands.md` take. A `careful` brainstorm allows the careful helper limits (3 consultants, 3 lenses), unless `FLOW_MODE` names another mode. `fix` and `small` still never open a page. |
+
 ## 0.44: feature-flow config
 
 | Version | Added |

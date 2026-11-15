@@ -6,7 +6,7 @@ The conductor commands below are `python3 scripts/flow.py <feature> <command>`. 
 
 ## Step 0: Brainstorm, when it helps
 
-When the user asked for `brainstorm` or `careful`, or the idea is fuzzy (no bar yet, two real ways to build it, more than two Unsure lines), follow the brainstorm guide ([brainstorm.md](brainstorm.md)) first: it ends with the user's pick and comes back here to write the brief from it. Skip it with `fast`, for an import, and with `auto` when no one can pick.
+When the user asked for `brainstorm` or `careful`, or the idea is fuzzy (no bar yet, two real ways to build it, more than two Unsure lines), follow the brainstorm guide ([brainstorm.md](brainstorm.md)) first: it ends with the user's pick and comes back here to write the brief from it, with the brainstorm's `Mode:` header line as the brief's `Mode:`. Skip it with `fast`, for an import, and with `auto` when no one can pick.
 
 ## Step 1: Write the brief
 

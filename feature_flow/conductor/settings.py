@@ -88,6 +88,7 @@ class Settings:
     scout_web: str = "normal"  # the same for the web scouts (flow-web)
     brainstorm_type: str = ""  # the brainstorm's Type: line, "" without one
     brainstorm_helpers: tuple = None  # the helpers its Helpers: line picks; None without one: any, up to the caps
+    brainstorm_run_mode: str = ""  # its Mode: line, how the plan will be built; careful raises the helper limits
 
     @classmethod
     def load(cls, feature, environ=None):
@@ -139,6 +140,7 @@ class Settings:
             scout_web=web,
             brainstorm_type=mode.get("type", ""),
             brainstorm_helpers=mode.get("helpers"),
+            brainstorm_run_mode=mode.get("mode", ""),
         )
 
     def session_limit(self, driver):
