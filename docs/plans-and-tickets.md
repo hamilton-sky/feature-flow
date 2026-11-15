@@ -33,8 +33,8 @@ The lines `commands.md` can hold ([template](../guides/templates/commands.md)); 
 | `Acceptance:` | no | turns on the [tester](helpers.md#acceptance-tests-the-tester); runs only `plans/<feature>/acceptance/` |
 | `Sensitive:` | no | paths that make any ticket touching them level 3 |
 | `Shared:`, `Setup:` | no | for [lanes](speed.md#tickets-side-by-side-lanes): paths that keep a ticket alone, and what a fresh worktree needs |
-| `Profile:` | no | `careful`, `standard`, `normal` or `fast` for this plan ([profiles](speed.md#profiles)); a new plan's template says `standard` |
-| `Gate:` | no | when the full gate and the review run: `each`, `batch N` or `end` ([checkpoints](speed.md#when-the-gate-runs-checkpoints)); without it the profile picks; `off unsafe` turns the gate off |
+| `Mode:` | no | `fix`, `small`, `feature`, `careful` or `explore` for this plan ([modes](modes.md)); a new plan's template says `feature`. An old plan's `Profile:` line is still read |
+| `Gate:` | no | when the full gate and the review run: `each`, `batch N` or `end` ([checkpoints](speed.md#when-the-gate-runs-checkpoints)); without it the mode picks; `off unsafe` turns the gate off |
 
 One markdown file per ticket in `plans/<feature>/tasks/NN-slug.md`:
 

@@ -55,7 +55,7 @@ class FixPlanTests(unittest.TestCase):
         self.assertIn("range(len(rows) - 1)", t)
         spec = self.plan("fix-last-row", "spec.md")
         self.assertIn("1 failed: expected 3 lines, got 2", spec)
-        self.assertIn("Profile: `normal`", self.plan("fix-last-row", "commands.md"))
+        self.assertIn("Mode: `fix`", self.plan("fix-last-row", "commands.md"))
         self.assertIn("no other plan has commands", out)
 
     def test_fix_carries_the_newest_plans_commands_but_not_its_choices(self):
@@ -66,7 +66,7 @@ class FixPlanTests(unittest.TestCase):
         code, out, err = self.run_fix(str(self.diag), "fix-last-row")
         self.assertEqual(code, 0, err)
         cmds = self.plan("fix-last-row", "commands.md")
-        for line in ("Build: `make`", "Test: `make test`", "Smoke: `true`", "Profile: `normal`"):
+        for line in ("Build: `make`", "Test: `make test`", "Smoke: `true`", "Mode: `fix`"):
             self.assertIn(line, cmds)
         for word in ("Acceptance:", "fast", "Gate:", "Lint:"):
             self.assertNotIn(word, cmds)

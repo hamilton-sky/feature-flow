@@ -8,9 +8,9 @@ from pathlib import Path
 from feature_flow import git, state, suggest
 from feature_flow.conductor import Conductor, NoPhase, Stop
 from feature_flow.conductor.planning import Planner
-from feature_flow.conductor import repair as run_repair, resume as run_resume
+from feature_flow.conductor import budget as time_budget, repair as run_repair, resume as run_resume
 
-USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] [file] | verdict <file> [lane] | fast on|off\n"
+USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt [lane] [file] | verdict <file> [lane] | fast on|off | mode <mode>\n"
          "       python3 scripts/flow.py <feature> budget [<minutes>|+<minutes>|off] | replan-prompt [repair [<answers>]] | repair-check\n"
          "       python3 scripts/flow.py <feature> scouts [lane] | scout-prompt <k> [lane] | plan-scouts <brief> | plan-scout-prompt <k>\n"
          "       python3 scripts/flow.py <feature> consult-prompt architect|designer|po <question file>\n"
@@ -19,13 +19,14 @@ USAGE = ("usage: python3 scripts/flow.py <feature> start | next [lane] | prompt 
          "       python3 scripts/flow.py <feature> plan-prompt <brief> [findings] | plan-review-prompt | plan-accept")
 COMMANDS = ("start", "next", "prompt", "verdict", "plan-prompt", "plan-review-prompt", "plan-accept", "reset", "resume", "fast", "scouts",
             "scout-prompt", "plan-scouts", "plan-scout-prompt", "consult-prompt", "budget", "replan-prompt",
-            "brainstorm-prompt", "asked", "repair-check")
+            "brainstorm-prompt", "asked", "repair-check", "mode")
 ARGS = {"verdict": (3, 4), "plan-prompt": (3, 4), "reset": (2, 3), "resume": (2, 3, 4, 5, 6, 7), "next": (2, 3), "prompt": (2, 3, 4), "fast": (3,), "scouts": (2, 3), "scout-prompt": (3, 4),
         "plan-scouts": (3,), "plan-scout-prompt": (3,), "consult-prompt": (4,), "brainstorm-prompt": (4,), "asked": (3,), "budget": (2, 3),
-        "replan-prompt": (2, 3, 4)}
+        "replan-prompt": (2, 3, 4), "mode": (3,)}
 WANTS = {"verdict": ("the file the reviewer's whole reply was saved to", "<file> [lane]"),
          "plan-prompt": ("the brief file", "<brief> [findings]"),
          "fast": ("on or off", "on|off"),
+         "mode": ("the mode to switch to", "small|<the plan's mode>"),
          "scout-prompt": ("the scout's number from a SCOUT line", "<k> [lane]"),
          "plan-scouts": ("the brief file", "<brief>"),
          "plan-scout-prompt": ("the scout's number from a SCOUT line", "<k>"),
@@ -33,7 +34,7 @@ WANTS = {"verdict": ("the file the reviewer's whole reply was saved to", "<file>
          "asked": ("the stop", "setup|options|plan"),
          "brainstorm-prompt": ("the helper and the question file",
                                "scout|web|architect|designer|po|skeptic <question file>")}
-RUNNER_ONLY = ("next", "prompt", "verdict", "fast", "scouts", "scout-prompt", "budget", "replan-prompt", "repair-check")
+RUNNER_ONLY = ("next", "prompt", "verdict", "fast", "mode", "scouts", "scout-prompt", "budget", "replan-prompt", "repair-check")
 
 
 def main(argv=None, scripts=None):
@@ -160,6 +161,8 @@ def run(args, scripts, trusted):
             line = conductor.brainstorm_prompt(args[2], args[3])
         elif command == "fast":
             line = conductor.fast_switch(args[2])
+        elif command == "mode":
+            line = time_budget.mode_switch(conductor, args[2])
         elif command == "budget":
             line = conductor.budget_cmd(*args[2:])
         elif command == "repair-check":

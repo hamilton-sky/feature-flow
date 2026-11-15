@@ -6,9 +6,10 @@ next before it judges anything. Also the owner check every command makes, the ha
 import hashlib
 import os
 import re
+import sys
 from pathlib import Path
 
-from feature_flow import checks, floorguard, gate, git, prompts, repaircheck, status, tickets
+from feature_flow import checks, floorguard, gate, git, profiles, prompts, repaircheck, status, tickets
 from feature_flow.conductor import budget, planning, repair
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.settings import MAX_LANES, _env_int, mode_ok
@@ -42,6 +43,10 @@ def before_start(c):
     if owner and os.environ.get("FLOW_TAKEOVER", "0") != "1":
         raise Stop("%s is owned by session %s. if that session is closed or dead, run start with FLOW_TAKEOVER=1"
                    % (c.feature, owner[:8]))
+    for line in profiles.warnings(os.environ, c.settings.filled):  # retired settings set by hand
+        print(line, file=sys.stderr)
+    if c.settings.mode:
+        c.log("MODE-%s" % c.settings.mode.upper())
     busy = c.lane_sched().busy_lanes()
     wanted, auto = lanes_wanted(c, busy)
     mode_ok("lanes_range", lanes=wanted)

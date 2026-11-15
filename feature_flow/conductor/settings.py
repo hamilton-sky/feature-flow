@@ -64,7 +64,8 @@ def _reviewers(environ):
 @dataclass(frozen=True)
 class Settings:
     root: Path
-    profile: str
+    profile: str  # the profile that holds the mode's settings, "" for none
+    mode: str  # fix, small, feature, careful or explore; "" for none (a plan from before modes)
     filled: Tuple[str, ...]  # the keys the profile filled into the environment
     max_retries: int
     max_rounds: int
@@ -94,7 +95,9 @@ class Settings:
         environ = os.environ if environ is None else environ
         root = Path(environ.get("FLOW_DIR") or "plans")
         try:
-            profile = profiles.pick(environ, tickets.commands_value(root / feature / "commands.md", "Profile"))
+            commands = root / feature / "commands.md"
+            run_mode, profile = profiles.resolve(environ, tickets.commands_value(commands, "Mode"),
+                                             tickets.commands_value(commands, "Profile"))
         except profiles.UnknownProfile as err:
             raise Stop(str(err))
         filled = profiles.apply(environ, profile)
@@ -110,6 +113,7 @@ class Settings:
         return cls(
             root=root,
             profile=profile,
+            mode=run_mode,
             filled=tuple(filled),
             max_retries=_env_int("FLOW_MAX_RETRIES", 2, environ),
             max_rounds=_env_int("FLOW_MAX_REVIEW_ROUNDS", 3, environ),

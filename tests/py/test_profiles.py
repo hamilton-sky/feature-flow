@@ -55,6 +55,43 @@ class LivePageDocumentationTests(unittest.TestCase):
                 self.assertIn(phrase, skill, name)
 
 
+class ModeTests(unittest.TestCase):
+    def test_each_mode_stands_on_the_profile_it_replaces(self):
+        # the modes change names, not behaviour: each one fills exactly what its old profile filled
+        self.assertEqual(profiles.MODES, {"fix": "normal", "small": "fast", "feature": "standard",
+                                          "careful": "careful", "explore": "standard"})
+        for old, mode in (("fast", "small"), ("standard", "feature"), ("careful", "careful")):
+            self.assertEqual(profiles.resolve({}, "", old), (mode, old))
+            self.assertEqual(profiles.resolve({}, mode), (mode, old))
+        self.assertEqual(profiles.resolve({}, "", "normal"), ("", "normal"))
+        self.assertEqual(profiles.resolve({}, "", ""), ("", ""))
+
+    def test_the_order_env_mode_then_env_profile_then_mode_line_then_profile_line(self):
+        self.assertEqual(profiles.resolve({"FLOW_MODE": "small", "FLOW_PROFILE": "careful"}, "careful", "standard"),
+                         ("small", "fast"))
+        self.assertEqual(profiles.resolve({"FLOW_PROFILE": "careful"}, "small", "standard"), ("careful", "careful"))
+        self.assertEqual(profiles.resolve({}, "`Small`", "careful"), ("small", "fast"))
+
+    def test_an_unknown_mode_names_the_five(self):
+        with self.assertRaises(profiles.UnknownProfile) as caught:
+            profiles.resolve({"FLOW_MODE": "turbo"})
+        self.assertEqual(str(caught.exception), "the mode must be fix, small, feature, careful, explore, not turbo")
+
+    def test_retired_settings_set_by_hand_warn_and_filled_ones_do_not(self):
+        env = {"FLOW_REVIEWERS": "1", "FLOW_ROUND_REVIEW": "on", "FLOW_GATE": "off", "FLOW_PROFILE": "fast"}
+        lines = profiles.warnings(env, ["FLOW_ROUND_REVIEW"])
+        self.assertEqual(len(lines), 3, lines)
+        self.assertTrue(lines[0].startswith("feature-flow: FLOW_REVIEWERS is set; from 0.44.0 only the mode sets it"))
+        self.assertIn("FLOW_PROFILE is now FLOW_MODE", lines[1])
+        self.assertIn("`Gate: off unsafe`", lines[2])
+        self.assertEqual(profiles.warnings({"FLOW_MODE": "small", "FLOW_FAST": "1"}, ["FLOW_FAST"]), [])
+
+    def test_env_profile_reads_flow_mode_too(self):
+        self.assertEqual(profiles.env_profile({"FLOW_MODE": "careful"}), "careful")
+        self.assertEqual(profiles.env_profile({"FLOW_PROFILE": "careful"}), "careful")
+        self.assertEqual(profiles.env_profile({"FLOW_MODE": "turbo"}), "")
+
+
 class ProfileDriveTests(unittest.TestCase):
     def setup(self, profile_line="", **env):
         repo = Repo(tickets=(("01-a", "A", "—"),))
@@ -78,10 +115,23 @@ class ProfileDriveTests(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertNotEqual(repo.state().get("fast"), "1")
 
+    def test_the_plans_mode_is_logged_and_sets_its_profile(self):
+        repo, (rc, out) = self.setup("Mode: `small`\n")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("MODE-SMALL", repo.log())
+        self.assertIn("PROFILE-FAST", repo.log())
+        self.assertEqual(repo.state().get("fast"), "1")
+
+    def test_flow_mode_wins_over_the_plans_mode(self):
+        repo, (rc, out) = self.setup("Mode: `small`\n", FLOW_MODE="careful")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("MODE-CAREFUL", repo.log())
+        self.assertNotEqual(repo.state().get("fast"), "1")
+
     def test_an_unknown_profile_stops_the_run(self):
         repo, (rc, out) = self.setup("", FLOW_PROFILE="turbo")
         self.assertEqual(rc, 1)
-        self.assertIn("STOP the profile must be careful, fast, normal, standard, not turbo", out)
+        self.assertIn("STOP the mode must be fix, small, feature, careful, explore, not turbo", out)
 
 
 if __name__ == "__main__":

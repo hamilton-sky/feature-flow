@@ -12,7 +12,7 @@ move on one Approve at a time. The session publishes the page to the same link a
 
 import os
 
-from feature_flow import brainstorm_mode
+from feature_flow import brainstorm_mode, profiles
 
 STEPS = ("Style", "Team", "Options", "Plan", "Build")
 STYLE_SECTIONS = ("idea", "sketch")  # the brainstorm's sections that belong to Style; the rest are Options
@@ -48,7 +48,7 @@ def is_plan_key(key):  # flow_plan.is_plan_key: builder-<NN> is the Plan step's 
 
 def profile(environ=None):
     environ = os.environ if environ is None else environ
-    return "careful" if environ.get("FLOW_PROFILE", "").strip().lower() == "careful" else "normal"
+    return "careful" if profiles.env_profile(environ) == "careful" else "normal"
 
 
 def setup_of(text, environ=None):
