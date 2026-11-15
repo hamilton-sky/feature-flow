@@ -54,9 +54,6 @@ def run(argv, out, err, cwd=None):
         err.write(USAGE + "\n")
         return 2
     root = _env("FLOW_DIR", "plans")
-    if mode == "--doctor":
-        from feature_flow import doctor
-        return doctor.main([feature] + list(argv[2:]), out, err)
     folder = "%s/%s/%s" % (root, feature, _env("FLOW_TICKETS", "tasks"))
     if not os.path.isdir(_under(cwd, folder)):
         err.write("no ticket folder: %s\n" % folder)
@@ -378,4 +375,7 @@ def main(argv=None):
         from feature_flow import fixer
         return fixer.main(argv[2:] + argv[:1])
     sys.stdout.flush()
+    if len(argv) > 1 and argv[0] != "" and argv[1] == "--doctor":  # why a run stopped, feature_flow/doctor.py
+        from feature_flow import doctor
+        return doctor.main(argv[:1] + argv[2:], _Bytes(sys.stdout.buffer), _Bytes(sys.stderr.buffer))
     return run(argv, _Bytes(sys.stdout.buffer), _Bytes(sys.stderr.buffer))

@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 
+import feature_flow
 from feature_flow.released import RELEASED
 
 # the help text
@@ -153,7 +154,7 @@ def _files(src, skip_python=True):
 
 def source_root():
     """Where the skills, roles, guides and scripts are: the copy inside an installed package, else the checkout."""
-    package = os.path.dirname(os.path.abspath(__file__))
+    package = os.path.dirname(os.path.abspath(feature_flow.__file__))
     bundle = os.path.join(package, BUNDLE)
     return bundle if os.path.isdir(bundle) else os.path.dirname(package)
 
@@ -203,7 +204,7 @@ class Installer:
         # the Python package: the checkout's, else (inside an installed package) this one
         package = here + "/feature_flow"
         if not os.path.isfile(package + "/__init__.py"):
-            package = os.path.dirname(os.path.abspath(__file__))
+            package = os.path.dirname(os.path.abspath(feature_flow.__file__))
         self.package = package
         # Forkboard, the brainstorm's review page: packages/forkboard/ in a checkout; an installed package has it
         # inside already, as feature_flow/_forkboard/, and copies it with the rest

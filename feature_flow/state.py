@@ -112,6 +112,18 @@ def save(path, data, kind=None):
     _remember(kind, out)
 
 
+def parse_log(text):
+    """[(ticket, event, detail)] for each well formed line of a run's log; a bad line is skipped."""
+    rows = []
+    for line in text.splitlines():
+        parts = line.split(",", 2)
+        if len(parts) != 3 or not parts[2].strip():
+            continue
+        event, _, detail = parts[2].strip().partition(" ")
+        rows.append((parts[1].strip(), event, detail.strip()))
+    return rows
+
+
 def log(path, num, event):
     with open(path, "a", encoding="utf-8") as handle:
         handle.write("%s,%s,%s\n" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), num or "-", event))

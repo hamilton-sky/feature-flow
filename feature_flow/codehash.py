@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 
+import feature_flow
 from feature_flow import git, prompts
 
 # feature-flow's own scripts; any other .py file in the same folder is the repo's own code
@@ -12,7 +13,7 @@ SCRIPTS = ("flow.py", "flow-status.py", "gate.py", "floor-guard.py", "flow-view.
 
 
 def _files(scripts):
-    package = Path(__file__).resolve().parent
+    package = Path(feature_flow.__file__).resolve().parent  # the whole package, wherever this module sits
     found = [p for p in package.rglob("*.py") if "__pycache__" not in p.parts]
     folder = Path(scripts).resolve()
     found += [folder / name for name in SCRIPTS if (folder / name).is_file()]

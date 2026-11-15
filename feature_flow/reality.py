@@ -13,13 +13,13 @@ import json
 import os
 from pathlib import Path
 
-from feature_flow import report, state, tickets
+from feature_flow import state, tickets
 
 
 def log_rows(top, feature):
     """The run log's rows for the feature, [] when there is no log yet."""
     text = state.read_text(state.log_path(Path(top) / state.STATE_DIR, feature))
-    return report.parse(text) if text else []
+    return state.parse_log(text) if text else []
 
 
 def collect(plan_folder, rows):

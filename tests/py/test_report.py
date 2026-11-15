@@ -8,7 +8,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import report  # the package under test, from this checkout
+from feature_flow import report, state  # the package under test, from this checkout
 
 LOG = """10:00:00,-,START
 10:00:01,01,BUILD
@@ -31,12 +31,12 @@ garbage line
 
 class ReportTests(unittest.TestCase):
     def test_parse_skips_bad_lines_and_keeps_the_stop_reason(self):
-        rows = report.parse(LOG)
+        rows = state.parse_log(LOG)
         self.assertEqual(len(rows), 15)
         self.assertIn(("01", "STOP", "the gate failed: Test exited 1"), rows)
 
     def test_summary_counts_per_ticket_and_run(self):
-        tickets, run, stops = report.summarize(report.parse(LOG))
+        tickets, run, stops = report.summarize(state.parse_log(LOG))
         self.assertEqual(tickets["01"]["BUILD"], 2)
         self.assertEqual(tickets["01"]["GATE-FAIL"], 1)
         self.assertEqual(tickets["02"]["VERDICT-FAIL"], 1)
@@ -44,7 +44,7 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(stops, [("01", "the gate failed: Test exited 1")])
 
     def test_render_names_the_reworked_ticket_and_the_stop(self):
-        text = report.render("f", report.parse(LOG))
+        text = report.render("f", state.parse_log(LOG))
         self.assertIn("tickets built more than once (reworked): 01", text)
         self.assertIn("STOP at ticket 01: the gate failed: Test exited 1", text)
         self.assertIn("GATE-FAIL x1", text)

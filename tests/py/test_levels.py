@@ -9,7 +9,7 @@ import unittest
 from helpers import ROOT, Repo
 
 sys.path.insert(0, str(ROOT))
-from feature_flow import conductor, report, status, tickets  # the package under test, from this checkout
+from feature_flow import conductor, report, state, status, tickets  # the package under test, from this checkout
 
 PYTHON = '"%s"' % sys.executable
 T1 = "plans/f/tasks/01-a.md"
@@ -288,7 +288,7 @@ class Units(unittest.TestCase):
 
     def test_report_shows_the_level(self):
         log = "1,01,BUILD\n2,01,LEVEL-2\n3,01,REVIEW-SINGLE\n4,01,REVIEW\n5,01,LEVEL-RAISE\n6,01,PASS-FOLLOWUPS\n"
-        text = report.render("f", report.parse(log))
+        text = report.render("f", state.parse_log(log))
         self.assertIn("ticket  level  builds  reviews  single", text)
         self.assertRegex(text, r"01\s+2\s+1\s+1\s+1\s")
         self.assertIn("tickets passed with follow-ups (see the plan's followups.md): 01", text)

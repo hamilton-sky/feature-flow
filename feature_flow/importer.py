@@ -23,6 +23,7 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
+import feature_flow
 from feature_flow import git, plan_lock
 
 USAGE = "usage: feature-flow import <spec-kit or openspec folder, or its tasks.md> <feature> [--dry-run]"
@@ -183,7 +184,7 @@ def build(path, feature, guides_root):
 def guides_home(top):
     """The folder whose guides/templates/ this install uses: beside the package (a checkout, or .feature-flow/
     in a repo install), the package's own bundle, else the repo's .feature-flow/."""
-    here = Path(__file__).resolve().parent
+    here = Path(feature_flow.__file__).resolve().parent
     for root in (here.parent, here / "_bundle"):
         if (root / "guides" / "templates").is_dir():
             return root
