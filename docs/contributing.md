@@ -25,9 +25,12 @@ Then `cd` into it, start the agent and type `/feature-flow hello` (Codex: `$feat
 
 ## Tests
 
+Where each part of the code lives, and which way imports may point, is in [CONTRIBUTING.md](../CONTRIBUTING.md#where-code-lives).
+
 ```bash
 bash tests/run.sh                                                    # runs the unit tests below as four shards side by side
 python3 tests/shard.py all 4                                         # only the unit tests in tests/py, four shards side by side
+python3 tests/shard.py time                                          # re-time each test file into tests/py/timings.json, which balances the shards
 python3 -m unittest discover -s tests/py                             # the same tests, one after another
 python3 -m unittest discover -s packages/forkboard/tests            # Forkboard, the brainstorm page
 (cd packages/forkboard/tests/browser && npm install && npm test)    # the page in Chromium
