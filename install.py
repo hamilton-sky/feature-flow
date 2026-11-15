@@ -6,6 +6,6 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # never leave __pycache__ in the user's tree
 here = Path(__file__).resolve().parent
 sys.path.insert(0, str(here))
-from feature_flow.install import main
+from feature_flow.commands.install import main
 
 sys.exit(main(here))

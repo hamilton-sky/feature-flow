@@ -19,7 +19,7 @@ import helpers
 from helpers import ROOT, Repo
 
 sys.path.insert(0, str(ROOT))
-from feature_flow import install  # the package under test, from this checkout
+from feature_flow.commands import install  # the package under test, from this checkout
 
 PYTHON = '"%s"' % sys.executable
 SLUGS = ("01-a", "02-b", "03-c")

@@ -1,4 +1,4 @@
-"""The Plan and Build steps of the guided flow's page (feature_flow/flow_plan.py): the drafted plan, its build flow
+"""The Plan and Build steps of the guided flow's page (feature_flow/pages/flow_plan.py): the drafted plan, its build flow
 and its width on the page, and the plan-yes card's picks written into the draft so one yes freezes them with it."""
 
 import io
@@ -14,7 +14,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import brainstorm_page, flow_page, flow_plan, studio  # the modules under test, from this checkout
+from feature_flow.pages import brainstorm_page, flow_page, flow_plan, studio  # the modules under test, from this checkout
 from test_brainstorm_page import BRAINSTORM
 from test_lanes_width import CSV, write_plan
 

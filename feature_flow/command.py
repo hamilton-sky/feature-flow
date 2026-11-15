@@ -10,7 +10,9 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, brainstorm_page, cli, config, doctor, install, evaluate, importer, report, uninstall, view
+from feature_flow import __version__, cli
+from feature_flow.commands import config, doctor, install, evaluate, importer, report, uninstall
+from feature_flow.pages import brainstorm_page, view
 from feature_flow.commands import flow_status
 from feature_flow.infra import git, suggest
 

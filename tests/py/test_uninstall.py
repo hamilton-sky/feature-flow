@@ -8,7 +8,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import command, install, uninstall
+from feature_flow import command
+from feature_flow.commands import install, uninstall
 
 
 class UninstallTests(unittest.TestCase):

@@ -6,7 +6,7 @@ import unittest
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import report  # the package under test, from this checkout
+from feature_flow.commands import report  # the package under test, from this checkout
 from feature_flow.plan import reality
 from feature_flow.infra import state
 
@@ -74,7 +74,7 @@ class RealityOnTheBuildTab(unittest.TestCase):
         self.repo.close()
 
     def test_the_build_tab_adds_plan_vs_reality_once_a_ticket_is_built(self):
-        from feature_flow import flow_plan
+        from feature_flow.pages import flow_plan
         _, _, found = flow_plan.build_section(self.repo.path("plans/f"))
         self.assertEqual([s["title"] for s in found], ["Build"])
         log = self.repo.path(".feature-flow/state/flow-f.log")

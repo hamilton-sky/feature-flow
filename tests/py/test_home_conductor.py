@@ -8,7 +8,7 @@ import helpers
 from helpers import Repo
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import install
+from feature_flow.commands import install
 
 T1 = "plans/f/tasks/01-a.md"
 KEYS = ("HOME", "CLAUDE_HOME", "AGENTS_HOME", "FEATURE_FLOW_HOME")
@@ -78,7 +78,7 @@ class HomeConductor(unittest.TestCase):
         self.assertEqual(self.files(), self.installed)
 
     def test_an_edit_to_the_home_floorguard_stops_the_run(self):
-        self.stops_after_editing("feature_flow/floorguard.py")
+        self.stops_after_editing("feature_flow/verify/floorguard.py")
 
     def test_an_edit_to_the_home_flow_script_stops_the_run(self):
         self.stops_after_editing("scripts/flow.py")
@@ -93,7 +93,7 @@ class RepoInstallBesideHome(HomeConductor):
 
     def test_edits_to_the_home_copy_do_not_affect_the_repo_run(self):
         self.begin()
-        self.edit("feature_flow/floorguard.py")
+        self.edit("feature_flow/verify/floorguard.py")
         self.edit("scripts/flow.py")
         rc, out = self.finish()
         self.assertEqual(rc, 0, out)

@@ -748,13 +748,13 @@ class FlowEditBase(Base):
             path.write_bytes(with_floor(path.read_bytes()))
 
     def build(self, ticket_edit=None):
-        """start, BUILD, then the builder edits feature_flow/floorguard.py and commits; returns the base."""
+        """start, BUILD, then the builder edits feature_flow/verify/floorguard.py and commits; returns the base."""
         rc, lines, err = self.passed("start")
         self.token = lines[0].split()[1]
         rc, lines, err = self.passed("next")
         self.assertTrue(lines[0].startswith("BUILD "), (lines, err))
         base = lines[0].split()[3]
-        with open(str(self.repo.path("feature_flow/floorguard.py")), "ab") as handle:
+        with open(str(self.repo.path("feature_flow/verify/floorguard.py")), "ab") as handle:
             handle.write(b"\n# a flow-edit build\n")
         if ticket_edit:
             ticket_edit()
@@ -778,7 +778,7 @@ class FlowEdit(FlowEditBase):
         rc, lines, err = self.after_build(base)
         self.assertEqual(rc, 0, (lines, err))
         self.assertRegex(lines[0], TRUST)
-        self.assertEqual(lines[1], "FLOW-EDIT feature_flow/floorguard.py")
+        self.assertEqual(lines[1], "FLOW-EDIT feature_flow/verify/floorguard.py")
         self.assertTrue(lines[2].startswith("REVIEW "), (lines, err))
         self.digest = TRUST.match(lines[0]).group(1)
         rc, lines, err = self.passed("next")  # the runner lets it through; the conductor wants a verdict first
@@ -789,14 +789,14 @@ class FlowEdit(FlowEditBase):
         self.build()
         rc, out, err = self.call("next")
         self.assertStopped(rc, out.splitlines(), err)
-        self.assertIn("feature_flow/floorguard.py", out)
+        self.assertIn("feature_flow/verify/floorguard.py", out)
 
     def test_a_state_change_with_trust_rewritten_to_match_stops(self):
         base = self.build()
         self.append(self.repo.path(STATE), "phase=\n")
         trust = self.repo.path(".feature-flow/state/flow-f.trust")
         each = json.loads(trust.read_text(encoding="utf-8"))
-        for rel in ("feature_flow/floorguard.py", STATE):
+        for rel in ("feature_flow/verify/floorguard.py", STATE):
             each[rel] = hashlib.sha256(self.repo.path(rel).read_bytes()).hexdigest()
         trust.write_text(json.dumps(each, sort_keys=True, indent=1) + "\n", encoding="utf-8")
         rc, lines, err = self.after_build(base)

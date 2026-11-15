@@ -39,7 +39,7 @@ BUNDLED = [
     "feature_flow/_bundle/adapters/codex/feature-flow/SKILL.md",
     "feature_flow/_bundle/scripts/flow.py",
     "feature_flow/_bundle/scripts/flow-view.html",
-    "feature_flow/install.py",
+    "feature_flow/commands/install.py",
     "feature_flow/command.py",
     "feature_flow/_forkboard/__init__.py",
     "feature_flow/_forkboard/page.py",
@@ -111,7 +111,7 @@ def main(argv):
         with tarfile.open(str(sdist)) as tar:
             members = [m.name.split("/", 1)[-1] for m in tar.getmembers()]
         need = ["skills/feature-flow/SKILL.md", "guides/build.md", "agents/ticket-builder.md",
-                "adapters/codex/feature-flow/SKILL.md", "scripts/flow-view.html", "feature_flow/install.py",
+                "adapters/codex/feature-flow/SKILL.md", "scripts/flow-view.html", "feature_flow/commands/install.py",
                 "packages/forkboard/forkboard/page.py", "packages/forkboard/forkboard/assets/editor.js",
                 "packages/forkboard/forkboard/assets/providers.js", "packages/forkboard/forkboard/server.py",
                 "packages/forkboard/forkboard/storage.py"]

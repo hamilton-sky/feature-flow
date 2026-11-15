@@ -15,7 +15,7 @@ from pathlib import Path
 from helpers import ROOT, Repo
 
 sys.path.insert(0, str(ROOT))
-from feature_flow import evaluate, install  # noqa: E402
+from feature_flow.commands import evaluate, install  # noqa: E402
 
 PYTHON = '"%s"' % sys.executable
 CHECK = "```check\n$ %s -c \"print('fine')\"\nprints fine\n```\n\n" % PYTHON

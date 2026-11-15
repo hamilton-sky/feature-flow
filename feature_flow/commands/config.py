@@ -11,7 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from feature_flow import install
+from feature_flow.commands import install
 from feature_flow.plan import modes, tickets
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.settings import GATE_DEFAULTS, MAX_LANES, Settings

@@ -11,9 +11,9 @@ import shutil
 import stat
 import subprocess
 
-from feature_flow.install import (EXCLUDE_BEGIN, EXCLUDE_END, HASHES, INSTALLED, USER_HASHES, Installer, _logical_cwd, flow_home,
+from feature_flow.commands.install import (EXCLUDE_BEGIN, EXCLUDE_END, HASHES, INSTALLED, USER_HASHES, Installer, _logical_cwd, flow_home,
                                   _read, _read_text, _sha256)
-from feature_flow.released import RELEASED
+from feature_flow.commands.released import RELEASED
 
 USAGE = """\
 usage: feature-flow uninstall [target-repo] [--user] [--force] [--dry-run]
