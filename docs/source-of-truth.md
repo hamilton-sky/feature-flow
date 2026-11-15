@@ -10,7 +10,7 @@ feature-flow keeps every decision in files, in git. The guided flow's page and t
 |---|---|
 | The brainstorm: its type, scouts and team, the options, the pick | `.feature-flow/state/brainstorm-<feature>.md` (git ignored), copied into `plans/<feature>/brainstorm.md` when the plan is accepted |
 | The plan: spec, tickets, levels, `Touches:`, Done when | `plans/<feature>/spec.md`, `plans/<feature>/tasks/*.md` |
-| The build setup: commands, profile, lanes, gate, checks | `plans/<feature>/commands.md` |
+| The build setup: commands, mode, lanes, gate, checks | `plans/<feature>/commands.md` |
 | What the roles decided during the run, and why | `plans/<feature>/decisions.md` |
 | What the run left for later | `plans/<feature>/followups.md` |
 | Traps the builders found | `plans/<feature>/learnings.md` |

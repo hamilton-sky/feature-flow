@@ -51,7 +51,7 @@ This is the only stop. Show the cause, the fix and the `Repro:` command, and ask
 
 ## Step 5: The plan of one ticket
 
-Run `python3 <S>/flow-status.py <feature> --fix .feature-flow/state/fix-<feature>.md`. It writes `plans/<feature>/` with one ticket: `Type: fix`, `Test first: yes`, your `Touches:` and level, and a check block that runs the `Repro:` command. Its `commands.md` takes the command lines (Build, Test, Lint, Smoke and the rest) of the newest plan in the repo, under `Profile: normal`, so the ticket gets the full gate and its own review.
+Run `python3 <S>/flow-status.py <feature> --fix .feature-flow/state/fix-<feature>.md`. It writes `plans/<feature>/` with one ticket: `Type: fix`, `Test first: yes`, your `Touches:` and level, and a check block that runs the `Repro:` command. Its `commands.md` takes the command lines (Build, Test, Lint, Smoke and the rest) of the newest plan in the repo, under `Mode: fix`, so the ticket gets the full gate and its own review.
 
 - When it says it took the commands from another plan, show them in one line. When it says no plan has commands, fill in `commands.md` from the project's own config (package.json, Makefile, CI) and show it.
 - Run `python3 <S>/flow-status.py <feature> --lint` until it is clean.

@@ -84,6 +84,23 @@ def fast_switch(c, value):
                              % len(c.deferred()))
 
 
+def mode_switch(c, value):
+    """`mode small` mid-run is `fast on`; `mode <the plan's own mode>` is `fast off`. Any other mode changes the
+    plan's reviews, so it needs a re-plan, which needs the user's yes."""
+    from feature_flow import profiles
+    word = (value or "").strip().lower()
+    own = c.settings.mode or profiles.OLD_NAMES.get(c.profile or "normal") or "fix"
+    if word not in profiles.MODES:
+        raise Stop("the mode must be %s, not %s" % (", ".join(profiles.ORDER), value))
+    if word == "small":
+        return fast_switch(c, "on")
+    if word == own:
+        return fast_switch(c, "off")
+    raise Stop("mode %s changes the plan's reviews, which only a re-plan can do: with the user's yes, run "
+               "replan-prompt and give it to the feature-planner. mid-run, only small (and back to %s) switches"
+               % (word, own))
+
+
 def check_budget(c, offer=True):
     """Before a ticket starts: over the budget, switch to fast mode first. Still over once fast mode has had
     a ticket, stop once and offer a re-plan, which only the user can say yes to. Nothing is cut silently."""

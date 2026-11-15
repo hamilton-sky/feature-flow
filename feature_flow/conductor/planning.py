@@ -7,7 +7,7 @@ import os
 import shutil
 from pathlib import Path
 
-from feature_flow import brainstorm_mode, checks, git, plan_lock, prompts, scouts, state
+from feature_flow import brainstorm_mode, checks, git, plan_lock, profiles, prompts, scouts, state
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.phases.base import lane_runner
 
@@ -98,7 +98,7 @@ class Planner:
         question = self.read_text(question_file, "question").strip("\n")
         if not question:
             raise Stop("the question %s is empty" % question_file)
-        profile = "careful" if os.environ.get("FLOW_PROFILE", "").strip().lower() == "careful" else "normal"
+        profile = "careful" if profiles.env_profile(os.environ) == "careful" else "normal"
         group = HELPERS[helper] if helper != "web" else "web"
         kind = self.brainstorm_type or "standard"
         caps = brainstorm_mode.limits(profile, {"code": self.scout_code, "web": self.scout_web}, kind)

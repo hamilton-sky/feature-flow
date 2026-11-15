@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.42: modes
+
+| Version | Added |
+|---|---|
+| 0.42.0 | **Modes** ([docs](modes.md)): one word says what kind of work a run is, `fix`, `small`, `feature` (the default), `careful` or `explore`, and sets the reviews, the gate, the lanes and the scouts. They replace the profiles and the `fast` word: each mode stands on an old profile (`small` on fast, `feature` and `explore` on standard, `fix` on normal), so nothing builds differently. The plan says it on a `Mode:` line in `commands.md` (the template says `feature`, a fix plan `fix`), `FLOW_MODE` overrides it, and `FLOW_PROFILE` and `Profile:` are still read. The session guesses the mode from your words when you name none and says why. The plan-yes card picks a mode. Mid-run, `mode small` is `fast on`, and `mode <the plan's mode>` goes back; a heavier mode needs a re-plan. **Fewer settings**: `start` warns when `FLOW_FAST`, `FLOW_REVIEWERS`, `FLOW_ROUND_REVIEW`, `FLOW_BASE_GATE`, `FLOW_GATE_FULL`, `FLOW_BATCH`, `FLOW_MAX_RETRIES` or `FLOW_MAX_REVIEW_ROUNDS` is set by hand, or `FLOW_GATE=off`: from 0.43.0 the mode sets them alone, and only `Gate: off unsafe` turns the gate off. A shorter `commands.md` template: the required lines first, then the optional ones. |
+
 ## 0.42: a local live page
 
 | Version | Added |

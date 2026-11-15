@@ -14,7 +14,8 @@ The README covers what feature-flow is and how to start. These pages hold the re
 | **Understand** | [How it works](how-it-works.md) | you want every check, the review levels, the agent roles and the graph page |
 | | [Files are the truth](source-of-truth.md) | you want to know what the page can and cannot change, and what Plan vs reality shows |
 | | [Plans and tickets](plans-and-tickets.md) | you are reading or editing a plan, or importing one from Spec Kit or OpenSpec |
-| | [Speed and long runs](speed.md) | you want profiles, side-by-side lanes, the fast path, checkpoints, a time budget or handoffs |
+| | [Modes](modes.md) | you want to pick fix, small, feature, careful or explore, and know what each sets |
+| | [Speed and long runs](speed.md) | you want the profiles behind the modes, side-by-side lanes, the fast path, checkpoints, a time budget or handoffs |
 | | [Scouts and helper agents](helpers.md) | you want the scouts, codeintel, the architect, designer and product owner, or the tester |
 | | [Limits and safety](limits.md) | you want to know what the checks cannot stop, and what is protected |
 | **Reference** | [Commands and settings](commands-and-settings.md) | you need a script command or a `FLOW_` setting |

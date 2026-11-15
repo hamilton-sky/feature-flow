@@ -6,7 +6,7 @@ The file is `.feature-flow/state/brainstorm-<feature>.md`, in the git-ignored st
 
 ## When
 
-- **`careful`** (the word, `FLOW_PROFILE=careful`, or `Profile: careful` in the conversation): always.
+- **`careful`** (the word, `FLOW_MODE=careful`, or `Mode: careful` in the conversation; the old `FLOW_PROFILE` and `Profile:` too): always.
 - **`brainstorm`** in the arguments: always. **`brainstorm sketch`** starts from the user's own drawing (Sketch first, below).
 - **Otherwise**, offer it in one line when the idea is fuzzy: there is no bar yet, there are two real ways to build it, or the brief would carry more than two Unsure lines. On a no, go to the brief.
 - **Never** with `fast` (unless the user typed `brainstorm`), for a Spec Kit or OpenSpec import, or when a plan exists.
