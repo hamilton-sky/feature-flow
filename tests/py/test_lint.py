@@ -7,7 +7,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import floorguard  # the package under test, from this checkout
+from feature_flow.verify import floorguard  # the package under test, from this checkout
 from feature_flow.plan import status
 
 CHECKED = "\n```check\n$ true\n```\n"

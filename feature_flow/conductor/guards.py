@@ -9,7 +9,8 @@ import re
 import sys
 from pathlib import Path
 
-from feature_flow import checks, floorguard, gate, prompts
+from feature_flow import prompts
+from feature_flow.verify import checks, floorguard, gate
 from feature_flow.plan import modes, repaircheck, status, tickets
 from feature_flow.infra import git
 from feature_flow.conductor import budget, planning, repair

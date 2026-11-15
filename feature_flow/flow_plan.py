@@ -11,7 +11,8 @@ it with a re-plan. The Build step shows how far the run is.
 import re
 from pathlib import Path
 
-from feature_flow import gate, lanes
+from feature_flow import lanes
+from feature_flow.verify import gate
 from feature_flow.plan import status
 from feature_flow.plan import builders, modes, reality, tickets
 
@@ -111,7 +112,7 @@ def gate_note(cadence):
 
 def checks_text(plan):
     """The checks every ticket must pass, as markdown: the gate's commands, and what the plan relaxed or turned off."""
-    from feature_flow import floorguard
+    from feature_flow.verify import floorguard
     gate_cmds = [k for k in gate.KEYS + ("Quick",) if plan.value(k)] + ["Check %s" % p for p, _ in
                                                                       gate.path_checks(plan.commands)]
     cadence = plan.gate()

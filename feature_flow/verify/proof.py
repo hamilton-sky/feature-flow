@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from dataclasses import dataclass
 
-from feature_flow import floorguard, gate
+from feature_flow.verify import floorguard, gate
 from feature_flow.infra import git, proc
 
 FENCE = "```"

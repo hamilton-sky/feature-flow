@@ -24,7 +24,6 @@ ENTRY = {"__init__", "__main__", "command", "cli"}
 
 # modules still at the top of feature_flow/, by the folder they move to
 FLAT = {
-    "gate": "verify", "floorguard": "verify", "proof": "verify", "checks": "verify",
     "lanes": "conductor", "scouts": "conductor", "prompts": "conductor", "codeintel": "conductor",
     "codehash": "conductor",
     "view": "pages", "flow_page": "pages", "flow_plan": "pages", "brainstorm_page": "pages", "studio": "pages",

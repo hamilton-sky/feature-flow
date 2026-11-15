@@ -4,7 +4,8 @@ stops the run): handed out, its answer recorded, then judged, and the build or r
 import re
 import shlex
 
-from feature_flow import proof, prompts, scouts
+from feature_flow import prompts, scouts
+from feature_flow.verify import proof
 from feature_flow.plan import tickets
 from feature_flow.infra import git, state
 from feature_flow.conductor.errors import NoPhase, Stop

@@ -24,6 +24,6 @@ spec = importlib.util.spec_from_file_location(
     "feature_flow", pkg / "__init__.py", submodule_search_locations=[str(pkg)])
 sys.modules["feature_flow"] = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sys.modules["feature_flow"])
-from feature_flow.floorguard import main
+from feature_flow.verify.floorguard import main
 
 sys.exit(main())
