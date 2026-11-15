@@ -20,7 +20,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from feature_flow import __version__, codeintel, lanes, report
+from feature_flow import __version__, report
+from feature_flow.conductor import codeintel, lanes
 from feature_flow.plan import brainstorm_mode, tickets
 from feature_flow.infra import git, state, suggest
 

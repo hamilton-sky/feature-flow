@@ -11,7 +11,7 @@ it with a re-plan. The Build step shows how far the run is.
 import re
 from pathlib import Path
 
-from feature_flow import lanes
+from feature_flow.conductor import lanes
 from feature_flow.verify import gate
 from feature_flow.plan import status
 from feature_flow.plan import builders, modes, reality, tickets

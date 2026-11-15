@@ -162,7 +162,7 @@ def _report(g, mode, opt, feature, out, err, root="plans", cwd=None):
 def width_of(g, commands):
     """(how many of the plan's open tickets can build at once, [(ticket, the one it waits for, why)]), from the
     tickets' Touches:, Level: and Blocked by: lines and the Shared: line of commands.md."""
-    from feature_flow import lanes
+    from feature_flow.conductor import lanes
     shared = lanes.touches("Touches: " + (tickets.commands_value(commands, "Shared") or "")) or [] \
         if os.path.isfile(commands) else []
     items = [(t, g.touches.get(t) if t in g.hastouches else None,

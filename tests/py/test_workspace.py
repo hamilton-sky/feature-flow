@@ -13,7 +13,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import codehash, lanes, prompts  # the package under test, from this checkout
+from feature_flow.conductor import codehash, lanes, prompts  # the package under test, from this checkout
 from feature_flow.conductor import Stop
 from feature_flow.conductor.phases.ask import Ask
 from feature_flow.conductor.schedulers import LaneScheduler

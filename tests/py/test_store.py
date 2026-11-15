@@ -10,7 +10,7 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import lanes  # the package under test, from this checkout
+from feature_flow.conductor import lanes  # the package under test, from this checkout
 from feature_flow.conductor import store
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.store import RunState, TicketState

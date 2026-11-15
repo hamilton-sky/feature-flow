@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 import feature_flow
-from feature_flow import prompts
+from feature_flow.conductor import prompts
 from feature_flow.infra import git
 
 # feature-flow's own scripts; any other .py file in the same folder is the repo's own code

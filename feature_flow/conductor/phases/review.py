@@ -3,7 +3,7 @@
 import os
 import re
 
-from feature_flow import scouts
+from feature_flow.conductor import scouts
 from feature_flow.infra import git, state
 from feature_flow.conductor import guards
 from feature_flow.conductor.errors import NoPhase, Stop

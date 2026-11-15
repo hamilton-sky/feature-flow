@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from feature_flow import lanes, prompts
+from feature_flow.conductor import lanes, prompts
 from feature_flow.conductor.errors import NoPhase, Stop
 from feature_flow.conductor.store import NOTE_SEP
 

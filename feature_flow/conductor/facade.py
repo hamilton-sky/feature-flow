@@ -10,7 +10,7 @@ import secrets
 import time
 from pathlib import Path
 
-from feature_flow import codehash
+from feature_flow.conductor import codehash
 from feature_flow.infra import git, state
 from feature_flow.conductor import budget as time_budget, guards, repair, reset as run_reset
 from feature_flow.conductor.errors import NoPhase, Stop
