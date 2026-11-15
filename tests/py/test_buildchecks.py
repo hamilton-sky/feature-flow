@@ -10,7 +10,7 @@ from unittest import mock
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import git  # the package under test, from this checkout
+from feature_flow.infra import git  # the package under test, from this checkout
 from feature_flow.conductor import buildchecks
 from feature_flow.conductor.errors import Stop
 

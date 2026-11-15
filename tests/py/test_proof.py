@@ -9,7 +9,8 @@ from unittest import mock
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import cli, conductor, git, proof  # the package under test, from this checkout
+from feature_flow import cli, conductor, proof  # the package under test, from this checkout
+from feature_flow.infra import git
 
 FENCE = "```"
 

@@ -10,7 +10,8 @@ import sys
 
 from pathlib import Path
 
-from feature_flow import __version__, brainstorm_page, cli, config, doctor, git, install, evaluate, importer, report, status, suggest, uninstall, view
+from feature_flow import __version__, brainstorm_page, cli, config, doctor, install, evaluate, importer, report, status, uninstall, view
+from feature_flow.infra import git, suggest
 
 USAGE = """\
 usage: feature-flow install [target-repo] [--agent claude|codex|all] [--user] [--private] [--force] [--dry-run]

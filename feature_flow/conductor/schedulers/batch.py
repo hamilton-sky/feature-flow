@@ -4,7 +4,8 @@ next ticket may take others with it; whether it does is decided per ticket, sinc
 
 import re
 
-from feature_flow import checks, git, lanes, proof, tickets
+from feature_flow import checks, lanes, proof, tickets
+from feature_flow.infra import git
 from feature_flow.conductor import buildchecks
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases.ask import Ask

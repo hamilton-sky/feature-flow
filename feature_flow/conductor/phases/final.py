@@ -3,7 +3,8 @@ reviewed once. It is no ticket's phase and has no lane; a failure becomes a fix 
 
 import os
 
-from feature_flow import git, prompts, scouts, state, tickets
+from feature_flow import prompts, scouts, tickets
+from feature_flow.infra import git, state
 from feature_flow.conductor import guards
 from feature_flow.conductor.errors import Stop
 from feature_flow.conductor.phases.base import Outcome, Phase

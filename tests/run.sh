@@ -596,7 +596,7 @@ else
   expect_rc "the unit tests in tests/py pass (python3 tests/shard.py all 4)" 0 $rc
   [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -60
 fi
-out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' feature_flow/*.py feature_flow/conductor/*.py feature_flow/conductor/*/*.py packages/forkboard/forkboard/*.py scripts/flow.py 2>&1)"
+out="$(cd "$ROOT" && python3 -c 'import ast,sys; [ast.parse(open(f).read(), f, feature_version=(3, 9)) for f in sys.argv[1:]]' $(find feature_flow -name '*.py' -not -path '*/__pycache__/*') packages/forkboard/forkboard/*.py scripts/flow.py 2>&1)"
 expect_rc "the conductor and Forkboard parse as Python 3.9" 0 $?
 out="$(cd "$ROOT" && grep -rlE --include='*.py' '^(import|from) ' feature_flow packages/forkboard/forkboard | xargs grep -hE '^(import|from) ' | grep -vE '^(import|from) (feature_flow|\.|os|sys|re|subprocess|hashlib|pathlib|argparse|secrets|time|datetime|shlex|typing|dataclasses|__future__|json|textwrap|tempfile|shutil|enum|difflib|stat|traceback|fnmatch|contextlib|html|importlib|math|http|socket|socketserver)(\b|\s)')"
 if [ -z "$out" ]; then ok "the conductor and Forkboard import only the standard library"; else bad "the conductor and Forkboard import only the standard library" "$out"; fi
@@ -606,9 +606,8 @@ flowrepo() { # name -> prints a newrepo dir that also has scripts/flow.py and fe
   d="$(newrepo "$1")"
   cp "$ROOT/scripts/flow.py" "$d/scripts/"
   mkdir -p "$d/feature_flow"
-  cp "$ROOT"/feature_flow/*.py "$d/feature_flow/"
-  cp -R "$ROOT/feature_flow/conductor" "$d/feature_flow/"
-  find "$d/feature_flow/conductor" -name __pycache__ -prune -exec rm -rf {} +
+  cp -R "$ROOT/feature_flow/." "$d/feature_flow/"
+  find "$d/feature_flow" -name __pycache__ -prune -exec rm -rf {} +
   (cd "$d" && git add -A && git commit -qm "add flow.py")
   echo "$d"
 }

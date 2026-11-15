@@ -11,7 +11,8 @@ the user names, else the one the run (or the last reset) remembered, else the pa
 import os
 import re
 
-from feature_flow import codehash, git, proof, suggest, tickets
+from feature_flow import codehash, proof, tickets
+from feature_flow.infra import git, suggest
 from feature_flow.conductor.errors import Stop
 
 STARTS = "starts"  # run state key: `NN:<sha>` items, where a ticket starts the next time it is picked

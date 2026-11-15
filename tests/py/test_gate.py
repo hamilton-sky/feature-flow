@@ -10,7 +10,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import checks, gate, proc  # the package under test, from this checkout
+from feature_flow import checks, gate  # the package under test, from this checkout
+from feature_flow.infra import proc
 
 
 def timeless(text):

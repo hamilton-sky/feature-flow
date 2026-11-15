@@ -6,7 +6,8 @@ from pathlib import Path
 import helpers
 
 sys.path.insert(0, str(helpers.ROOT))
-from feature_flow import state, tickets  # the package under test, from this checkout
+from feature_flow import tickets  # the package under test, from this checkout
+from feature_flow.infra import state
 
 
 class TicketTests(unittest.TestCase):

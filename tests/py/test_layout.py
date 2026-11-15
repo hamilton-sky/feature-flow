@@ -24,7 +24,6 @@ ENTRY = {"__init__", "__main__", "command", "cli"}
 
 # modules still at the top of feature_flow/, by the folder they move to
 FLAT = {
-    "git": "infra", "state": "infra", "proc": "infra", "suggest": "infra", "plan_lock": "infra",
     "tickets": "plan", "builders": "plan", "brainstorm_mode": "plan", "repaircheck": "plan", "reality": "plan",
     "profiles": "plan", "status": "plan",
     "gate": "verify", "floorguard": "verify", "proof": "verify", "checks": "verify",

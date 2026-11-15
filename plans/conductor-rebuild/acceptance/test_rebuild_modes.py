@@ -154,7 +154,7 @@ class CheckCodeSeam(unittest.TestCase):
     # conductor.Conductor, "check_code", ...)` still turns it off.)
     def test_patching_check_code_on_the_class_turns_the_code_check_off(self):
         def change_flow_code(where):
-            with open(str(where / "feature_flow" / "git.py"), "a", encoding="utf-8") as handle:
+            with open(str(where / "feature_flow" / "infra" / "git.py"), "a", encoding="utf-8") as handle:
                 handle.write("# changed mid-ticket\n")
 
         def scenario(w):

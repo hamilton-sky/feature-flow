@@ -29,7 +29,8 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
-from feature_flow import git, importer, plan_lock
+from feature_flow import importer
+from feature_flow.infra import git, plan_lock
 
 USAGE = "usage: python3 scripts/flow-status.py <feature> --fix <diagnosis.md> [--dry-run]"
 HEADER = re.compile(r"^(Repro|Expect|Touches|Level|Cause|Fix):[ \t]*(.*?)\s*$")
