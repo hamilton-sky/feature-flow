@@ -86,10 +86,10 @@ class Build(Phase):
         """For the review that judges the spec checklist (spec, single or pair): the tester's acceptance tests run
         after the ticket, so the reviewer sees which ones its work should have turned green. It ran only for a pair
         review before, so a spec reviewer never saw the failures of the tests its ticket delivers. [] when the plan
-        has no acceptance tests yet, and for a ticket whose `Acceptance:` line already gated its own tests."""
+        has no acceptance tests yet, and for a ticket whose `Acceptance:` line the gate already ran."""
         end = ws.scheduler().end
         command = end.acceptance_command()
-        if not command or end.tests_due() or proof.acceptance_line(ws.ticket_at_base()):
+        if not command or end.tests_due() or (ws.gate_on and proof.acceptance_line(ws.ticket_at_base())):
             return []
         result = checks.smoke(command, ws.gate_timeout, cwd=ws.folder)
         dirty = git.changes(cwd=ws.folder)

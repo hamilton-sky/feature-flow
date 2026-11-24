@@ -174,9 +174,13 @@ def acceptance_line(text):
             break
         match = re.match(r"^Acceptance:[ \t]*(.*)$", line)
         if match:
-            value = match.group(1).strip().strip("`").strip()
+            value = match.group(1).strip()
+            if len(value) > 1 and value.startswith("`") and value.endswith("`") and "`" not in value[1:-1]:
+                value = value[1:-1].strip()
             if value.startswith("$ "):
                 value = value[2:].strip()
+            if value.startswith("<") or "`" in value:  # the template's placeholder, or a command it cannot read
+                return ""
             return "" if value in ("", "—", "-", "none") else value
     return ""
 

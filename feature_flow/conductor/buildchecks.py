@@ -12,6 +12,7 @@ import hashlib
 import time
 import json
 import re
+import shlex
 
 from feature_flow.conductor import lanes
 from feature_flow.verify import checks, gate, proof
@@ -154,7 +155,9 @@ class TicketAcceptance:
     more review rounds. A ticket whose header names its tests now has to turn them green before review, like its
     Done when checks: a failure goes back to the builder with the output. The builder cannot change the tests (the
     floor guard), so one it believes asks for something spec.md does not say goes to the product owner with
-    `## Ask: po`, as at the end of the run."""
+    `## Ask: po`; once the product owner rules a test wrong, the run is shown to the reviewer instead of blocking,
+    and the tester changes the test at the end of the run. A mapped file the tester never wrote (it named the file
+    another way, or tested nothing of the story) blocks nothing either: the builder could not fix that."""
 
     def run(self, c):
         command = proof.acceptance_line(c.ticket_at_base())
@@ -162,22 +165,52 @@ class TicketAcceptance:
             return None, "", []
         end = c.scheduler().end
         if not end.acceptance_command() or end.tests_due():
-            c.log("ACCEPT-TICKET-SKIP")
+            c.log("ACCEPT-GATE-SKIP")
             return None, "", ["the ticket maps acceptance tests (`%s`), but the tester has not committed any yet, so "
                               "the conductor did not run them" % command]
+        missing = self.missing_files(c, command, end.acceptance_folder())
+        if missing:
+            c.log("ACCEPT-GATE-SKIP")
+            return None, "", ["the ticket maps acceptance tests (`%s`), but the tester wrote no %s, so the conductor "
+                              "did not run them: judge the story from its Done when and the acceptance run below"
+                              % (command, " or ".join("`%s`" % m for m in missing))]
         result = checks.smoke(command, c.gate_timeout, cwd=_folder(c))
         dirty = git.changes(cwd=_folder(c))
         if dirty:
             raise Stop("the Acceptance line of %s changed the working tree: %s. it must not change it"
                        % (c.ticket_name(), " ".join(dirty[:5])))
-        c.log("ACCEPT-TICKET-%s" % ("PASS" if result.ok else "FAIL"))
-        if not result.ok:
-            report = ("the acceptance tests this ticket's `Acceptance:` line maps to it fail: `%s`. the tester wrote "
-                      "them from spec.md, so make them pass; you cannot change them. if one asks for something "
-                      "spec.md does not say, add `## Ask: po` naming the test and the spec line, and stop. the last "
-                      "lines:\n\n%s" % (command, gate.tail(result.out, 40)))
-            return "acceptance tests", report, []
-        return None, "", ["the conductor ran this ticket's acceptance tests (`%s`) and they pass" % command]
+        c.log("ACCEPT-GATE-%s" % ("PASS" if result.ok else "FAIL"))
+        if result.ok:
+            return None, "", ["the conductor ran this ticket's acceptance tests (`%s`) and they pass" % command]
+        tail = gate.tail(result.out, 40)
+        if c.get("num") in c.all.get("accept_ruled", "").split():
+            return None, "", ["this ticket's acceptance tests (`%s`) still fail, and the product owner ruled at least "
+                              "one of them wrong in this ticket (see its Consulted section): the tester changes those "
+                              "at the end of the run. a failure the ruling does not cover is NOT MET. the last lines: %s"
+                              % (command, " ".join(tail.split())[:1500])]
+        report = ("the acceptance tests this ticket's `Acceptance:` line maps to it fail: `%s`. the tester wrote "
+                  "them from spec.md, so make them pass; you cannot change them. if one asks for something "
+                  "spec.md does not say, add `## Ask: po` naming the test and the spec line, and stop. the last "
+                  "lines:\n\n%s" % (command, tail))
+        return "acceptance tests", report, []
+
+    @staticmethod
+    def missing_files(c, command, folder):
+        """The words of command that name a path under the acceptance folder (a pytest `::test` suffix dropped) and
+        that do not exist in the ticket's folder."""
+        try:
+            words = shlex.split(command)
+        except ValueError:
+            return []
+        top = git.toplevel(cwd=_folder(c))
+        if top is None:
+            return []
+        found = []
+        for word in words:
+            path = word.split("::", 1)[0]
+            if path.startswith(folder) and path != folder and not (top / path).exists():
+                found.append(path)
+        return found
 
 
 class TestFirst:

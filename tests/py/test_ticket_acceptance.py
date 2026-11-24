@@ -32,6 +32,9 @@ class ParseTheLine(unittest.TestCase):
         self.assertEqual(proof.acceptance_line("# T\nAcceptance: —\n"), "")
         self.assertEqual(proof.acceptance_line("# T\n\n## Done when\n\nAcceptance: pytest a.py\n"), "")
         self.assertEqual(proof.acceptance_line("# T\nLevel: 2\n"), "")
+        # the template's placeholder, left in by a planner, is not a command to run
+        self.assertEqual(proof.acceptance_line("# T\nAcceptance: <optional: the command>\n"), "")
+        self.assertEqual(proof.acceptance_line("# T\nAcceptance: `pytest a.py` -q\n"), "")
 
 
 class Gate(unittest.TestCase):
@@ -49,8 +52,8 @@ class Gate(unittest.TestCase):
         repo.path("feature.txt").write_text("done\n", encoding="utf-8")
         repo.resolve(T1)
         self.assertTrue(s.next().startswith("REVIEW %s 01 " % T1))
-        self.assertIn("ACCEPT-TICKET-FAIL", self.log(repo))
-        self.assertIn("ACCEPT-TICKET-PASS", self.log(repo))
+        self.assertIn("ACCEPT-GATE-FAIL", self.log(repo))
+        self.assertIn("ACCEPT-GATE-PASS", self.log(repo))
 
     def test_without_the_line_the_spec_reviewer_sees_the_failing_run(self):
         full = ["Level: 2", "Review: full"]  # a spec pass, then a quality pass: no pair review
@@ -71,7 +74,38 @@ class Gate(unittest.TestCase):
         self.assertTrue(s.next().startswith("BUILD %s 01 " % T1))
         s.repo.resolve(T1)
         self.assertTrue(s.next().startswith("REVIEW %s 01 " % T1))
-        self.assertIn("ACCEPT-TICKET-SKIP", self.log(s.repo))
+        self.assertIn("ACCEPT-GATE-SKIP", self.log(s.repo))
+
+    def test_a_mapped_file_the_tester_never_wrote_blocks_nothing(self):
+        missing = "Acceptance: `%s plans/f/acceptance/test_story_9.py`" % PYTHON
+        s = Session(self, [(T1, ticket("A", "—", ["Level: 2", missing]))], COMMANDS)
+        repo = s.repo
+        self.assertTrue(s.next().startswith("TEST plans/f "))
+        write_tests(repo)
+        self.assertTrue(s.next().startswith("BUILD %s 01 " % T1))
+        repo.resolve(T1)
+        self.assertTrue(s.next().startswith("REVIEW %s 01 " % T1))
+        self.assertIn("ACCEPT-GATE-SKIP", self.log(repo))
+        self.assertIn("test_story_9.py", repo.state().get("review_notes", ""))
+
+    def test_a_test_the_product_owner_rules_wrong_stops_blocking_the_ticket(self):
+        s = Session(self, [(T1, ticket("A", "—", ["Level: 2", MAPPED]))], COMMANDS)
+        repo = s.repo
+        self.assertTrue(s.next().startswith("TEST plans/f "))
+        write_tests(repo)
+        self.assertTrue(s.next().startswith("BUILD %s 01 " % T1))
+        repo.resolve(T1)
+        self.assertTrue(s.next().startswith("BUILD %s 01 " % T1))  # sent back: its test fails
+        with open(str(repo.path(T1)), "a", encoding="utf-8") as handle:
+            handle.write("\n## Ask: po\n\ncheck.py wants feature.txt; spec.md never says so.\n")
+        repo.commit("ask")
+        self.assertTrue(s.next().startswith("ASK po %s 01 " % T1))
+        s.verdict("## Answer\n\nspec.md has no such line.\n\nRULING: TEST WRONG\n\nANSWER: GIVEN\n")
+        self.assertTrue(s.next().startswith("BUILD %s 01 " % T1))
+        repo.resolve(T1)
+        self.assertTrue(s.next().startswith("REVIEW %s 01 " % T1))  # shown to the reviewer, not blocking
+        self.assertIn("ruled at least one of them wrong", repo.state().get("review_notes", ""))
+        self.assertIn("RULING-TEST", self.log(repo))
 
     @staticmethod
     def log(repo):
