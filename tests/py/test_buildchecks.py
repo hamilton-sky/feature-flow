@@ -99,10 +99,10 @@ class Pipeline(unittest.TestCase):
         return [type(check).__name__ for check in buildchecks.pipeline(c, gate=gate)]
 
     def test_the_full_pipeline(self):
-        self.assertEqual(self.names(True), ["Gate", "FloorGuard", "Footprint", "DoneWhen", "TestFirst"])
+        self.assertEqual(self.names(True), ["Gate", "FloorGuard", "Footprint", "DoneWhen", "TicketAcceptance", "TestFirst"])
 
     def test_the_batch_pipeline_has_no_gate(self):
-        self.assertEqual(self.names(True, gate=False), ["FloorGuard", "Footprint", "DoneWhen", "TestFirst"])
+        self.assertEqual(self.names(True, gate=False), ["FloorGuard", "Footprint", "DoneWhen", "TicketAcceptance", "TestFirst"])
 
     def test_gate_off_runs_only_the_guard_and_the_footprint(self):
         self.assertEqual(self.names(False), ["FloorGuard", "Footprint"])

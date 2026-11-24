@@ -15,7 +15,7 @@ from pathlib import Path
 from feature_flow.infra import git, state, suggest
 
 USAGE = "usage: feature-flow report <feature>"
-FAILS = ("GATE-FAIL", "GUARD-FAIL", "DONEWHEN-FAIL", "TESTFIRST-FAIL", "VERDICT-FAIL")
+FAILS = ("GATE-FAIL", "GUARD-FAIL", "DONEWHEN-FAIL", "ACCEPT-GATE-FAIL", "TESTFIRST-FAIL", "VERDICT-FAIL")
 RUN_EVENTS = ("START", "TAKEOVER", "RESET", "HANDOFF", "STOP")
 
 

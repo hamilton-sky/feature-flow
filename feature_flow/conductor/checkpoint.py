@@ -151,6 +151,11 @@ def run(c):
             reopen(c, item, failed, "its Done when checks failed at the checkpoint, with every ticket since the "
                    "last one built.\n\n" + report)
             return REOPENED
+        failed, report, _ = buildchecks.TicketAcceptance().run(c)
+        if failed:
+            reopen(c, item, failed, "the acceptance tests its `Acceptance:` line maps to it fail at the checkpoint, "
+                   "with every ticket since the last one built.\n\n" + report)
+            return REOPENED
         c.write_due("%s (left for later)" % tickets.name(path))
     c.all.update({"num": "all", "ticket": "", "base": base, "checkpoint_sha": git.head(), "checkpoint_wait": ""})
     c.save()

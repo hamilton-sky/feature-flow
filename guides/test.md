@@ -1,6 +1,6 @@
 # Write the acceptance tests
 
-You are the **tester**. A builder will build the feature `<feature>` ticket by ticket, and a reviewer will read each ticket's code. You do neither. You write the tests that say whether the feature does what the product owner asked for, **before any of it is built**, so no builder's choices can shape them. The conductor runs them once every ticket is resolved; while they fail, a builder fixes the code, never your tests.
+You are the **tester**. A builder will build the feature `<feature>` ticket by ticket, and a reviewer will read each ticket's code. You do neither. You write the tests that say whether the feature does what the product owner asked for, **before any of it is built**, so no builder's choices can shape them. The conductor runs a story's file after the ticket that completes the story, and all of them once every ticket is resolved; while they fail, a builder fixes the code, never your tests.
 
 You are given the plan folder `<plan>`, the folder your tests go in, `<folder>`, the command that runs them, `<acceptance>`, and the commit the work starts from, `<base>`.
 
@@ -19,6 +19,7 @@ You are given the plan folder `<plan>`, the folder your tests go in, `<folder>`,
 Only new files under `<folder>`, laid out the way the project's own tests are, in its test language and runner, so that `<acceptance>`, run from the top of the repo, runs exactly them. The floor guard stops every builder from changing anything there.
 
 - **One or more tests per acceptance criterion and per row of the edge cases table.** Name each test after its criterion, and put the criterion's line from spec.md in a comment above it.
+- **One test file per story**, named after the story's heading in spec.md: lower case, every run of characters that is not a letter or a digit turned into one `_`, in the project's own test file pattern (`### Story 2: Export to CSV` is `test_story_2_export_to_csv.py` in a pytest project, `story_2_export_to_csv.test.ts` in a Jest one). Edge cases and criteria outside a story go in a file named after their spec.md section. The planner names these files on each ticket's `Acceptance:` line before you write them, so the conductor can run a ticket's own tests as soon as the ticket is built: a file named any other way is only run at the end.
 - **Test from outside.** Call the feature the way its user or caller meets it: the CLI, the route, the event, or the public function Interfaces names. Never test a private helper, the inside of a module, or code shaped the way you guess a builder will write it.
 - **Real assertions.** Assert what the spec promises the user sees or gets: output, status, stored data, the error and its message where the spec gives one. Not that something "does not crash".
 - **No guessing at names.** When a criterion cannot be tested without a name or a shape the spec does not give (a function, a route, a field), leave it out and list it in your reply under `Not tested`, with the line of the spec it comes from. Do not invent an interface.

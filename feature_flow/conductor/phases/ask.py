@@ -76,9 +76,16 @@ class Ask(Phase):
 
     @classmethod
     def disputes_tests(cls, ws):
-        """True for a question from the builder of an acceptance fix ticket: it may dispute a tester's test."""
-        return (ws.get("ask_from") == "build" and bool(ws.all.get("accept_num"))
-                and ws.get("num") == ws.all.get("accept_num"))
+        """True for a question from the builder of an acceptance fix ticket, or of a ticket whose `Acceptance:` line
+        maps acceptance tests to it: it may dispute a tester's test."""
+        if ws.get("ask_from") != "build":
+            return False
+        if ws.all.get("accept_num") and ws.get("num") == ws.all.get("accept_num"):
+            return True
+        try:
+            return bool(proof.acceptance_line(ws.ticket_at_base()))
+        except Stop:
+            return False
 
     @classmethod
     def emit_ask(cls, ws):
@@ -178,6 +185,8 @@ class Ask(Phase):
                     + [" ".join(("%s THE PRODUCT OWNER: %s" % (question, answer)).split())[:2000]])
                 answer += ("\n\nThe product owner ruled the test wrong: leave it failing and finish the rest. The tester "
                            "changes it once this ticket is resolved.")
+                ruled = [n for n in ws.all.get("accept_ruled", "").split() if n != ws.get("num")]
+                ws.all["accept_ruled"] = " ".join(ruled + [ws.get("num")])
         tickets.append_section(ws.at(ws.ticket()), "Consulted (%s)" % role,
                                "**Question:**\n\n%s\n\n**Answer:**\n\n%s" % (demote(question), answer))
         decisions = cls.log_decision(ws, role, question, answer)

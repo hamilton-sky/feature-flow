@@ -40,7 +40,7 @@ def reset(c, num=None):
                        % nums)
     dropped = c.lane_sched().drop_lanes()
     had_run = c.state_file.is_file()
-    keys = (run_resume.STARTS, run_resume.FORGOT, "deferred", "reviewed", "fast", "accept_round", "accept_num", "accept_rulings") + (("budget", "spent", "budget_offer") if c.all.get("budget") else ())
+    keys = (run_resume.STARTS, run_resume.FORGOT, "deferred", "reviewed", "fast", "accept_round", "accept_num", "accept_rulings", "accept_ruled") + (("budget", "spent", "budget_offer") if c.all.get("budget") else ())
     kept = {k: c.all[k] for k in keys if c.all.get(k)}  # a deferred ticket still owes its review,
     # and a budget's time stays spent
     if c.all.get("phase") == "test" and c.all.get("test_base"):  # the tester's tests are judged after the reset
