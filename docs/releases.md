@@ -4,6 +4,12 @@ What each version added, newest first. The [README](../README.md) and the [docs]
 
 Upgrade between features, not in the middle of a run (see [Upgrading](install.md#upgrading)).
 
+## 0.46: a ticket's own acceptance tests
+
+| Version | Added |
+|---|---|
+| 0.46.0 | **A ticket is gated on its own acceptance tests** ([docs](plans-and-tickets.md)): a ticket's optional `Acceptance:` header line names the command that runs the acceptance tests of the spec story it completes. The conductor runs it after the Done when checks, once the tester has committed the tests, and sends the ticket back with the output while it fails (and again at a checkpoint). The builder cannot change the tests; one it believes is wrong goes to the product owner with `## Ask: po`. The tester now writes one test file per story, named after the story's heading, so the planner can name the file before it exists. A ticket without the line still gets the advisory acceptance run, which now reaches a spec or single review too, not only a pair review. In a field run two tickets passed both reviews while five of their own acceptance tests failed; that cost an extra ticket and three review rounds at the end. |
+
 ## 0.45: the mode on the start card
 
 | Version | Added |

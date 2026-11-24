@@ -6,6 +6,7 @@ Blocked by: —
 Test first: yes
 Level: 2
 Builder: <optional: frontend, backend or docs, when every non-test path is that kind; delete this line otherwise>
+Acceptance: <optional: the command that runs the acceptance tests of the spec story this ticket completes, e.g. python -m pytest plans/<feature>/acceptance/test_story_2_export_to_csv.py -q; delete this line otherwise>
 Touches: <the paths this ticket changes, comma separated: a folder ends with /, a * glob crosses folders. e.g. src/export/, tests/test_export.py>
 
 <What to do and why, in prose. Name files, functions and types. Never use line numbers.

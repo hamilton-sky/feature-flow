@@ -1,4 +1,5 @@
-"""The checks of a build as an ordered pipeline: the gate, the floor guard, the footprint, Done when and test first.
+"""The checks of a build as an ordered pipeline: the gate, the floor guard, the footprint, Done when, the ticket's
+acceptance tests and test first.
 
 Each check's `run(c)` takes the conductor (for its paths, settings, state and log) and returns
 (failure source, report, notes): source is None when it passes, and the notes are for the reviewer.
@@ -13,7 +14,7 @@ import json
 import re
 
 from feature_flow.conductor import lanes
-from feature_flow.verify import checks, proof
+from feature_flow.verify import checks, gate, proof
 from feature_flow.plan import tickets
 from feature_flow.infra import git
 from feature_flow.conductor.errors import Stop
@@ -145,6 +146,40 @@ class DoneWhen:
                "; ".join("`%s` (needs %s)" % (d.command, d.needs) for d, _ in deferred))]
 
 
+class TicketAcceptance:
+    """Run the acceptance tests the ticket's `Acceptance:` line maps to it, once the tester has committed them.
+
+    The acceptance tests used to run only after the last ticket, so two tickets passed both reviews in the field
+    while five of their own tests failed, and the failures came back at the very end as a new ticket and three
+    more review rounds. A ticket whose header names its tests now has to turn them green before review, like its
+    Done when checks: a failure goes back to the builder with the output. The builder cannot change the tests (the
+    floor guard), so one it believes asks for something spec.md does not say goes to the product owner with
+    `## Ask: po`, as at the end of the run."""
+
+    def run(self, c):
+        command = proof.acceptance_line(c.ticket_at_base())
+        if not command:
+            return None, "", []
+        end = c.scheduler().end
+        if not end.acceptance_command() or end.tests_due():
+            c.log("ACCEPT-TICKET-SKIP")
+            return None, "", ["the ticket maps acceptance tests (`%s`), but the tester has not committed any yet, so "
+                              "the conductor did not run them" % command]
+        result = checks.smoke(command, c.gate_timeout, cwd=_folder(c))
+        dirty = git.changes(cwd=_folder(c))
+        if dirty:
+            raise Stop("the Acceptance line of %s changed the working tree: %s. it must not change it"
+                       % (c.ticket_name(), " ".join(dirty[:5])))
+        c.log("ACCEPT-TICKET-%s" % ("PASS" if result.ok else "FAIL"))
+        if not result.ok:
+            report = ("the acceptance tests this ticket's `Acceptance:` line maps to it fail: `%s`. the tester wrote "
+                      "them from spec.md, so make them pass; you cannot change them. if one asks for something "
+                      "spec.md does not say, add `## Ask: po` naming the test and the spec line, and stop. the last "
+                      "lines:\n\n%s" % (command, gate.tail(result.out, 40)))
+            return "acceptance tests", report, []
+        return None, "", ["the conductor ran this ticket's acceptance tests (`%s`) and they pass" % command]
+
+
 class TestFirst:
     """For a `Test first: yes` ticket, prove a test-only commit failed the Test command. The branch to go
     back to is saved under the restore key while HEAD is detached. With a `Quick:` line it tries Quick first,
@@ -222,7 +257,7 @@ def pipeline(c, gate=True):
     found = [Gate()] if gate and c.gate_on else []
     found += [FloorGuard(), Footprint()]
     if c.gate_on:
-        found += [DoneWhen(), TestFirst()]
+        found += [DoneWhen(), TicketAcceptance(), TestFirst()]
     return found
 
 

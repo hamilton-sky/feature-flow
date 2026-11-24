@@ -60,7 +60,8 @@ class Build(Phase):
             return Outcome(ws.send_back(source, report, kind="check"))
         level = ws.measure_level()
         if ws.checkpointing() and level >= 3:  # it keeps its own review, so the full gate and Done when run now too
-            source, report, own = buildchecks.run(ws, [buildchecks.Gate(quick=False), buildchecks.DoneWhen()])
+            source, report, own = buildchecks.run(ws, [buildchecks.Gate(quick=False), buildchecks.DoneWhen(),
+                                                       buildchecks.TicketAcceptance()])
             if source:
                 return Outcome(ws.send_back(source, report, kind="check"))
             notes += own
@@ -75,18 +76,20 @@ class Build(Phase):
             if event == "REVIEW-SINGLE":
                 ws.st["level_raised"] = ""
             ws.log(event)
-        if review_pass == "pair":
+        if review_pass in ("pair", "spec", "single"):  # every pass that judges the spec checklist
             more += cls.acceptance_note(ws)
         ws.st["review_notes"] = NOTE_SEP.join(notes + more)
         return Outcome(review_phase.Review.hand_out(ws))
 
     @classmethod
     def acceptance_note(cls, ws):
-        """With two reviewers: the tester's acceptance tests run after the ticket, so the ticket reviewer sees which
-        ones its work should have turned green. [] when the plan has no acceptance tests yet."""
+        """For the review that judges the spec checklist (spec, single or pair): the tester's acceptance tests run
+        after the ticket, so the reviewer sees which ones its work should have turned green. It ran only for a pair
+        review before, so a spec reviewer never saw the failures of the tests its ticket delivers. [] when the plan
+        has no acceptance tests yet, and for a ticket whose `Acceptance:` line already gated its own tests."""
         end = ws.scheduler().end
         command = end.acceptance_command()
-        if not command or end.tests_due():
+        if not command or end.tests_due() or proof.acceptance_line(ws.ticket_at_base()):
             return []
         result = checks.smoke(command, ws.gate_timeout, cwd=ws.folder)
         dirty = git.changes(cwd=ws.folder)

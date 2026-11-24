@@ -47,6 +47,7 @@ Blocked by: 01, 02         or —
 Test first: yes            yes | no
 Level: 2                   1 light | 2 standard | 3 boundary
 Touches: src/export/       the paths it changes; a build outside them goes back
+Acceptance: <command>      optional: the acceptance tests of the story it completes; they must pass before review
 Floor: allow config        optional, only when a human decides the guard may let it through
 
 ...what to do and why...
