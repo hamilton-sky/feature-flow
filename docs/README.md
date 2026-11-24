@@ -21,3 +21,4 @@ The README covers what feature-flow is and how to start. These pages hold the re
 | **Reference** | [Commands and settings](commands-and-settings.md) | you need a script command or a `FLOW_` setting |
 | | [Releases](releases.md) | you want to know what each version added |
 | **Project** | [Contributing](contributing.md) | you want to run the tests, try it by hand, or release |
+| **Research** | [Block-based agent flows](research/block-flows.md) | you want the proposal for flows built from typed blocks that an agent writes and the conductor runs (not built yet) |
